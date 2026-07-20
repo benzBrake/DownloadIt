@@ -2,141 +2,128 @@
 
 [![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://nightly.link/benzBrake/DownloadIt/workflows/nightly.yml/master/DownloadIt-nightly.zip)
 
-DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。它通过定制的
-[`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) 加载
-bootstrapped XPI，并把网页链接交给外部下载管理器处理。
+DownloadIt is a port of FlashGot's download-bridge extension for modern Firefox. It uses a customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) to load a bootstrapped XPI and forward web links to an external download manager.
 
-当前版本处于迁移阶段，目标平台为 Windows，Firefox 最低版本为 136.0。
+The project is currently being migrated. Its target platform is Windows, and the minimum supported Firefox version is 136.0.
 
-## 当前功能
+## Current features
 
-- 在网页链接的右键菜单中提供 DownloadIt 菜单。
-- 自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
-- 支持 `http`、`https`、`ftp` 和 `magnet` 链接。
-- 向下载工具传递 URL、文件名、Referer、Cookie 和 User-Agent。
-- 在 Firefox 设置对话框中管理默认下载工具和 Cookie 转发策略。
-- 界面和右键菜单支持简体中文与英文。
-- 构建时校验并在运行时校验随扩展发布的 `FlashGot.exe`。
+- Adds a DownloadIt item to the context menu for web links.
+- Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
+- Supports `http`, `https`, `ftp`, and `magnet` links.
+- Passes the URL, filename, referrer, cookies, and User-Agent to the download tool.
+- Provides Firefox settings for the default download manager and cookie-forwarding policy.
+- Supports Simplified Chinese and English in the UI and context menu.
+- Verifies the bundled `FlashGot.exe` during the build and at runtime.
 
-当前尚未实现：
+The following features are not implemented yet:
 
-- “全部链接”和“选择链接”下载；
-- 未知文件类型拦截；
-- 媒体嗅探；
-- 原 FlashGot 的完整选项页及其他高级功能。
+- Downloading all links or selected links;
+- Unknown file-type interception;
+- Media sniffing;
+- The complete original FlashGot options page and other advanced features.
 
-## 工作方式
+## How it works
 
 ```text
-Firefox 右键菜单
+Firefox context menu
         │
         ▼
-DownloadIt 后台服务
-        │  临时 JSON 文件
+DownloadIt background service
+        │  Temporary JSON file
         ▼
 FlashGot.exe
         │
         ▼
-外部下载管理器
+External download manager
 ```
 
-扩展启动时会把 XPI 中的 `FlashGot.exe` 部署到 Firefox profile 下的
-`DownloadIt\FlashGot.exe`，然后使用以下命令行接口与它通信：
+When the extension starts, it deploys `FlashGot.exe` from the XPI to `DownloadIt\FlashGot.exe` under the Firefox profile, then communicates with it through these command-line interfaces:
 
-- `--list-json`：检测可用下载管理器；
-- `--job-json`：提交单个下载任务。
+- `--list-json`: detects available download managers;
+- `--job-json`: submits a single download task.
 
-## 使用前提
+## Prerequisites
 
-- Windows；
-- Firefox 136.0 或更高版本；
-- 已安装并正常配置的定制 `userChrome.js-Loader`。建议使用该 Loader
-  20250219 之后的版本（兼容 Firefox 135+）；
-- 至少安装一个 `FlashGot.exe` 支持的下载管理器；
-- 构建时如果缺少 `addon/FlashGot.exe`，脚本会从
-  [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 的 nightly
-  build 自动下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；
-  打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
-- 开发和测试需要 Node.js 18 或更高版本；
-- 构建需要 PowerShell 7（`pwsh`）。
+- Windows;
+- Firefox 136.0 or later;
+- A configured custom `userChrome.js-Loader` that is active in the target profile. The version released after 20250219 is recommended because it supports Firefox 135+;
+- At least one download manager supported by `FlashGot.exe`;
+- If `addon/FlashGot.exe` is missing during the build, the script automatically downloads it from the [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly build. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
+- Node.js 18 or later for development and testing;
+- PowerShell 7 (`pwsh`) for building.
 
-## 构建
+## Build
 
-在仓库根目录执行：
+Run the following command from the repository root:
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
 ```
 
-脚本会把 `addon/` 打包为根目录下的 `addon.xpi`，并检查 XPI 至少包含：
+The script packages `addon/` into `addon.xpi` in the repository root and verifies that the XPI contains at least:
 
-- `bootstrap.js`；
-- `install.rdf`；
-- `chrome.manifest`；
-- `FlashGot.exe`。
+- `bootstrap.js`;
+- `install.rdf`;
+- `chrome.manifest`;
+- `FlashGot.exe`.
 
-`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。
-`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时 `pack.ps1` 会自动获取最新
-nightly build。
+`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control; when it is missing, `pack.ps1` automatically fetches the latest nightly build.
 
-## 测试
+## Testing
 
-测试使用 Node.js 内置测试运行器：
+Tests use Node.js's built-in test runner:
 
 ```powershell
 node --test .\tests\*.test.mjs
 ```
 
-测试覆盖下载任务 JSON、URL 和文件名校验、下载管理器解析、右键菜单插入点，以及设置页面的基础结构。
+The test suite covers download-task JSON, URL and filename validation, download-manager parsing, the context-menu insertion point, and the basic structure of the settings page.
 
-## 安装与升级
+## Installation and upgrade
 
-1. 先安装并确认 `userChrome.js-Loader` 已在目标 Firefox profile 中生效。
-2. 执行构建命令生成 `addon.xpi`。
-3. 在 Firefox 打开 `about:addons`，选择齿轮菜单中的“从文件安装附加组件”，选中
-   `addon.xpi`。
-4. 重启 Firefox，使扩展和浏览器窗口中的右键菜单完成初始化。
+1. Install `userChrome.js-Loader` and confirm that it is active in the target Firefox profile.
+2. Run the build command to generate `addon.xpi`.
+3. In Firefox, open `about:addons`, choose “Install Add-on From File…” from the gear menu, and select `addon.xpi`.
+4. Restart Firefox so that the extension and context menus can finish initializing.
 
-升级时使用新构建的 `addon.xpi` 覆盖安装即可。若扩展未启动，请先确认 Loader
-版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
+To upgrade, install the newly built `addon.xpi` over the existing installation. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
 
-## 配置
+## Configuration
 
-右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
+Open the settings page from “DownloadIt Settings” in the context menu or from the extension settings in `about:addons`.
 
-| 偏好                            | 类型   | 说明                                                           |
-| ------------------------------- | ------ | -------------------------------------------------------------- |
-| `downloadit.defaultDM`        | 字符串 | 默认下载管理器名称。该名称必须来自最近一次检测结果。           |
-| `downloadit.omitCookies`      | 布尔值 | 为`true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
-| `downloadit.detectedManagers` | 字符串 | 下载管理器检测缓存，由扩展自动维护。                           |
+| Preference | Type | Description |
+| --- | --- | --- |
+| `downloadit.defaultDM` | String | Name of the default download manager. The name must come from the most recent detection result. |
+| `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
+| `downloadit.detectedManagers` | String | Cached download-manager detection results, maintained automatically by the extension. |
 
-当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。
+When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes.
 
-## 项目结构
+## Project structure
 
 ```text
 addon/
-├── bootstrap.js                         # 扩展生命周期入口
-├── install.rdf                           # bootstrapped XPI 元数据
-├── chrome.manifest                       # chrome://downloadit 注册
-├── FlashGot.exe                          # 下载管理器桥接程序
+├── bootstrap.js                         # Extension lifecycle entry point
+├── install.rdf                           # Bootstrapped XPI metadata
+├── chrome.manifest                       # chrome://downloadit registration
+├── FlashGot.exe                          # Download-manager bridge
 └── chrome/content/
-    ├── DownloadItService.sys.mjs        # 服务、进程和偏好管理
-    ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
-    ├── DownloadItProtocol.sys.mjs       # 下载任务协议和校验
-    ├── options.xhtml                     # 设置页面结构
-    ├── options.js                        # 设置页面逻辑
-    └── options.css                       # 设置页面样式
-pack.ps1                                  # XPI 打包脚本
-tests/                                    # Node.js 单元测试
+    ├── DownloadItService.sys.mjs        # Service, process, and preference management
+    ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
+    ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation
+    ├── options.xhtml                     # Settings page structure
+    ├── options.js                        # Settings page logic
+    └── options.css                       # Settings page styles
+pack.ps1                                  # XPI packaging script
+tests/                                    # Node.js unit tests
 ```
 
-## 许可证与第三方组件
+## License and third-party components
 
-DownloadIt 是基于原 FlashGot 扩展的非官方现代化移植版。原 FlashGot 由 Giorgio
-Maone 创作，采用 GPL-2.0-or-later，相关说明见
-[`addon/THIRD_PARTY_NOTICES.txt`](addon/THIRD_PARTY_NOTICES.txt)。
+DownloadIt is an unofficial modern port based on the original FlashGot extension. FlashGot was created by Giorgio Maone and is licensed under GPL-2.0-or-later. See [`addon/THIRD_PARTY_NOTICES.txt`](addon/THIRD_PARTY_NOTICES.txt) for related notices.
 
-打包时随附的 `FlashGot.exe` 基于
-[Grabby-FlashGot](https://github.com/benzBerake/Grabby-FlashGot)，采用 GPL-3.0；每个 XPI 包含与其中二进制匹配的
-`chrome/content/DownloadItBinaryMetadata.sys.mjs`，用于运行时完整性校验。
+The bundled `FlashGot.exe` is based on [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) and is licensed under GPL-3.0. Each XPI contains `chrome/content/DownloadItBinaryMetadata.sys.mjs`, whose metadata matches the bundled binary and is used for runtime integrity verification.
+
+For the Chinese version, see [README-zh_CN.md](README-zh_CN.md).
