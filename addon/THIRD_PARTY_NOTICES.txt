@@ -13,5 +13,5 @@ https://github.com/benzBerake/Grabby-FlashGot
 
 Bundled source version: v0.60.1 plus the file-based JSON CLI adaptation.
 Upstream license: GPL-3.0.
-Bundled SHA-256:
-dde6d4b50ed40f14e4d2246a2d0f9b816153ee7873a266d7eaeebcced9a0e680
+The SHA-256 of the bundled binary is recorded in the generated
+chrome/content/DownloadItBinaryMetadata.sys.mjs file inside each XPI.

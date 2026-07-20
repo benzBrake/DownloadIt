@@ -54,7 +54,7 @@ FlashGot.exe
 - 构建时如果缺少 `addon/FlashGot.exe`，脚本会从
   [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 的 nightly
   build 自动下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；
-  其 SHA-256 应为下文列出的值；
+  打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
 - 开发和测试需要 Node.js 18 或更高版本；
 - 构建需要 PowerShell 7（`pwsh`）。
 
@@ -102,11 +102,11 @@ node --test .\tests\*.test.mjs
 
 右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
-| 偏好 | 类型 | 说明 |
-| --- | --- | --- |
-| `downloadit.defaultDM` | 字符串 | 默认下载管理器名称。该名称必须来自最近一次检测结果。 |
-| `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
-| `downloadit.detectedManagers` | 字符串 | 下载管理器检测缓存，由扩展自动维护。 |
+| 偏好                            | 类型   | 说明                                                           |
+| ------------------------------- | ------ | -------------------------------------------------------------- |
+| `downloadit.defaultDM`        | 字符串 | 默认下载管理器名称。该名称必须来自最近一次检测结果。           |
+| `downloadit.omitCookies`      | 布尔值 | 为`true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
+| `downloadit.detectedManagers` | 字符串 | 下载管理器检测缓存，由扩展自动维护。                           |
 
 当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。
 
@@ -135,10 +135,6 @@ DownloadIt 是基于原 FlashGot 扩展的非官方现代化移植版。原 Flas
 Maone 创作，采用 GPL-2.0-or-later，相关说明见
 [`addon/THIRD_PARTY_NOTICES.txt`](addon/THIRD_PARTY_NOTICES.txt)。
 
-随附的 `FlashGot.exe` 基于
-[Grabby-FlashGot](https://github.com/benzBerake/Grabby-FlashGot)，采用 GPL-3.0；
-当前随附版本为 v0.60.1 的文件 JSON CLI 适配版。其 SHA-256 为：
-
-```text
-dde6d4b50ed40f14e4d2246a2d0f9b816153ee7873a266d7eaeebcced9a0e680
-```
+打包时随附的 `FlashGot.exe` 基于
+[Grabby-FlashGot](https://github.com/benzBerake/Grabby-FlashGot)，采用 GPL-3.0；每个 XPI 包含与其中二进制匹配的
+`chrome/content/DownloadItBinaryMetadata.sys.mjs`，用于运行时完整性校验。

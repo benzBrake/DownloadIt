@@ -4,6 +4,10 @@ import {
   parseAvailableManagers,
 } from "./DownloadItProtocol.sys.mjs";
 import { DownloadItContextMenuController } from "./DownloadItContextMenu.sys.mjs";
+import {
+  BINARY_SIZE,
+  BINARY_SHA256,
+} from "./DownloadItBinaryMetadata.sys.mjs";
 
 const { classes: Cc, interfaces: Ci } = Components;
 
@@ -22,8 +26,6 @@ if (!IOUtils || !PathUtils) {
 
 const BINARY_RESOURCE = "FlashGot.exe";
 const BINARY_NAME = "FlashGot.exe";
-const BINARY_SIZE = 812544;
-const BINARY_SHA256 = "dde6d4b50ed40f14e4d2246a2d0f9b816153ee7873a266d7eaeebcced9a0e680";
 const PROFILE_DIRECTORY = "DownloadIt";
 
 const PREF_DEFAULT_MANAGER = "downloadit.defaultDM";
