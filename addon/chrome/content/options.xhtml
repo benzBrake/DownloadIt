@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://downloadit/content/options.css" type="text/css"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>DownloadIt</title>
+    <script type="application/javascript" src="chrome://downloadit/content/options.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">DI</div>
+          <div>
+            <div class="brand-name">DownloadIt</div>
+            <div class="brand-subtitle" data-i18n="brandSubtitle">下载桥接器</div>
+          </div>
+        </div>
+
+        <nav class="section-nav" aria-label="设置分区" data-i18n-aria-label="navLabel">
+          <button class="nav-item is-active" type="button" role="tab" aria-selected="true" aria-controls="section-managers" data-section="managers">
+            <span class="nav-number">01</span>
+            <span data-i18n="navManagers">下载管理器</span>
+          </button>
+          <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-privacy" data-section="privacy">
+            <span class="nav-number">02</span>
+            <span data-i18n="navPrivacy">请求与隐私</span>
+          </button>
+          <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-about" data-section="about">
+            <span class="nav-number">03</span>
+            <span data-i18n="navAbout">关于 / 诊断</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-status">
+          <span id="sidebar-status-dot" class="status-dot is-pending" aria-hidden="true"></span>
+          <span id="sidebar-status" data-i18n="serviceStarting">后台服务启动中</span>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="content-header">
+          <div id="section-kicker" class="section-kicker" data-i18n="managerKicker">01 / 运行状态</div>
+          <h1 id="section-title" data-i18n="managerTitle">下载管理器</h1>
+          <p id="section-description" data-i18n="managerDescription">选择用于右键下载的默认工具，并查看当前可用的下载管理器。</p>
+        </header>
+
+        <div class="content-scroll">
+          <section id="section-managers" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="managers">
+            <div class="status-strip">
+              <div>
+                <div id="manager-count" class="status-strip-value">0</div>
+                <div id="manager-count-label" class="status-strip-label" data-i18n="managerCountLabel">个可用下载工具</div>
+              </div>
+              <div id="manager-state" class="status-strip-state" role="status" data-i18n="detectionIdle">上次检测结果</div>
+            </div>
+
+            <div class="setting-group">
+              <div class="group-heading">
+                <div>
+                  <div class="eyebrow" data-i18n="defaultManagerEyebrow">默认路由</div>
+                  <h2 data-i18n="defaultManagerTitle">默认下载工具</h2>
+                </div>
+                <span id="default-manager-lock" class="lock-note" hidden="hidden" data-i18n="locked">由 Firefox 策略锁定</span>
+              </div>
+              <label class="select-label" for="default-manager" data-i18n="defaultManagerLabel">右键菜单中的默认工具</label>
+              <div class="select-row">
+                <xul:menulist id="default-manager" aria-describedby="default-manager-help">
+                  <xul:menupopup id="default-manager-popup" />
+                </xul:menulist>
+                <button id="refresh-managers" class="secondary-button" type="button">
+                  <span class="button-glyph" aria-hidden="true">&#x21bb;</span>
+                  <span data-i18n="refreshManagers">重新检测</span>
+                </button>
+              </div>
+              <p id="default-manager-help" class="field-help" data-i18n="defaultManagerHelp">DownloadIt 会将链接发送到这里选择的工具。</p>
+            </div>
+
+            <div class="setting-group manager-group">
+              <div class="group-heading compact-heading">
+                <div>
+                  <div class="eyebrow" data-i18n="availableEyebrow">实时扫描</div>
+                  <h2 data-i18n="availableTitle">已发现的工具</h2>
+                </div>
+              </div>
+              <ul id="manager-list" class="manager-list"></ul>
+            </div>
+          </section>
+
+          <section id="section-privacy" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="privacy" hidden="hidden">
+            <div class="setting-group">
+              <div class="group-heading">
+                <div>
+                  <div class="eyebrow" data-i18n="privacyEyebrow">请求头</div>
+                  <h2 data-i18n="privacyTitle">请求与隐私</h2>
+                </div>
+              </div>
+
+              <label class="toggle-row" for="send-cookies">
+                <input id="send-cookies" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-i18n="sendCookiesTitle">向下载工具发送 Cookies</strong>
+                  <small data-i18n="sendCookiesHelp">发送当前站点的登录状态，有助于下载需要登录的文件。</small>
+                </span>
+              </label>
+              <div id="cookie-lock" class="inline-note is-warning" hidden="hidden">
+                <span class="note-mark" aria-hidden="true">!</span>
+                <span data-i18n="cookieLocked">此设置已由 Firefox 策略锁定。</span>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <div class="group-heading compact-heading">
+                <div>
+                  <div class="eyebrow" data-i18n="automaticEyebrow">自动处理</div>
+                  <h2 data-i18n="automaticTitle">随任务传递的信息</h2>
+                </div>
+              </div>
+              <div class="info-list">
+                <div class="info-row">
+                  <span class="info-mark is-on" aria-hidden="true"></span>
+                  <div>
+                    <strong data-i18n="refererTitle">Referer</strong>
+                    <span data-i18n="automaticLabel">自动附带</span>
+                  </div>
+                </div>
+                <div class="info-row">
+                  <span class="info-mark is-on" aria-hidden="true"></span>
+                  <div>
+                    <strong data-i18n="userAgentTitle">User-Agent</strong>
+                    <span data-i18n="automaticLabel">自动附带</span>
+                  </div>
+                </div>
+              </div>
+              <p class="field-help" data-i18n="automaticHelp">这些信息用于让外部下载工具复现当前页面的下载请求。</p>
+            </div>
+          </section>
+
+          <section id="section-about" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="about" hidden="hidden">
+            <div class="setting-group">
+              <div class="group-heading">
+                <div>
+                  <div class="eyebrow" data-i18n="aboutEyebrow">运行信息</div>
+                  <h2 data-i18n="aboutTitle">关于 / 诊断</h2>
+                </div>
+              </div>
+              <dl class="diagnostic-list">
+                <div class="diagnostic-row">
+                  <dt data-i18n="versionLabel">扩展版本</dt>
+                  <dd id="addon-version">1.5.6.14.1</dd>
+                </div>
+                <div class="diagnostic-row">
+                  <dt data-i18n="platformLabel">平台支持</dt>
+                  <dd id="platform-status">Windows</dd>
+                </div>
+                <div class="diagnostic-row">
+                  <dt data-i18n="serviceLabel">后台服务</dt>
+                  <dd id="service-status">--</dd>
+                </div>
+                <div class="diagnostic-row diagnostic-path">
+                  <dt data-i18n="binaryLabel">组件路径</dt>
+                  <dd id="binary-path">--</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="diagnostic-callout">
+              <span class="callout-mark" aria-hidden="true">DI</span>
+              <div>
+                <strong data-i18n="aboutCalloutTitle">DownloadIt 正在连接 Firefox 与外部下载工具。</strong>
+                <p data-i18n="aboutCalloutHelp">如果下载工具列表为空，请确认下载工具已安装后重新检测。</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <footer class="action-bar">
+          <div id="change-state" class="change-state" role="status" data-i18n="noChanges">没有待应用的修改</div>
+          <div class="action-buttons">
+            <button id="cancel" class="text-button" type="button" data-i18n="cancel">取消</button>
+            <button id="apply" class="primary-button" type="button" disabled="disabled" data-i18n="apply">应用</button>
+          </div>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

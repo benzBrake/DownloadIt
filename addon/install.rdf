@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<RDF xmlns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:em="http://www.mozilla.org/2004/em-rdf#">
+  <Description about="urn:mozilla:install-manifest">
+    <em:id>downloadit@downloadit.invalid</em:id>
+    <em:name>DownloadIt</em:name>
+    <em:version>1.5.6.14.1</em:version>
+    <em:type>2</em:type>
+    <em:bootstrap>true</em:bootstrap>
+    <em:description>Send Firefox downloads to external download managers through DownloadIt.</em:description>
+    <em:creator>DownloadIt contributors</em:creator>
+    <em:contributor>Giorgio Maone (original FlashGot)</em:contributor>
+    <em:optionsURL>chrome://downloadit/content/options.xhtml</em:optionsURL>
+    <em:optionsType>1</em:optionsType>
+    <em:iconURL>chrome://browser/skin/downloads/downloads.svg</em:iconURL>
+
+    <em:targetApplication>
+      <Description>
+        <em:id>{ec8030f7-c20a-464f-9b0e-13a3a9e97384}</em:id>
+        <em:minVersion>136.0</em:minVersion>
+        <em:maxVersion>*</em:maxVersion>
+      </Description>
+    </em:targetApplication>
+
+    <em:localized>
+      <Description>
+        <em:locale>zh-CN</em:locale>
+        <em:name>DownloadIt</em:name>
+        <em:description>通过 DownloadIt 将 Firefox 下载任务发送到外部下载工具。</em:description>
+      </Description>
+    </em:localized>
+  </Description>
+</RDF>

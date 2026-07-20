@@ -3,3 +3,5 @@ original/
 reference/
 *.xpi
 AGENTS.local.md
+.tmp/
+addon/FlashGot.exe

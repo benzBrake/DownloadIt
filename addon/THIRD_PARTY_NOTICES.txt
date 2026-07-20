@@ -1,0 +1,17 @@
+DownloadIt
+==========
+
+DownloadIt is an unofficial modern Firefox port based on the original
+FlashGot extension, which is Copyright (C) Giorgio Maone and distributed
+under GPL-2.0-or-later.
+
+FlashGot.exe
+===============
+
+FlashGot.exe is based on Grabby-FlashGot by pouriap and benzBerake:
+https://github.com/benzBerake/Grabby-FlashGot
+
+Bundled source version: v0.60.1 plus the file-based JSON CLI adaptation.
+Upstream license: GPL-3.0.
+Bundled SHA-256:
+dde6d4b50ed40f14e4d2246a2d0f9b816153ee7873a266d7eaeebcced9a0e680
