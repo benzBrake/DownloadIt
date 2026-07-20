@@ -18,6 +18,13 @@ $githubApiHeaders = @{
     "Accept" = "application/vnd.github+json"
     "User-Agent" = "DownloadIt-pack"
 }
+$githubToken = $env:GITHUB_TOKEN
+if ([string]::IsNullOrWhiteSpace($githubToken)) {
+    $githubToken = $env:GH_TOKEN
+}
+if (-not [string]::IsNullOrWhiteSpace($githubToken)) {
+    $githubApiHeaders["Authorization"] = "Bearer $githubToken"
+}
 $requiredEntries = @(
     "bootstrap.js"
     "install.rdf"
