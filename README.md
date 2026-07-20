@@ -51,8 +51,10 @@ FlashGot.exe
 - 已安装并正常配置的定制 `userChrome.js-Loader`。建议使用该 Loader
   20250219 之后的版本（兼容 Firefox 135+）；
 - 至少安装一个 `FlashGot.exe` 支持的下载管理器；
-- 构建时需要本地准备 `addon/FlashGot.exe`。该二进制组件默认被 `.gitignore`
-  排除，不随 Git 仓库提交；其 SHA-256 应为下文列出的值；
+- 构建时如果缺少 `addon/FlashGot.exe`，脚本会从
+  [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 的 nightly
+  build 自动下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；
+  其 SHA-256 应为下文列出的值；
 - 开发和测试需要 Node.js 18 或更高版本；
 - 构建需要 PowerShell 7（`pwsh`）。
 
@@ -72,7 +74,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
 - `FlashGot.exe`。
 
 `addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。
-`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时打包校验会失败。
+`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时 `pack.ps1` 会自动获取最新
+nightly build。
 
 ## 测试
 
