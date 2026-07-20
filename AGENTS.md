@@ -1,5 +1,5 @@
-# 约定
+# Conventions
 
-如果存在`AGENTS.local.md`请优先遵循其中约定。
+If `AGENTS.local.md` exists, follow the conventions in it first.
 
-此仓库需要移植 FlashGot 到最新的 Firefox 中，需要依赖定制的 userChrome.js Loader。
+This repository needs to port FlashGot to the latest Firefox, which depends on a customized userChrome.js Loader.
