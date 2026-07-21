@@ -113,6 +113,7 @@ addon/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation
+    ├── DownloadItUtils.sys.mjs           # Request encoding, domain, and cookie helpers
     ├── options.xhtml                     # Settings page structure
     ├── options.js                        # Settings page logic
     └── options.css                       # Settings page styles

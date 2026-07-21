@@ -113,6 +113,7 @@ addon/
     ├── DownloadItService.sys.mjs        # 服务、进程和偏好管理
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItProtocol.sys.mjs       # 下载任务协议和校验
+    ├── DownloadItUtils.sys.mjs           # 请求编码、域名和 Cookie 工具函数
     ├── options.xhtml                     # 设置页面结构
     ├── options.js                        # 设置页面逻辑
     └── options.css                       # 设置页面样式
