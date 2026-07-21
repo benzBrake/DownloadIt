@@ -8,6 +8,10 @@ import {
   BINARY_SIZE,
   BINARY_SHA256,
 } from "./DownloadItBinaryMetadata.sys.mjs";
+import {
+  getCookieHeader,
+  getManagerOutputEncoding,
+} from "./DownloadItUtils.sys.mjs";
 
 const { classes: Cc, interfaces: Ci } = Components;
 
@@ -79,17 +83,6 @@ export function openSettingsWindow(parentWindow = null) {
   );
 }
 
-function getManagerOutputEncoding() {
-  const locale = Services.locale.appLocaleAsBCP47.toLowerCase();
-  if (locale === "zh-cn") {
-    return "gbk";
-  }
-  if (locale === "zh-tw" || locale === "zh-hk") {
-    return "big5";
-  }
-  return "windows-1252";
-}
-
 const MESSAGES = {
   "en-US": {
     root: "Download with DownloadIt",
@@ -114,81 +107,6 @@ const MESSAGES = {
     unsupported: "此链接类型无法发送到 DownloadIt。",
   },
 };
-
-function getBaseDomain(uri) {
-  const host = uri?.asciiHost || uri?.host || "";
-  if (!host) {
-    return "";
-  }
-  try {
-    return Services.eTLD.getBaseDomainFromHost(host);
-  } catch {
-    return host;
-  }
-}
-
-function cookieMatchesURI(cookie, uri) {
-  const requestHost = String(uri.asciiHost || uri.host || "").toLowerCase();
-  const cookieHost = String(cookie.host || "").replace(/^\./, "").toLowerCase();
-  const requestPath = uri.filePath || "/";
-  const cookiePath = cookie.path || "/";
-
-  if (!requestHost || !cookieHost || !cookie.name) {
-    return false;
-  }
-  if (cookie.isDomain) {
-    if (requestHost !== cookieHost && !requestHost.endsWith(`.${cookieHost}`)) {
-      return false;
-    }
-  } else if (requestHost !== cookieHost) {
-    return false;
-  }
-  if (requestPath !== cookiePath && !requestPath.startsWith(
-    cookiePath.endsWith("/") ? cookiePath : `${cookiePath}/`
-  )) {
-    return false;
-  }
-  if (cookie.isSecure && !uri.schemeIs("https")) {
-    return false;
-  }
-  return !(Number(cookie.expires) > 0 && Number(cookie.expires) * 1000 <= Date.now());
-}
-
-function getCookieHeader(uri, browser) {
-  if (!uri?.schemeIs("http") && !uri?.schemeIs("https")) {
-    return "";
-  }
-
-  const baseDomain = getBaseDomain(uri);
-  const originAttributes = {
-    ...(browser?.contentPrincipal?.originAttributes || {}),
-  };
-  const plans = [originAttributes];
-  if (originAttributes.partitionKey) {
-    const unpartitioned = { ...originAttributes };
-    delete unpartitioned.partitionKey;
-    plans.push(unpartitioned);
-  }
-
-  const cookies = [];
-  const seen = new Set();
-  for (const attributes of plans) {
-    let candidates = [];
-    try {
-      candidates = Services.cookies.getCookiesFromHost(baseDomain, attributes);
-    } catch (error) {
-      console.warn("DownloadIt: cookie lookup failed", error);
-    }
-    for (const cookie of candidates) {
-      const key = `${cookie.host}\u0001${cookie.path}\u0001${cookie.name}`;
-      if (!seen.has(key) && cookieMatchesURI(cookie, uri)) {
-        seen.add(key);
-        cookies.push(`${cookie.name}=${cookie.value}`);
-      }
-    }
-  }
-  return cookies.join("; ");
-}
 
 export class DownloadItService {
   constructor(addonData) {
@@ -393,7 +311,9 @@ export class DownloadItService {
         throw error;
       }
       const bytes = await IOUtils.read(path);
-      return new TextDecoder(getManagerOutputEncoding()).decode(bytes);
+      return new TextDecoder(
+        getManagerOutputEncoding(Services.locale.appLocaleAsBCP47)
+      ).decode(bytes);
     }
   }
 
@@ -410,10 +330,16 @@ export class DownloadItService {
       context.downloadPageReferer
     ) ? Services.io.newURI(context.downloadPageReferer) : null;
     const omitCookies = Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false);
-    const cookies = omitCookies ? "" : getCookieHeader(uri, context.browser);
+    const cookieOptions = {
+      cookieService: Services.cookies,
+      eTLDService: Services.eTLD,
+    };
+    const cookies = omitCookies
+      ? ""
+      : getCookieHeader(uri, context.browser, cookieOptions);
     const downloadPageCookies = omitCookies || !pageReferrerURI
       ? ""
-      : getCookieHeader(pageReferrerURI, context.browser);
+      : getCookieHeader(pageReferrerURI, context.browser, cookieOptions);
     const userAgent = context.browser?.browsingContext?.customUserAgent ||
       Cc["@mozilla.org/network/protocol;1?name=http"]
         .getService(Ci.nsIHttpProtocolHandler).userAgent;
