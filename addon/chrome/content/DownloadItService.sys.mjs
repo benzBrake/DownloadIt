@@ -4,6 +4,7 @@ import {
   parseAvailableManagers,
 } from "./DownloadItProtocol.sys.mjs";
 import { DownloadItContextMenuController } from "./DownloadItContextMenu.sys.mjs";
+import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
 import {
   BINARY_SIZE,
   BINARY_SHA256,
@@ -38,8 +39,18 @@ const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
+const APP_LOCALES_CHANGED_TOPIC = "intl:app-locales-changed";
 
 let activeService = null;
+
+export class DownloadItError extends Error {
+  constructor(code, args = {}) {
+    super(code);
+    this.name = "DownloadItError";
+    this.code = code;
+    this.args = args;
+  }
+}
 
 export function registerActiveService(service) {
   activeService = service;
@@ -82,31 +93,6 @@ export function openSettingsWindow(parentWindow = null) {
     "chrome,titlebar,toolbar,centerscreen,resizable",
   );
 }
-
-const MESSAGES = {
-  "en-US": {
-    root: "Download with DownloadIt",
-    defaultDownload: "Download this link with %s",
-    noManager: "No supported download manager was detected",
-    refresh: "Detect download managers again",
-    refreshDone: "%s supported download manager(s) detected.",
-    scanFailed: "Could not detect download managers: %s",
-    settings: "DownloadIt settings",
-    downloadFailed: "Could not send the link to %s: %s",
-    unsupported: "This link type cannot be sent to DownloadIt.",
-  },
-  "zh-CN": {
-    root: "使用 DownloadIt 下载",
-    defaultDownload: "使用 %s 下载此链接",
-    noManager: "未检测到支持的下载工具",
-    refresh: "重新检测下载工具",
-    refreshDone: "检测到 %s 个支持的下载工具。",
-    scanFailed: "无法检测下载工具：%s",
-    settings: "DownloadIt 设置",
-    downloadFailed: "无法将链接发送到 %s：%s",
-    unsupported: "此链接类型无法发送到 DownloadIt。",
-  },
-};
 
 export class DownloadItService {
   constructor(addonData) {
@@ -185,17 +171,6 @@ export class DownloadItService {
     return this.readSettings();
   }
 
-  message(key, ...values) {
-    const locale = Services.locale.appLocaleAsBCP47.toLowerCase().startsWith("zh")
-      ? "zh-CN"
-      : "en-US";
-    let text = MESSAGES[locale][key] || MESSAGES["en-US"][key] || key;
-    for (const value of values) {
-      text = text.replace("%s", String(value));
-    }
-    return text;
-  }
-
   async startup() {
     if (Services.appinfo.OS !== "WINNT") {
       throw new Error("DownloadIt currently supports Windows only");
@@ -203,6 +178,7 @@ export class DownloadItService {
 
     this.binaryPath = await this.deployBinary();
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
+    Services.obs.addObserver(this, APP_LOCALES_CHANGED_TOPIC);
 
     const windows = Services.wm.getEnumerator("navigator:browser");
     while (windows.hasMoreElements()) {
@@ -223,6 +199,9 @@ export class DownloadItService {
     try {
       Services.obs.removeObserver(this, "browser-delayed-startup-finished");
     } catch {}
+    try {
+      Services.obs.removeObserver(this, APP_LOCALES_CHANGED_TOPIC);
+    } catch {}
 
     for (const controller of this.controllers.values()) {
       controller.destroy();
@@ -237,6 +216,14 @@ export class DownloadItService {
   observe(subject, topic) {
     if (topic === "browser-delayed-startup-finished") {
       this.attachWindow(subject);
+    } else if (topic === APP_LOCALES_CHANGED_TOPIC) {
+      for (const controller of this.controllers.values()) {
+        controller.localizationReady
+          .then(() => controller.refreshMenuLabel())
+          .catch(error => {
+            console.error("DownloadIt: context-menu locale refresh failed", error);
+          });
+      }
     }
   }
 
@@ -251,7 +238,11 @@ export class DownloadItService {
     }
 
     try {
-      const controller = new DownloadItContextMenuController(this, window);
+      const controller = new DownloadItContextMenuController(
+        this,
+        window,
+        initializeDownloadItLocalization,
+      );
       controller.init();
       this.controllers.set(window, controller);
       window.addEventListener("unload", () => {
@@ -322,7 +313,7 @@ export class DownloadItService {
       throw new Error(`Unsupported download manager: ${manager}`);
     }
     if (!isSupportedURL(context.url)) {
-      throw new Error(this.message("unsupported"));
+      throw new DownloadItError("unsupported-url");
     }
 
     const uri = Services.io.newURI(context.url);

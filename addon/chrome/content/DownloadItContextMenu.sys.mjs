@@ -22,6 +22,16 @@ export function findContextMenuInsertionPoint(contextMenu) {
   return null;
 }
 
+export async function refreshContextMenuLabel(document, menu) {
+  if (!document?.l10n || !menu) {
+    return;
+  }
+  document.l10n.setAttributes(menu, "downloadit-root");
+  if (typeof document.l10n.translateFragment === "function") {
+    await document.l10n.translateFragment(menu);
+  }
+}
+
 function createXULElement(document, tagName, attributes = {}) {
   const element = document.createXULElement(tagName);
   for (const [name, value] of Object.entries(attributes)) {
@@ -33,10 +43,12 @@ function createXULElement(document, tagName, attributes = {}) {
 }
 
 export class DownloadItContextMenuController {
-  constructor(service, window) {
+  constructor(service, window, initializeLocalization) {
     this.service = service;
     this.window = window;
+    this.initializeLocalization = initializeLocalization;
     this.document = window.document;
+    this.localizationReady = Promise.resolve();
     this.context = null;
     this.menu = null;
     this.popup = null;
@@ -44,6 +56,9 @@ export class DownloadItContextMenuController {
   }
 
   init() {
+    this.localizationReady = Promise.resolve(
+      this.initializeLocalization?.(this.window),
+    );
     this.contextMenu = this.document.getElementById(CONTEXT_MENU_ID);
     if (!this.contextMenu) {
       throw new Error("Firefox content context menu was not found");
@@ -52,8 +67,6 @@ export class DownloadItContextMenuController {
     this.document.getElementById(DOWNLOADIT_MENU_ID)?.remove();
     this.menu = createXULElement(this.document, "menu", {
       id: DOWNLOADIT_MENU_ID,
-      label: this.service.message("root"),
-      accesskey: "D",
       class: "menu-iconic",
       hidden: "true",
       style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
@@ -74,6 +87,10 @@ export class DownloadItContextMenuController {
 
     this.contextMenu.addEventListener("popupshowing", this);
     this.popup.addEventListener("popupshowing", this);
+    this.refreshMenuLabel();
+    this.localizationReady.then(() => this.refreshMenuLabel()).catch(error => {
+      console.error("DownloadIt: context-menu localization failed", error);
+    });
   }
 
   destroy() {
@@ -97,7 +114,28 @@ export class DownloadItContextMenuController {
     }
   }
 
+  refreshMenuLabel() {
+    return refreshContextMenuLabel(this.document, this.menu).catch(error => {
+      console.error("DownloadIt: context-menu label refresh failed", error);
+    });
+  }
+
+  setLocalized(element, id, args = null) {
+    if (this.document.l10n) {
+      this.document.l10n.setAttributes(element, id, args);
+    }
+  }
+
+  async formatMessage(id, args = null) {
+    await this.localizationReady;
+    if (!this.document.l10n) {
+      return id;
+    }
+    return await this.document.l10n.formatValue(id, args) || id;
+  }
+
   updateContext() {
+    this.refreshMenuLabel();
     const contextMenu = this.window.gContextMenu;
     const url = contextMenu?.onLink ? contextMenu.linkURL : "";
     const browser = contextMenu?.browser || this.window.gBrowser?.selectedBrowser;
@@ -122,15 +160,17 @@ export class DownloadItContextMenuController {
     const defaultManager = this.service.defaultManager;
     const defaultItem = createXULElement(this.document, "menuitem", {
       id: "downloadit-download-default",
-      label: defaultManager
-        ? this.service.message("defaultDownload", defaultManager)
-        : this.service.message("noManager"),
       disabled: !defaultManager || !this.context ? "true" : null,
       class: "menuitem-iconic",
       style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
     });
     defaultItem.addEventListener("command", () => this.download(defaultManager));
     this.popup.appendChild(defaultItem);
+    this.setLocalized(
+      defaultItem,
+      defaultManager ? "downloadit-default-download" : "downloadit-no-manager",
+      defaultManager ? { manager: defaultManager } : null,
+    );
     this.popup.appendChild(createXULElement(this.document, "menuseparator"));
 
     for (const manager of this.service.managers) {
@@ -149,19 +189,19 @@ export class DownloadItContextMenuController {
 
     this.popup.appendChild(createXULElement(this.document, "menuseparator"));
     const refreshItem = createXULElement(this.document, "menuitem", {
-      label: this.service.message("refresh"),
     });
     refreshItem.addEventListener("command", () => this.refreshManagers());
     this.popup.appendChild(refreshItem);
+    this.setLocalized(refreshItem, "downloadit-refresh");
 
     this.popup.appendChild(createXULElement(this.document, "menuseparator"));
     const settingsItem = createXULElement(this.document, "menuitem", {
-      label: this.service.message("settings"),
       class: "menuitem-iconic",
       style: "--menuitem-icon: url(chrome://global/skin/icons/settings.svg); list-style-image: url(chrome://global/skin/icons/settings.svg);",
     });
     settingsItem.addEventListener("command", () => this.service.openSettings(this.window));
     this.popup.appendChild(settingsItem);
+    this.setLocalized(settingsItem, "downloadit-settings");
   }
 
   async download(manager) {
@@ -171,9 +211,15 @@ export class DownloadItContextMenuController {
     try {
       await this.service.downloadLink(this.context, manager);
     } catch (error) {
+      const messageId = error?.code === "unsupported-url"
+        ? "downloadit-unsupported"
+        : "downloadit-download-failed";
+      const args = messageId === "downloadit-download-failed"
+        ? { manager, error: error.message || String(error) }
+        : null;
       this.service.alert(
         this.window,
-        this.service.message("downloadFailed", manager, error.message || error)
+        await this.formatMessage(messageId, args),
       );
     }
   }
@@ -183,12 +229,14 @@ export class DownloadItContextMenuController {
       const managers = await this.service.refreshManagers();
       this.service.alert(
         this.window,
-        this.service.message("refreshDone", managers.length)
+        await this.formatMessage("downloadit-refresh-done", { count: managers.length }),
       );
     } catch (error) {
       this.service.alert(
         this.window,
-        this.service.message("scanFailed", error.message || error)
+        await this.formatMessage("downloadit-scan-failed", {
+          error: error.message || String(error),
+        }),
       );
     }
   }
