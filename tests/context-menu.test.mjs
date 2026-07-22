@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   findContextMenuInsertionPoint,
+  refreshContextMenuLabel,
 } from "../addon/chrome/content/DownloadItContextMenu.sys.mjs";
 
 function mockContextMenu(anchors = {}) {
@@ -46,4 +47,39 @@ test("context menu insertion ignores anchors outside the context menu", () => {
   });
 
   assert.equal(findContextMenuInsertionPoint(contextMenu), null);
+});
+
+test("context menu label can be refreshed after the application locale changes", () => {
+  let localizedId = null;
+  const menu = {
+  };
+  const document = {
+    l10n: {
+      setAttributes(element, id) {
+        assert.equal(element, menu);
+        localizedId = id;
+      },
+    },
+  };
+
+  refreshContextMenuLabel(document, menu);
+
+  assert.equal(localizedId, "downloadit-root");
+});
+
+test("context menu label refresh explicitly translates the dynamic menu", async () => {
+  let translated = null;
+  const menu = {};
+  const document = {
+    l10n: {
+      setAttributes() {},
+      async translateFragment(element) {
+        translated = element;
+      },
+    },
+  };
+
+  await refreshContextMenuLabel(document, menu);
+
+  assert.equal(translated, menu);
 });

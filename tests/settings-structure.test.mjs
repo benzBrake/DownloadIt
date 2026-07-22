@@ -22,6 +22,7 @@ test("settings dialog contains the current capability controls", () => {
   assert.match(markup, /xmlns:xul="http:\/\/www\.mozilla\.org\/keymaster\/gatekeeper\/there\.is\.only\.xul"/);
   assert.match(markup, /<xul:menulist id="default-manager"/);
   assert.match(markup, /<xul:menupopup id="default-manager-popup"/);
+  assert.match(markup, /<link rel="localization" href="downloadit\.ftl"/);
   assert.match(markup, /<script[^>]+src="chrome:\/\/downloadit\/content\/options\.js"/);
   for (const id of [
     "section-managers",
