@@ -116,6 +116,7 @@ addon/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
+    ├── DownloadItXUL.sys.mjs             # Shared Firefox XUL element construction helper
     ├── DownloadItSelectionActor.sys.mjs # Selection link extraction Actor
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration
     ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation

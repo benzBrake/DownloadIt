@@ -1,4 +1,5 @@
 import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
+import { createXULElement } from "./DownloadItXUL.sys.mjs";
 
 const CONTEXT_MENU_ID = "contentAreaContextMenu";
 const DOWNLOADIT_MENU_ID = "downloadit-context-menu";
@@ -50,16 +51,6 @@ export async function refreshContextMenuLabel(
       await document.l10n.translateFragment(optionsMenu);
     }
   }
-}
-
-function createXULElement(document, tagName, attributes = {}) {
-  const element = document.createXULElement(tagName);
-  for (const [name, value] of Object.entries(attributes)) {
-    if (value !== undefined && value !== null) {
-      element.setAttribute(name, String(value));
-    }
-  }
-  return element;
 }
 
 export class DownloadItContextMenuController {

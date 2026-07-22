@@ -40,7 +40,9 @@ test("settings dialog contains the current capability controls", () => {
 
 test("settings refresh keeps default-manager persistence staged", () => {
   const script = read("addon/chrome/content/options.js");
-  assert.match(script, /createXULElement\("menuitem"\)/);
+  assert.match(script, /DownloadItXUL\.sys\.mjs/);
+  assert.doesNotMatch(script, /XUL_NS|createElementNS/);
+  assert.match(script, /createXULElement\(document, "menuitem"\)/);
   assert.match(script, /addEventListener\("command"/);
   assert.match(script, /renderedManagerNames/);
   assert.match(script, /refreshManagers\(\{ persistDefault: false \}\)/);

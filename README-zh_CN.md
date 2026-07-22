@@ -116,6 +116,7 @@ addon/
     ├── DownloadItService.sys.mjs        # 服务、进程和偏好管理
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItDownloadDialog.sys.mjs # Firefox 原生下载弹窗集成
+    ├── DownloadItXUL.sys.mjs             # 共享的 Firefox XUL 元素构造工具
     ├── DownloadItSelectionActor.sys.mjs # 选区链接提取 Actor
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent 资源注册
     ├── DownloadItProtocol.sys.mjs       # 下载任务协议和校验

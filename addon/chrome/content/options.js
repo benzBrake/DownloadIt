@@ -7,13 +7,10 @@ const { getActiveService } = ChromeUtils.importESModule(
 const { initializeDownloadItLocalization } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItLocalization.sys.mjs",
 );
+const { createXULElement } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItXUL.sys.mjs",
+);
 const localizationReady = initializeDownloadItLocalization(window);
-
-const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
-
-function createXULElement(name) {
-  return document.createElementNS(XUL_NS, name);
-}
 
 const SECTION_META = {
   managers: [
@@ -205,13 +202,13 @@ function renderManagers() {
   if (managersChanged) {
     popup.replaceChildren();
     if (!managers.length) {
-      const item = createXULElement("menuitem");
+      const item = createXULElement(document, "menuitem");
       popup.append(item);
       setLocalized(item, "downloadit-no-manager-option");
       item.setAttribute("value", "");
     } else {
       for (const manager of managers) {
-        const item = createXULElement("menuitem");
+        const item = createXULElement(document, "menuitem");
         item.setAttribute("label", manager);
         item.setAttribute("value", manager);
         popup.append(item);

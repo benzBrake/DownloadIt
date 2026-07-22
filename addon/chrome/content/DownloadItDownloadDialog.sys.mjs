@@ -1,4 +1,5 @@
 import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
+import { createXULElement } from "./DownloadItXUL.sys.mjs";
 
 const DOWNLOAD_DIALOG_URL =
   "chrome://mozapps/content/downloads/unknownContentType.xhtml";
@@ -17,23 +18,6 @@ function documentURL (window) {
 
 export function isDownloadDialogWindow (window) {
   return documentURL(window) === DOWNLOAD_DIALOG_URL;
-}
-
-function createXULElement (document, tagName, attributes = {}, children = []) {
-  const element = document.createXULElement(tagName);
-  for (const [name, value] of Object.entries(attributes)) {
-    if (typeof value === "boolean") {
-      if (value) {
-        element.setAttribute(name, "true");
-      } else {
-        element.removeAttribute(name);
-      }
-    } else if (value !== undefined && value !== null) {
-      element.setAttribute(name, String(value));
-    }
-  }
-  element.append(...children);
-  return element;
 }
 
 export class DownloadItDownloadDialogController {
