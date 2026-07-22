@@ -636,6 +636,36 @@ declare class MozXULElement extends XULElement {
   initializeAttributeInheritance(): void;
 }
 
+interface L10nArgs {
+  [name: string]: string | number | null;
+}
+
+declare class L10nFileSource {
+  constructor(
+    name: string,
+    metaSource: string,
+    locales: readonly string[],
+    prePath: string,
+  );
+}
+
+declare class L10nRegistry {
+  static getInstance(): L10nRegistry;
+  hasSource(name: string): boolean;
+  registerSources(sources: readonly L10nFileSource[]): void;
+}
+
+interface Localization {
+  addResourceIds(resourceIds: readonly string[]): void;
+  formatValue(id: string, args?: L10nArgs | null): Promise<string | null>;
+}
+
+interface DocumentL10n extends Localization {
+  readonly ready: Promise<void>;
+  setAttributes(element: Element, id: string, args?: L10nArgs | null): void;
+  translateFragment(node: Node): Promise<void>;
+}
+
 interface BrowserElement extends XULElement {
   readonly currentURI: nsIURI;
   readonly contentTitle: string;
@@ -719,6 +749,7 @@ interface UnifiedExtensionsController {
 }
 
 interface Document {
+  readonly l10n: DocumentL10n | null;
   getAnonymousElementByAttribute(
     element: Element,
     attributeName: string,
