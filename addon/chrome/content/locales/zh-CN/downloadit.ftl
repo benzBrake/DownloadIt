@@ -1,8 +1,9 @@
-downloadit-root =
+downloadit-download =
     .label = 使用 DownloadIt 下载
     .accesskey = D
-downloadit-default-download =
-    .label = 使用 { $manager } 下载此链接
+downloadit-options =
+    .label = Downloadit 选项
+    .accesskey = O
 downloadit-no-manager =
     .label = 未检测到支持的下载工具
 downloadit-refresh =
@@ -82,4 +83,3 @@ downloadit-error-locked-cookies = Cookie 偏好已被锁定。
 downloadit-error-unsupported-manager = 所选下载工具已不可用。
 downloadit-error-service = DownloadIt 后台服务尚未就绪。
 downloadit-error-unexpected = DownloadIt 错误：{ $error }
-

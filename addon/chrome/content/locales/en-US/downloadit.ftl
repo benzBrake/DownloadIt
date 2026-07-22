@@ -1,8 +1,9 @@
-downloadit-root =
-    .label = Download with DownloadIt
+downloadit-download =
+    .label = DownloadIt
     .accesskey = D
-downloadit-default-download =
-    .label = Download this link with { $manager }
+downloadit-options =
+    .label = DownloadIt options
+    .accesskey = O
 downloadit-no-manager =
     .label = No supported download manager was detected
 downloadit-refresh =
@@ -94,4 +95,3 @@ downloadit-error-locked-cookies = The cookie preference is locked.
 downloadit-error-unsupported-manager = The selected manager is no longer available.
 downloadit-error-service = The DownloadIt service is not ready.
 downloadit-error-unexpected = DownloadIt error: { $error }
-

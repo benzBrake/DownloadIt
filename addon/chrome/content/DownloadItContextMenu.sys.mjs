@@ -3,6 +3,7 @@ import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
 const CONTEXT_MENU_ID = "contentAreaContextMenu";
 const DOWNLOADIT_MENU_ID = "downloadit-context-menu";
 const DOWNLOADIT_POPUP_ID = "downloadit-context-popup";
+const DOWNLOADIT_DOWNLOAD_ID = "downloadit-download-default";
 
 // Firefox keeps this group at the end of the content context menu. The old
 // learn-more/sibling-separator selector no longer matches current Firefox,
@@ -22,13 +23,19 @@ export function findContextMenuInsertionPoint(contextMenu) {
   return null;
 }
 
-export async function refreshContextMenuLabel(document, menu) {
-  if (!document?.l10n || !menu) {
+export async function refreshContextMenuLabel(document, downloadItem, optionsMenu = null) {
+  if (!document?.l10n || !downloadItem) {
     return;
   }
-  document.l10n.setAttributes(menu, "downloadit-root");
+  document.l10n.setAttributes(downloadItem, "downloadit-download");
+  if (optionsMenu) {
+    document.l10n.setAttributes(optionsMenu, "downloadit-options");
+  }
   if (typeof document.l10n.translateFragment === "function") {
-    await document.l10n.translateFragment(menu);
+    await document.l10n.translateFragment(downloadItem);
+    if (optionsMenu) {
+      await document.l10n.translateFragment(optionsMenu);
+    }
   }
 }
 
@@ -65,10 +72,19 @@ export class DownloadItContextMenuController {
     }
 
     this.document.getElementById(DOWNLOADIT_MENU_ID)?.remove();
+    this.document.getElementById(DOWNLOADIT_DOWNLOAD_ID)?.remove();
+    this.downloadItem = createXULElement(this.document, "menuitem", {
+      id: DOWNLOADIT_DOWNLOAD_ID,
+      class: "menuitem-iconic",
+      hidden: "true",
+      style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
+    });
+    this.downloadItem.addEventListener("command", () => {
+      this.download(this.service.defaultManager);
+    });
     this.menu = createXULElement(this.document, "menu", {
       id: DOWNLOADIT_MENU_ID,
       class: "menu-iconic",
-      hidden: "true",
       style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
     });
     this.popup = createXULElement(this.document, "menupopup", {
@@ -78,10 +94,12 @@ export class DownloadItContextMenuController {
 
     const insertionPoint = findContextMenuInsertionPoint(this.contextMenu);
     if (insertionPoint) {
+      this.contextMenu.insertBefore(this.downloadItem, insertionPoint);
       this.contextMenu.insertBefore(this.menu, insertionPoint);
     } else {
       // Keep the failure mode deterministic when Firefox changes its menu
       // markup again: append to this menu, never fall back to another group.
+      this.contextMenu.appendChild(this.downloadItem);
       this.contextMenu.appendChild(this.menu);
     }
 
@@ -96,8 +114,10 @@ export class DownloadItContextMenuController {
   destroy() {
     this.contextMenu?.removeEventListener("popupshowing", this);
     this.popup?.removeEventListener("popupshowing", this);
+    this.downloadItem?.remove();
     this.menu?.remove();
     this.context = null;
+    this.downloadItem = null;
     this.menu = null;
     this.popup = null;
     this.contextMenu = null;
@@ -115,7 +135,7 @@ export class DownloadItContextMenuController {
   }
 
   refreshMenuLabel() {
-    return refreshContextMenuLabel(this.document, this.menu).catch(error => {
+    return refreshContextMenuLabel(this.document, this.downloadItem, this.menu).catch(error => {
       console.error("DownloadIt: context-menu label refresh failed", error);
     });
   }
@@ -151,28 +171,15 @@ export class DownloadItContextMenuController {
       referer,
       downloadPageReferer,
     } : null;
-    this.menu.hidden = !this.context;
+    this.downloadItem.hidden = !this.context;
+    this.downloadItem.disabled = !this.context || !this.service.defaultManager;
+    this.menu.hidden = false;
   }
 
   rebuildPopup() {
     this.popup.replaceChildren();
 
     const defaultManager = this.service.defaultManager;
-    const defaultItem = createXULElement(this.document, "menuitem", {
-      id: "downloadit-download-default",
-      disabled: !defaultManager || !this.context ? "true" : null,
-      class: "menuitem-iconic",
-      style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
-    });
-    defaultItem.addEventListener("command", () => this.download(defaultManager));
-    this.popup.appendChild(defaultItem);
-    this.setLocalized(
-      defaultItem,
-      defaultManager ? "downloadit-default-download" : "downloadit-no-manager",
-      defaultManager ? { manager: defaultManager } : null,
-    );
-    this.popup.appendChild(createXULElement(this.document, "menuseparator"));
-
     for (const manager of this.service.managers) {
       const item = createXULElement(this.document, "menuitem", {
         label: manager,
@@ -187,7 +194,17 @@ export class DownloadItContextMenuController {
       this.popup.appendChild(item);
     }
 
-    this.popup.appendChild(createXULElement(this.document, "menuseparator"));
+    if (this.service.managers.length === 0) {
+      const noManagerItem = createXULElement(this.document, "menuitem", {
+        disabled: "true",
+      });
+      this.popup.appendChild(noManagerItem);
+      this.setLocalized(noManagerItem, "downloadit-no-manager");
+    }
+
+    if (this.service.managers.length > 0) {
+      this.popup.appendChild(createXULElement(this.document, "menuseparator"));
+    }
     const refreshItem = createXULElement(this.document, "menuitem", {
     });
     refreshItem.addEventListener("command", () => this.refreshManagers());

@@ -45,6 +45,6 @@ export async function initializeDownloadItLocalization(window) {
   await insertPromise;
   if (document.l10n) {
     await document.l10n.ready;
-    await document.l10n.formatValue("downloadit-root");
+    await document.l10n.formatValue("downloadit-download");
   }
 }
