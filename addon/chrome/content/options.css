@@ -17,6 +17,7 @@
   --success: #287957;
   --warning: #a86a22;
   --danger: #bd4739;
+  --sidebar-width: 214px;
   --font-ui: "Segoe UI Variable", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "Noto Sans Mono", ui-monospace, monospace;
 }
@@ -48,6 +49,7 @@
 html,
 body {
   margin: 0;
+  height: 100%;
   min-width: 680px;
   min-height: 520px;
   background: var(--bg);
@@ -79,7 +81,8 @@ input:disabled {
 
 #app {
   display: grid;
-  grid-template-columns: 214px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  height: 100vh;
   min-height: 100vh;
 }
 
@@ -205,8 +208,9 @@ input:disabled {
 
 .main-panel {
   display: flex;
+  height: 100%;
   min-width: 0;
-  min-height: 100vh;
+  min-height: 0;
   flex-direction: column;
   background: var(--bg);
 }
@@ -243,8 +247,9 @@ input:disabled {
 .content-scroll {
   min-height: 0;
   flex: 1;
-  overflow: auto;
-  padding: 25px 38px 36px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 25px 38px 106px;
 }
 
 .settings-section {
@@ -645,6 +650,11 @@ button {
 }
 
 .action-bar {
+  position: fixed;
+  z-index: 10;
+  right: 0;
+  bottom: 0;
+  left: var(--sidebar-width);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -652,7 +662,8 @@ button {
   gap: 20px;
   padding: 13px 38px;
   border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  background: var(--surface);
+  box-shadow: 0 -6px 18px rgba(28, 32, 31, 0.08);
 }
 
 .change-state {
@@ -712,7 +723,11 @@ button {
   }
 
   #app {
-    grid-template-columns: 174px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
+  :root {
+    --sidebar-width: 174px;
   }
 
   .content-header,
@@ -730,6 +745,11 @@ button {
 @media (max-width: 620px) {
   #app {
     display: block;
+    height: auto;
+  }
+
+  :root {
+    --sidebar-width: 0px;
   }
 
   .sidebar {
@@ -764,6 +784,7 @@ button {
   }
 
   .main-panel {
+    height: auto;
     min-height: calc(100vh - 111px);
   }
 
@@ -781,6 +802,10 @@ button {
     gap: 8px;
     padding-top: 10px;
     padding-bottom: 10px;
+  }
+
+  .content-scroll {
+    padding-bottom: 130px;
   }
 
   .change-state {

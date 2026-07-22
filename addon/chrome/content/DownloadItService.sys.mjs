@@ -90,7 +90,7 @@ export function openSettingsWindow(parentWindow = null) {
   return opener.openDialog(
     SETTINGS_URL,
     "downloadit-options",
-    "chrome,titlebar,toolbar,centerscreen,resizable",
+    "chrome,titlebar,toolbar,centerscreen,resizable,width=1100,height=760",
   );
 }
 
