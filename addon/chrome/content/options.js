@@ -4,6 +4,10 @@
 const { getActiveService } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItService.sys.mjs",
 );
+const { initializeDownloadItLocalization } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItLocalization.sys.mjs",
+);
+const localizationReady = initializeDownloadItLocalization(window);
 
 const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
@@ -11,147 +15,22 @@ function createXULElement(name) {
   return document.createElementNS(XUL_NS, name);
 }
 
-const TEXT = {
-  "en-US": {
-    brandSubtitle: "download bridge",
-    navLabel: "Settings sections",
-    navManagers: "Download manager",
-    navPrivacy: "Request & privacy",
-    navAbout: "About / diagnostics",
-    managerKicker: "01 / runtime",
-    managerTitle: "Download manager",
-    managerDescription: "Choose the default tool for DownloadIt downloads and inspect the managers available on this system.",
-    privacyKicker: "02 / request policy",
-    privacyTitle: "Request & privacy",
-    privacyDescription: "Choose which browser request details are forwarded to external download tools.",
-    aboutKicker: "03 / service details",
-    aboutTitle: "About / diagnostics",
-    aboutDescription: "A compact view of the bridge service and its deployed component.",
-    serviceStarting: "Service starting",
-    serviceReady: "Service connected",
-    serviceUnavailable: "Service unavailable",
-    managerCountLabel: "available download managers",
-    detectionIdle: "Current detection cache",
-    detectionLoading: "Scanning for download managers...",
-    detectionSuccess: "Scan complete: %s manager(s)",
-    detectionError: "Scan failed: %s",
-    noManagers: "No supported download manager was detected",
-    defaultManagerEyebrow: "default route",
-    defaultManagerTitle: "Default download manager",
-    defaultManagerLabel: "Default tool for the DownloadIt context menu",
-    defaultManagerHelp: "DownloadIt sends links to the manager selected here.",
-    refreshManagers: "Detect again",
-    availableEyebrow: "live scan",
-    availableTitle: "Detected tools",
-    managerDefault: "default",
-    noManagerOption: "No available download manager",
-    locked: "Locked by Firefox policy",
-    privacyEyebrow: "request headers",
-    sendCookiesTitle: "Send cookies to download managers",
-    sendCookiesHelp: "Preserve the current site's login state for downloads that require it.",
-    cookieLocked: "This setting is locked by a Firefox policy.",
-    automaticEyebrow: "automatic handling",
-    automaticTitle: "Forwarded with each task",
-    refererTitle: "Referer",
-    userAgentTitle: "User-Agent",
-    automaticLabel: "automatically attached",
-    automaticHelp: "These values help the external manager reproduce the request made by the current page.",
-    aboutEyebrow: "runtime details",
-    versionLabel: "Extension version",
-    platformLabel: "Platform support",
-    serviceLabel: "Background service",
-    binaryLabel: "Component path",
-    windows: "Windows",
-    unsupportedPlatform: "Windows only",
-    ready: "Ready",
-    starting: "Starting",
-    unavailable: "Unavailable",
-    aboutCalloutTitle: "DownloadIt connects Firefox to external download tools.",
-    aboutCalloutHelp: "If the list is empty, install a supported manager and detect again.",
-    noChanges: "No changes to apply",
-    unsavedChanges: "Changes are ready to apply",
-    applied: "Settings applied",
-    applying: "Applying settings...",
-    cancel: "Cancel",
-    apply: "Apply",
-    errorLockedDefault: "The default manager preference is locked.",
-    errorLockedCookies: "The cookie preference is locked.",
-    errorUnsupportedManager: "The selected manager is no longer available.",
-    errorService: "The DownloadIt service is not ready.",
-  },
-  "zh-CN": {
-    brandSubtitle: "下载桥接器",
-    navLabel: "设置分区",
-    navManagers: "下载管理器",
-    navPrivacy: "请求与隐私",
-    navAbout: "关于 / 诊断",
-    managerKicker: "01 / 运行状态",
-    managerTitle: "下载管理器",
-    managerDescription: "选择用于右键下载的默认工具，并查看当前系统可用的下载管理器。",
-    privacyKicker: "02 / 请求策略",
-    privacyTitle: "请求与隐私",
-    privacyDescription: "选择哪些浏览器请求信息会传递给外部下载工具。",
-    aboutKicker: "03 / 服务信息",
-    aboutTitle: "关于 / 诊断",
-    aboutDescription: "查看桥接服务和已部署组件的运行状态。",
-    serviceStarting: "后台服务启动中",
-    serviceReady: "后台服务已连接",
-    serviceUnavailable: "后台服务不可用",
-    managerCountLabel: "个可用下载工具",
-    detectionIdle: "当前检测缓存",
-    detectionLoading: "正在检测下载工具...",
-    detectionSuccess: "检测完成：%s 个工具",
-    detectionError: "检测失败：%s",
-    noManagers: "未检测到支持的下载工具",
-    defaultManagerEyebrow: "默认路由",
-    defaultManagerTitle: "默认下载工具",
-    defaultManagerLabel: "DownloadIt 右键菜单中的默认工具",
-    defaultManagerHelp: "DownloadIt 会将链接发送到这里选择的工具。",
-    refreshManagers: "重新检测",
-    availableEyebrow: "实时扫描",
-    availableTitle: "已发现的工具",
-    managerDefault: "默认",
-    noManagerOption: "暂无可用下载工具",
-    locked: "由 Firefox 策略锁定",
-    privacyEyebrow: "请求头",
-    sendCookiesTitle: "向下载工具发送 Cookies",
-    sendCookiesHelp: "保留当前站点的登录状态，用于下载需要登录的文件。",
-    cookieLocked: "此设置已由 Firefox 策略锁定。",
-    automaticEyebrow: "自动处理",
-    automaticTitle: "随任务传递的信息",
-    refererTitle: "Referer",
-    userAgentTitle: "User-Agent",
-    automaticLabel: "自动附带",
-    automaticHelp: "这些信息用于让外部下载工具复现当前页面的下载请求。",
-    aboutEyebrow: "运行信息",
-    versionLabel: "扩展版本",
-    platformLabel: "平台支持",
-    serviceLabel: "后台服务",
-    binaryLabel: "组件路径",
-    windows: "Windows",
-    unsupportedPlatform: "仅支持 Windows",
-    ready: "已就绪",
-    starting: "启动中",
-    unavailable: "不可用",
-    aboutCalloutTitle: "DownloadIt 正在连接 Firefox 与外部下载工具。",
-    aboutCalloutHelp: "如果下载工具列表为空，请确认下载工具已安装后重新检测。",
-    noChanges: "没有待应用的修改",
-    unsavedChanges: "有待应用的修改",
-    applied: "设置已应用",
-    applying: "正在应用设置...",
-    cancel: "取消",
-    apply: "应用",
-    errorLockedDefault: "默认下载工具偏好已被锁定。",
-    errorLockedCookies: "Cookie 偏好已被锁定。",
-    errorUnsupportedManager: "所选下载工具已不可用。",
-    errorService: "DownloadIt 后台服务尚未就绪。",
-  },
-};
-
 const SECTION_META = {
-  managers: ["managerKicker", "managerTitle", "managerDescription"],
-  privacy: ["privacyKicker", "privacyTitle", "privacyDescription"],
-  about: ["aboutKicker", "aboutTitle", "aboutDescription"],
+  managers: [
+    "downloadit-manager-kicker",
+    "downloadit-manager-title",
+    "downloadit-manager-description",
+  ],
+  privacy: [
+    "downloadit-privacy-kicker",
+    "downloadit-privacy-title",
+    "downloadit-privacy-description",
+  ],
+  about: [
+    "downloadit-about-kicker",
+    "downloadit-about-title",
+    "downloadit-about-description",
+  ],
 };
 
 const state = {
@@ -163,36 +42,25 @@ const state = {
   scanState: "idle",
   scanMessage: "",
   busy: false,
-  feedback: "",
+  feedback: null,
   feedbackKind: "",
 };
 
 let renderedManagerNames = null;
 
-const appLocale = globalThis.Services?.locale?.appLocaleAsBCP47 ||
-  globalThis.navigator?.language ||
-  "en-US";
-const locale = appLocale.toLowerCase().startsWith("zh")
-  ? "zh-CN"
-  : "en-US";
-const strings = TEXT[locale];
-
-function text(key, ...values) {
-  let value = strings[key] || TEXT["en-US"][key] || key;
-  for (const replacement of values) {
-    value = value.replace("%s", String(replacement));
-  }
-  return value;
+function localizedMessage(id, args = null) {
+  return { id, args };
 }
 
-function applyLocale() {
-  document.documentElement.lang = locale;
-  document.title = "DownloadIt";
-  for (const element of document.querySelectorAll("[data-i18n]")) {
-    element.textContent = text(element.dataset.i18n);
+function setLocalized(element, id, args = null) {
+  if (element && document.l10n) {
+    document.l10n.setAttributes(element, id, args);
   }
-  for (const element of document.querySelectorAll("[data-i18n-aria-label]")) {
-    element.setAttribute("aria-label", text(element.dataset.i18nAriaLabel));
+}
+
+function setLocalizedMessage(element, message) {
+  if (message) {
+    setLocalized(element, message.id, message.args);
   }
 }
 
@@ -238,15 +106,15 @@ function setFeedback(message, kind = "") {
 }
 
 function clearFeedback() {
-  state.feedback = "";
+  state.feedback = null;
   state.feedbackKind = "";
 }
 
 function render() {
   const meta = SECTION_META[state.section];
-  document.getElementById("section-kicker").textContent = text(meta[0]);
-  document.getElementById("section-title").textContent = text(meta[1]);
-  document.getElementById("section-description").textContent = text(meta[2]);
+  setLocalized(document.getElementById("section-kicker"), meta[0]);
+  setLocalized(document.getElementById("section-title"), meta[1]);
+  setLocalized(document.getElementById("section-description"), meta[2]);
 
   for (const button of document.querySelectorAll(".nav-item")) {
     const active = button.dataset.section === state.section;
@@ -267,15 +135,15 @@ function render() {
   const applyButton = document.getElementById("apply");
   changeState.className = "change-state";
   if (state.feedback) {
-    changeState.textContent = state.feedback;
+    setLocalizedMessage(changeState, state.feedback);
     changeState.classList.add(state.feedbackKind === "error" ? "is-error" : "is-success");
   } else if (state.busy) {
-    changeState.textContent = text("applying");
+    setLocalized(changeState, "downloadit-applying");
   } else if (dirty) {
-    changeState.textContent = text("unsavedChanges");
+    setLocalized(changeState, "downloadit-unsaved-changes");
     changeState.classList.add("is-dirty");
   } else {
-    changeState.textContent = text("noChanges");
+    setLocalized(changeState, "downloadit-no-changes");
   }
   applyButton.disabled = !dirty || state.busy || !state.service;
 }
@@ -289,28 +157,31 @@ function renderServiceState() {
 
   sidebarDot.className = "status-dot";
   if (!service) {
-    sidebarStatus.textContent = text("serviceUnavailable");
+    setLocalized(sidebarStatus, "downloadit-service-unavailable");
     sidebarDot.classList.add("is-error");
-    serviceStatus.textContent = text("unavailable");
+    setLocalized(serviceStatus, "downloadit-unavailable");
     serviceStatus.className = "is-error";
-    platformStatus.textContent = text("unsupportedPlatform");
+    setLocalized(platformStatus, "downloadit-unsupported-platform");
     return;
   }
 
   if (service.serviceReady) {
-    sidebarStatus.textContent = text("serviceReady");
+    setLocalized(sidebarStatus, "downloadit-service-ready");
     sidebarDot.classList.add("is-ready");
-    serviceStatus.textContent = text("ready");
+    setLocalized(serviceStatus, "downloadit-ready");
     serviceStatus.className = "is-ready";
   } else {
-    sidebarStatus.textContent = text("serviceStarting");
+    setLocalized(sidebarStatus, "downloadit-service-starting");
     sidebarDot.classList.add("is-pending");
-    serviceStatus.textContent = text("starting");
+    setLocalized(serviceStatus, "downloadit-starting");
     serviceStatus.className = "is-pending";
   }
-  platformStatus.textContent = service.platformSupported
-    ? text("windows")
-    : text("unsupportedPlatform");
+  setLocalized(
+    platformStatus,
+    service.platformSupported
+      ? "downloadit-windows"
+      : "downloadit-unsupported-platform",
+  );
 }
 
 function renderManagers() {
@@ -320,11 +191,14 @@ function renderManagers() {
   const popup = document.getElementById("default-manager-popup");
   const list = document.getElementById("manager-list");
   const count = document.getElementById("manager-count");
+  const countLabel = document.getElementById("manager-count-label");
   const managerState = document.getElementById("manager-state");
   const refreshButton = document.getElementById("refresh-managers");
   const defaultLock = document.getElementById("default-manager-lock");
 
-  count.textContent = String(managers.length);
+  setLocalized(count, "downloadit-manager-count", { count: managers.length });
+  setLocalized(countLabel, "downloadit-manager-count-label", { count: managers.length });
+
   const managersChanged = renderedManagerNames === null ||
     renderedManagerNames.length !== managers.length ||
     renderedManagerNames.some((manager, index) => manager !== managers[index]);
@@ -332,9 +206,9 @@ function renderManagers() {
     popup.replaceChildren();
     if (!managers.length) {
       const item = createXULElement("menuitem");
-      item.setAttribute("label", text("noManagerOption"));
-      item.setAttribute("value", "");
       popup.append(item);
+      setLocalized(item, "downloadit-no-manager-option");
+      item.setAttribute("value", "");
     } else {
       for (const manager of managers) {
         const item = createXULElement("menuitem");
@@ -367,25 +241,34 @@ function renderManagers() {
 
   managerState.className = "status-strip-state";
   if (state.scanState === "loading") {
-    managerState.textContent = text("detectionLoading");
+    setLocalized(managerState, "downloadit-detection-loading");
   } else if (state.scanState === "error") {
-    managerState.textContent = text("detectionError", state.scanMessage);
+    setLocalized(managerState, "downloadit-detection-error", {
+      error: state.scanMessage,
+    });
     managerState.classList.add("is-error");
   } else if (state.scanState === "success") {
-    managerState.textContent = text("detectionSuccess", managers.length);
+    setLocalized(managerState, "downloadit-detection-success", {
+      count: managers.length,
+    });
     managerState.classList.add("is-success");
   } else if (!managers.length) {
-    managerState.textContent = text("noManagers");
+    setLocalized(managerState, "downloadit-no-managers");
   } else {
-    managerState.textContent = text("detectionIdle");
+    setLocalized(managerState, "downloadit-detection-idle");
   }
 
   list.replaceChildren();
   if (!managers.length) {
     const empty = document.createElement("li");
     empty.className = "empty-row";
-    empty.innerHTML = `<span class="empty-mark">--</span><span>${text("noManagers")}</span>`;
+    const mark = document.createElement("span");
+    mark.className = "empty-mark";
+    mark.textContent = "--";
+    const message = document.createElement("span");
+    empty.append(mark, message);
     list.append(empty);
+    setLocalized(message, "downloadit-no-managers");
     return;
   }
 
@@ -405,8 +288,8 @@ function renderManagers() {
     if (manager === state.draft?.defaultManager) {
       const badge = document.createElement("span");
       badge.className = "manager-badge";
-      badge.textContent = text("managerDefault");
       row.append(badge);
+      setLocalized(badge, "downloadit-manager-default");
     }
     list.append(row);
   }
@@ -426,21 +309,25 @@ function renderAbout() {
   document.getElementById("binary-path").textContent = snapshot?.binaryPath || "--";
 }
 
-function errorMessage(error) {
-  const message = String(error?.message || error || "");
+function errorText(error) {
+  return String(error?.message || error || "");
+}
+
+function localizedError(error) {
+  const message = errorText(error);
   if (/default download manager preference is locked/i.test(message)) {
-    return text("errorLockedDefault");
+    return localizedMessage("downloadit-error-locked-default");
   }
   if (/cookie preference is locked/i.test(message)) {
-    return text("errorLockedCookies");
+    return localizedMessage("downloadit-error-locked-cookies");
   }
   if (/unsupported download manager/i.test(message)) {
-    return text("errorUnsupportedManager");
+    return localizedMessage("downloadit-error-unsupported-manager");
   }
   if (!message) {
-    return text("errorService");
+    return localizedMessage("downloadit-error-service");
   }
-  return message;
+  return localizedMessage("downloadit-error-unexpected", { error: message });
 }
 
 async function refreshManagers() {
@@ -463,7 +350,7 @@ async function refreshManagers() {
     state.scanState = "success";
   } catch (error) {
     state.scanState = "error";
-    state.scanMessage = errorMessage(error);
+    state.scanMessage = errorText(error);
   }
   render();
 }
@@ -476,7 +363,7 @@ async function applySettings() {
     state.draft.defaultManager &&
     !state.snapshot.managers.includes(state.draft.defaultManager)
   ) {
-    setFeedback(text("errorUnsupportedManager"), "error");
+    setFeedback(localizedMessage("downloadit-error-unsupported-manager"), "error");
     render();
     return;
   }
@@ -493,28 +380,32 @@ async function applySettings() {
     };
     state.draft = { ...state.initial };
     state.scanState = "idle";
-    setFeedback(text("applied"), "success");
+    setFeedback(localizedMessage("downloadit-applied"), "success");
   } catch (error) {
-    setFeedback(errorMessage(error), "error");
+    setFeedback(localizedError(error), "error");
   } finally {
     state.busy = false;
   }
   render();
 }
 
-function init() {
-  applyLocale();
-  bindEvents();
-  state.service = getActiveService();
-  if (state.service) {
-    state.snapshot = state.service.readSettings();
-    state.initial = {
-      defaultManager: state.snapshot.defaultManager,
-      omitCookies: state.snapshot.omitCookies,
-    };
-    state.draft = { ...state.initial };
+async function init() {
+  try {
+    await localizationReady;
+    bindEvents();
+    state.service = getActiveService();
+    if (state.service) {
+      state.snapshot = state.service.readSettings();
+      state.initial = {
+        defaultManager: state.snapshot.defaultManager,
+        omitCookies: state.snapshot.omitCookies,
+      };
+      state.draft = { ...state.initial };
+    }
+    render();
+  } catch (error) {
+    console.error("DownloadIt: settings localization failed", error);
   }
-  render();
 }
 
 window.addEventListener("DOMContentLoaded", init, { once: true });
