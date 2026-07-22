@@ -4,6 +4,10 @@ import {
   parseAvailableManagers,
 } from "./DownloadItProtocol.sys.mjs";
 import { DownloadItContextMenuController } from "./DownloadItContextMenu.sys.mjs";
+import {
+  DownloadItDownloadDialogController,
+  isDownloadDialogWindow,
+} from "./DownloadItDownloadDialog.sys.mjs";
 import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
 import {
   BINARY_SIZE,
@@ -39,6 +43,7 @@ const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
+const DOWNLOAD_DIALOG_TOPIC = "domwindowopened";
 const APP_LOCALES_CHANGED_TOPIC = "intl:app-locales-changed";
 const SELECTION_ACTOR_NAME = "DownloadItSelection";
 const SELECTION_ACTOR_URI = "chrome://downloadit/content/DownloadItSelectionActor.sys.mjs";
@@ -132,6 +137,8 @@ export class DownloadItService {
     this.binaryPath = "";
     this.managers = this.loadManagerCache();
     this.controllers = new Map();
+    this.downloadDialogControllers = new Map();
+    this.downloadDialogWatchers = new Map();
     this.temporaryFiles = new Set();
     this.refreshPromise = null;
   }
@@ -212,12 +219,21 @@ export class DownloadItService {
     registerSelectionActor();
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
     Services.obs.addObserver(this, APP_LOCALES_CHANGED_TOPIC);
+    Services.obs.addObserver(this, DOWNLOAD_DIALOG_TOPIC);
 
     const windows = Services.wm.getEnumerator("navigator:browser");
     while (windows.hasMoreElements()) {
       const window = windows.getNext();
       if (window.location.href === BROWSER_WINDOW_URL && window.gBrowserInit?.delayedStartupFinished) {
         this.attachWindow(window);
+      }
+    }
+
+    const openWindows = Services.wm.getEnumerator(null);
+    while (openWindows.hasMoreElements()) {
+      const window = openWindows.getNext();
+      if (isDownloadDialogWindow(window)) {
+        this.watchDownloadDialog(window);
       }
     }
 
@@ -235,6 +251,9 @@ export class DownloadItService {
     try {
       Services.obs.removeObserver(this, APP_LOCALES_CHANGED_TOPIC);
     } catch {}
+    try {
+      Services.obs.removeObserver(this, DOWNLOAD_DIALOG_TOPIC);
+    } catch {}
 
     unregisterSelectionActor();
 
@@ -242,6 +261,14 @@ export class DownloadItService {
       controller.destroy();
     }
     this.controllers.clear();
+    for (const controller of this.downloadDialogControllers.values()) {
+      controller.destroy();
+    }
+    this.downloadDialogControllers.clear();
+    for (const [window, timer] of this.downloadDialogWatchers) {
+      window.clearTimeout(timer);
+    }
+    this.downloadDialogWatchers.clear();
 
     await Promise.allSettled(
       Array.from(this.temporaryFiles, path => this.removeTemporaryFile(path))
@@ -251,6 +278,8 @@ export class DownloadItService {
   observe(subject, topic) {
     if (topic === "browser-delayed-startup-finished") {
       this.attachWindow(subject);
+    } else if (topic === DOWNLOAD_DIALOG_TOPIC) {
+      this.watchDownloadDialog(subject);
     } else if (topic === APP_LOCALES_CHANGED_TOPIC) {
       for (const controller of this.controllers.values()) {
         controller.localizationReady
@@ -287,6 +316,76 @@ export class DownloadItService {
     } catch (error) {
       console.error("DownloadIt: browser window initialization failed", error);
     }
+  }
+
+  watchDownloadDialog(window) {
+    if (
+      !window?.addEventListener ||
+      this.downloadDialogControllers.has(window) ||
+      this.downloadDialogWatchers.has(window)
+    ) {
+      return;
+    }
+
+    let attempts = 0;
+    const attach = () => {
+      this.downloadDialogWatchers.delete(window);
+      if (window.closed) {
+        return;
+      }
+      if (isDownloadDialogWindow(window) && window.dialog?.mLauncher) {
+        this.attachDownloadDialog(window);
+        return;
+      }
+
+      const href = String(window.location?.href || "").replace(/\?.*$/, "");
+      const canStillBecomeDownloadDialog = !href || href === "about:blank" ||
+        isDownloadDialogWindow(window);
+      if (!canStillBecomeDownloadDialog || attempts++ >= 40) {
+        return;
+      }
+      const timer = window.setTimeout(attach, 50);
+      this.downloadDialogWatchers.set(window, timer);
+    };
+    window.addEventListener("load", attach, { once: true });
+    attach();
+  }
+
+  attachDownloadDialog(window) {
+    if (
+      !window ||
+      window.closed ||
+      !isDownloadDialogWindow(window) ||
+      this.downloadDialogControllers.has(window)
+    ) {
+      return;
+    }
+
+    const controller = new DownloadItDownloadDialogController(
+      this,
+      window,
+      initializeDownloadItLocalization,
+    );
+    this.downloadDialogControllers.set(window, controller);
+    controller.init().then(initialized => {
+      if (!initialized) {
+        controller.destroy();
+        this.downloadDialogControllers.delete(window);
+      }
+    }).catch(error => {
+      console.error("DownloadIt: download dialog initialization failed", error);
+      controller.destroy();
+      this.downloadDialogControllers.delete(window);
+    });
+    window.addEventListener("unload", () => {
+      const timer = this.downloadDialogWatchers.get(window);
+      if (timer) {
+        window.clearTimeout(timer);
+        this.downloadDialogWatchers.delete(window);
+      }
+      controller.destroy();
+      this.downloadDialogControllers.delete(window);
+    }, { once: true });
   }
 
   loadManagerCache() {
@@ -329,6 +428,17 @@ export class DownloadItService {
     return this.refreshPromise;
   }
 
+  async getManagersForDownloadDialog() {
+    if (this.managers.length > 0) {
+      return [...this.managers];
+    }
+    try {
+      return await this.refreshManagers({ persistDefault: false });
+    } catch {
+      return [];
+    }
+  }
+
   async readManagerOutput(path) {
     try {
       return await IOUtils.readUTF8(path);
@@ -345,6 +455,50 @@ export class DownloadItService {
 
   async downloadLink(context, manager) {
     return this.downloadLinks([context], manager);
+  }
+
+  async downloadLauncher({
+    launcher,
+    context = null,
+    dialogWindow = null,
+    manager,
+    filename = "",
+  } = {}) {
+    const source = launcher?.source;
+    if (!source?.spec || !isSupportedURL(source.spec)) {
+      throw new DownloadItError("unsupported-url");
+    }
+
+    const sourceWindow = this.getLauncherSourceWindow(context);
+    const browser = sourceWindow?.docShell?.chromeEventHandler ||
+      this.getBrowserWindow(dialogWindow)?.gBrowser?.selectedBrowser ||
+      null;
+    const downloadPageReferer = browser?.currentURI?.spec ||
+      sourceWindow?.location?.href || "";
+    const referer = source.referrerInfo?.originalReferrer?.spec || "";
+    return this.downloadLink({
+      url: source.spec,
+      description: launcher.suggestedFileName || source.spec,
+      filename: filename || launcher.suggestedFileName || "",
+      browser,
+      referer,
+      downloadPageReferer,
+    }, manager);
+  }
+
+  getLauncherSourceWindow(context) {
+    try {
+      return context?.getInterface?.(Ci.nsIDOMWindow) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  getBrowserWindow(window) {
+    if (window?.location?.href === BROWSER_WINDOW_URL) {
+      return window;
+    }
+    return Services.wm.getMostRecentWindow("navigator:browser");
   }
 
   async downloadLinks(contexts, manager) {

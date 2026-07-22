@@ -28,6 +28,7 @@ test("runtime text uses Fluent resources instead of inline localization maps", (
   const markup = read("addon/chrome/content/options.xhtml");
   const optionsScript = read("addon/chrome/content/options.js");
   const contextScript = read("addon/chrome/content/DownloadItContextMenu.sys.mjs");
+  const dialogScript = read("addon/chrome/content/DownloadItDownloadDialog.sys.mjs");
   const serviceScript = read("addon/chrome/content/DownloadItService.sys.mjs");
   const ids = messageIds(read("addon/chrome/content/locales/en-US/downloadit.ftl"));
   const nonMessageIds = new Set([
@@ -35,11 +36,17 @@ test("runtime text uses Fluent resources instead of inline localization maps", (
     "downloadit-context-popup",
     "downloadit-download-default",
     "downloadit-download-manager",
+    "downloadit-download-option",
+    "downloadit-download-radio",
+    "downloadit-download-deck",
+    "downloadit-download-manager-popup",
+    "downloadit-download-action",
   ]);
   const references = new Set([
     ...[...markup.matchAll(/data-l10n-id="([^"]+)"/g)].map(match => match[1]),
     ...[...optionsScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)].map(match => match[1]),
     ...[...contextScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)].map(match => match[1]),
+    ...[...dialogScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)].map(match => match[1]),
   ]);
 
   assert.doesNotMatch(markup, /data-i18n/);

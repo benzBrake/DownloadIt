@@ -14,6 +14,17 @@ downloadit-settings =
     .label = DownloadIt settings
 downloadit-download-failed = Could not send the link to { $manager }: { $error }
 downloadit-download-selection-failed = Could not send the selected links to { $manager }: { $error }
+downloadit-download-dialog-option =
+    .label = Use DownloadIt
+    .accesskey = D
+downloadit-download-dialog-manager = Download manager
+downloadit-download-dialog-action =
+    .label = DownloadIt
+    .tooltiptext = Send this download to DownloadIt
+    .accesskey = D
+downloadit-download-dialog-default-manager = { $manager } (default)
+downloadit-download-dialog-no-manager = No supported download manager is available.
+downloadit-download-dialog-failed = Could not send this download to { $manager }: { $error }
 downloadit-refresh-done =
     { $count ->
         [one] One supported download manager detected.

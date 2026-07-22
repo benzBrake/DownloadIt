@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DownloadItContextMenuController,
   findContextMenuInsertionPoint,
   refreshContextMenuLabel,
 } from "../addon/chrome/content/DownloadItContextMenu.sys.mjs";
@@ -119,4 +120,23 @@ test("context menu label refresh localizes the selection item", async () => {
   await refreshContextMenuLabel(document, downloadItem, null, selectionItem);
 
   assert.equal(localizedIds.get(selectionItem), "downloadit-download-selection");
+});
+
+test("message formatting omits absent Fluent arguments", async () => {
+  const window = {
+    document: {
+      l10n: {
+        async formatValue(id, ...args) {
+          assert.equal(args.length, 0);
+          return id;
+        },
+      },
+    },
+  };
+  const controller = new DownloadItContextMenuController({}, window, null);
+
+  assert.equal(
+    await controller.formatMessage("downloadit-unsupported", null),
+    "downloadit-unsupported",
+  );
 });

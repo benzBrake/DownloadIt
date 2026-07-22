@@ -11,6 +11,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Adds a DownloadIt item to the context menu for web links.
 - Adds a Downloadit Selection item below it when selected page content contains links.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
+- Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
 - Supports `http`, `https`, `ftp`, and `magnet` links.
 - Passes the URL, filename, referrer, cookies, and User-Agent to the download tool.
 - Provides Firefox settings for the default download manager and cookie-forwarding policy.
@@ -28,7 +29,7 @@ The following features are not implemented yet:
 ## How it works
 
 ```text
-Firefox context menu
+Firefox context menu or native download prompt
         │
         ▼
 DownloadIt background service
@@ -80,7 +81,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the context-menu insertion point, and the basic structure of the settings page.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the context-menu insertion point, the native download prompt integration, and the basic structure of the settings page.
 
 ## Installation and upgrade
 
@@ -114,6 +115,7 @@ addon/
 └── chrome/content/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
+    ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
     ├── DownloadItSelectionActor.sys.mjs # Selection link extraction Actor
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration
     ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation

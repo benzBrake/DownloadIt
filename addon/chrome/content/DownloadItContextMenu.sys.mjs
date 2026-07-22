@@ -188,7 +188,10 @@ export class DownloadItContextMenuController {
     if (!this.document.l10n) {
       return id;
     }
-    return await this.document.l10n.formatValue(id, args) || id;
+    const message = args == null
+      ? await this.document.l10n.formatValue(id)
+      : await this.document.l10n.formatValue(id, args);
+    return message || id;
   }
 
   updateContext() {
