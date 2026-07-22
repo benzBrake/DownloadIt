@@ -1,4 +1,5 @@
 export const OP_ONE = 0;
+export const OP_SEL = 1;
 
 const SUPPORTED_PROTOCOLS = new Set([
   "http:",
@@ -37,6 +38,63 @@ export function sanitizeFilename(value) {
   return String(value || "").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
 }
 
+function buildDownloadLink({
+  url,
+  description = "",
+  cookies = "",
+  postData = "",
+  filename = "",
+  extension = "",
+}) {
+  if (!isSupportedURL(url)) {
+    throw new TypeError("Unsupported download URL");
+  }
+
+  const normalizedFilename = sanitizeFilename(filename);
+  const inferredExtension = normalizedFilename.includes(".")
+    ? normalizedFilename.slice(normalizedFilename.lastIndexOf(".") + 1)
+    : "";
+
+  return {
+    url: String(url),
+    desc: String(description || ""),
+    cookies: String(cookies || ""),
+    postdata: String(postData || ""),
+    filename: normalizedFilename,
+    extension: String(extension || inferredExtension),
+  };
+}
+
+export function buildDownloadBatchJob({
+  manager,
+  links,
+  referer = "",
+  downloadPageReferer = "",
+  downloadPageCookies = "",
+  userAgent = "",
+}) {
+  const normalizedManager = String(manager || "").trim();
+  if (!normalizedManager) {
+    throw new TypeError("A download manager is required");
+  }
+  if (!Array.isArray(links) || links.length === 0) {
+    throw new TypeError("At least one download URL is required");
+  }
+
+  const normalizedLinks = links.map(link => buildDownloadLink(link || {}));
+
+  return {
+    dlcount: normalizedLinks.length,
+    dmName: normalizedManager,
+    optype: normalizedLinks.length > 1 ? OP_SEL : OP_ONE,
+    referer: String(referer || ""),
+    dlpageReferer: String(downloadPageReferer || ""),
+    dlpageCookies: String(downloadPageCookies || ""),
+    useragent: String(userAgent || ""),
+    links: normalizedLinks,
+  };
+}
+
 export function buildDownloadJob({
   manager,
   url,
@@ -50,36 +108,19 @@ export function buildDownloadJob({
   downloadPageCookies = "",
   userAgent = "",
 }) {
-  const normalizedManager = String(manager || "").trim();
-  if (!normalizedManager) {
-    throw new TypeError("A download manager is required");
-  }
-  if (!isSupportedURL(url)) {
-    throw new TypeError("Unsupported download URL");
-  }
-
-  const normalizedFilename = sanitizeFilename(filename);
-  const inferredExtension = normalizedFilename.includes(".")
-    ? normalizedFilename.slice(normalizedFilename.lastIndexOf(".") + 1)
-    : "";
-
-  return {
-    dlcount: 1,
-    dmName: normalizedManager,
-    optype: OP_ONE,
-    referer: String(referer || ""),
-    dlpageReferer: String(downloadPageReferer || ""),
-    dlpageCookies: String(downloadPageCookies || ""),
-    useragent: String(userAgent || ""),
-    links: [
-      {
-        url: String(url),
-        desc: String(description || ""),
-        cookies: String(cookies || ""),
-        postdata: String(postData || ""),
-        filename: normalizedFilename,
-        extension: String(extension || inferredExtension),
-      },
-    ],
-  };
+  return buildDownloadBatchJob({
+    manager,
+    links: [{
+      url,
+      description,
+      cookies,
+      postData,
+      filename,
+      extension,
+    }],
+    referer,
+    downloadPageReferer,
+    downloadPageCookies,
+    userAgent,
+  });
 }

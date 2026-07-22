@@ -1,6 +1,8 @@
 downloadit-download =
     .label = DownloadIt
     .accesskey = D
+downloadit-download-selection =
+    .label = Downloadit Selection
 downloadit-options =
     .label = DownloadIt options
     .accesskey = O
@@ -11,6 +13,7 @@ downloadit-refresh =
 downloadit-settings =
     .label = DownloadIt settings
 downloadit-download-failed = Could not send the link to { $manager }: { $error }
+downloadit-download-selection-failed = Could not send the selected links to { $manager }: { $error }
 downloadit-refresh-done =
     { $count ->
         [one] One supported download manager detected.

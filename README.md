@@ -9,6 +9,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 ## Current features
 
 - Adds a DownloadIt item to the context menu for web links.
+- Adds a Downloadit Selection item below it when selected page content contains links.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
 - Supports `http`, `https`, `ftp`, and `magnet` links.
 - Passes the URL, filename, referrer, cookies, and User-Agent to the download tool.
@@ -19,7 +20,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 
 The following features are not implemented yet:
 
-- Downloading all links or selected links;
+- Downloading all links;
 - Unknown file-type interception;
 - Media sniffing;
 - The complete original FlashGot options page and other advanced features.
@@ -42,7 +43,7 @@ External download manager
 When the extension starts, it deploys `FlashGot.exe` from the XPI to `DownloadIt\FlashGot.exe` under the Firefox profile, then communicates with it through these command-line interfaces:
 
 - `--list-json`: detects available download managers;
-- `--job-json`: submits a single download task.
+- `--job-json`: submits a single- or multi-link download task.
 
 ## Prerequisites
 
@@ -79,7 +80,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers download-task JSON, URL and filename validation, download-manager parsing, the context-menu insertion point, and the basic structure of the settings page.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the context-menu insertion point, and the basic structure of the settings page.
 
 ## Installation and upgrade
 
@@ -113,6 +114,7 @@ addon/
 └── chrome/content/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
+    ├── DownloadItSelectionActor.sys.mjs # Selection link extraction Actor
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration
     ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation
     ├── DownloadItUtils.sys.mjs           # Request encoding, domain, and cookie helpers

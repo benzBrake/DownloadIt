@@ -1,6 +1,8 @@
 downloadit-download =
     .label = 使用 DownloadIt 下载
     .accesskey = D
+downloadit-download-selection =
+    .label = 使用 DownloadIt 下载选中链接
 downloadit-options =
     .label = Downloadit 选项
     .accesskey = O
@@ -11,6 +13,7 @@ downloadit-refresh =
 downloadit-settings =
     .label = DownloadIt 设置
 downloadit-download-failed = 无法将链接发送到 { $manager }：{ $error }
+downloadit-download-selection-failed = 无法将选中链接发送到 { $manager }：{ $error }
 downloadit-refresh-done = 检测到 { $count } 个支持的下载工具。
 downloadit-scan-failed = 无法检测下载工具：{ $error }
 downloadit-unsupported = 此链接类型无法发送到 DownloadIt。

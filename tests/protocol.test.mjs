@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildDownloadBatchJob,
   buildDownloadJob,
   isSupportedURL,
+  OP_SEL,
   parseAvailableManagers,
   sanitizeFilename,
 } from "../addon/chrome/content/DownloadItProtocol.sys.mjs";
@@ -66,6 +68,51 @@ test("buildDownloadJob validates required values", () => {
     manager: "IDM",
     url: "javascript:alert(1)",
   }), /URL/i);
+});
+
+test("buildDownloadBatchJob emits a selection task for multiple links", () => {
+  assert.deepEqual(buildDownloadBatchJob({
+    manager: "Internet Download Manager",
+    links: [
+      {
+        url: "https://example.com/one.zip",
+        description: "One",
+        cookies: "a=1",
+      },
+      {
+        url: "https://example.com/two.zip",
+        description: "Two",
+        filename: "two<file>.zip",
+        cookies: "b=2",
+      },
+    ],
+  }), {
+    dlcount: 2,
+    dmName: "Internet Download Manager",
+    optype: OP_SEL,
+    referer: "",
+    dlpageReferer: "",
+    dlpageCookies: "",
+    useragent: "",
+    links: [
+      {
+        url: "https://example.com/one.zip",
+        desc: "One",
+        cookies: "a=1",
+        postdata: "",
+        filename: "",
+        extension: "",
+      },
+      {
+        url: "https://example.com/two.zip",
+        desc: "Two",
+        cookies: "b=2",
+        postdata: "",
+        filename: "two_file_.zip",
+        extension: "zip",
+      },
+    ],
+  });
 });
 
 test("sanitizeFilename removes Windows-invalid characters", () => {

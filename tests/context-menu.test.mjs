@@ -102,3 +102,21 @@ test("context menu label refresh localizes the options submenu", async () => {
   assert.equal(localizedIds.get(downloadItem), "downloadit-download");
   assert.equal(localizedIds.get(optionsMenu), "downloadit-options");
 });
+
+test("context menu label refresh localizes the selection item", async () => {
+  const localizedIds = new Map();
+  const downloadItem = {};
+  const selectionItem = {};
+  const document = {
+    l10n: {
+      setAttributes(element, id) {
+        localizedIds.set(element, id);
+      },
+      async translateFragment() {},
+    },
+  };
+
+  await refreshContextMenuLabel(document, downloadItem, null, selectionItem);
+
+  assert.equal(localizedIds.get(selectionItem), "downloadit-download-selection");
+});

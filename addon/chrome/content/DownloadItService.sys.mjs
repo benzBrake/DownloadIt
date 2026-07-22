@@ -1,5 +1,5 @@
 import {
-  buildDownloadJob,
+  buildDownloadBatchJob,
   isSupportedURL,
   parseAvailableManagers,
 } from "./DownloadItProtocol.sys.mjs";
@@ -40,8 +40,40 @@ const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
 const APP_LOCALES_CHANGED_TOPIC = "intl:app-locales-changed";
+const SELECTION_ACTOR_NAME = "DownloadItSelection";
+const SELECTION_ACTOR_URI = "chrome://downloadit/content/DownloadItSelectionActor.sys.mjs";
 
 let activeService = null;
+let selectionActorRegistered = false;
+
+function registerSelectionActor() {
+  if (selectionActorRegistered) {
+    return;
+  }
+  ChromeUtils.registerWindowActor(SELECTION_ACTOR_NAME, {
+    parent: {
+      esModuleURI: SELECTION_ACTOR_URI,
+    },
+    child: {
+      esModuleURI: SELECTION_ACTOR_URI,
+    },
+    allFrames: true,
+    matches: ["<all_urls>"],
+  });
+  selectionActorRegistered = true;
+}
+
+function unregisterSelectionActor() {
+  if (!selectionActorRegistered) {
+    return;
+  }
+  try {
+    ChromeUtils.unregisterWindowActor(SELECTION_ACTOR_NAME);
+  } catch (error) {
+    console.error("DownloadIt: selection Actor unregister failed", error);
+  }
+  selectionActorRegistered = false;
+}
 
 export class DownloadItError extends Error {
   constructor(code, args = {}) {
@@ -177,6 +209,7 @@ export class DownloadItService {
     }
 
     this.binaryPath = await this.deployBinary();
+    registerSelectionActor();
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
     Services.obs.addObserver(this, APP_LOCALES_CHANGED_TOPIC);
 
@@ -202,6 +235,8 @@ export class DownloadItService {
     try {
       Services.obs.removeObserver(this, APP_LOCALES_CHANGED_TOPIC);
     } catch {}
+
+    unregisterSelectionActor();
 
     for (const controller of this.controllers.values()) {
       controller.destroy();
@@ -309,41 +344,60 @@ export class DownloadItService {
   }
 
   async downloadLink(context, manager) {
+    return this.downloadLinks([context], manager);
+  }
+
+  async downloadLinks(contexts, manager) {
     if (!this.managers.includes(manager)) {
       throw new Error(`Unsupported download manager: ${manager}`);
     }
-    if (!isSupportedURL(context.url)) {
+    if (!Array.isArray(contexts) || contexts.length === 0) {
       throw new DownloadItError("unsupported-url");
     }
 
-    const uri = Services.io.newURI(context.url);
-    const pageReferrerURI = context.downloadPageReferer && isSupportedURL(
-      context.downloadPageReferer
-    ) ? Services.io.newURI(context.downloadPageReferer) : null;
+    const pageContext = contexts[0] || {};
+    const browser = pageContext.browser;
+    const pageReferrerURI = pageContext.downloadPageReferer && isSupportedURL(
+      pageContext.downloadPageReferer
+    ) ? Services.io.newURI(pageContext.downloadPageReferer) : null;
     const omitCookies = Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false);
     const cookieOptions = {
       cookieService: Services.cookies,
       eTLDService: Services.eTLD,
     };
-    const cookies = omitCookies
-      ? ""
-      : getCookieHeader(uri, context.browser, cookieOptions);
     const downloadPageCookies = omitCookies || !pageReferrerURI
       ? ""
-      : getCookieHeader(pageReferrerURI, context.browser, cookieOptions);
-    const userAgent = context.browser?.browsingContext?.customUserAgent ||
+      : getCookieHeader(pageReferrerURI, browser, cookieOptions);
+    const userAgent = browser?.browsingContext?.customUserAgent ||
       Cc["@mozilla.org/network/protocol;1?name=http"]
         .getService(Ci.nsIHttpProtocolHandler).userAgent;
 
-    const job = buildDownloadJob({
+    const links = [];
+    for (const context of contexts) {
+      if (!isSupportedURL(context?.url)) {
+        continue;
+      }
+      const uri = Services.io.newURI(context.url);
+      links.push({
+        url: context.url,
+        description: context.description,
+        filename: context.filename,
+        cookies: omitCookies
+          ? ""
+          : getCookieHeader(uri, context.browser || browser, cookieOptions),
+      });
+    }
+
+    if (links.length === 0) {
+      throw new DownloadItError("unsupported-url");
+    }
+
+    const job = buildDownloadBatchJob({
       manager,
-      url: context.url,
-      description: context.description,
-      filename: context.filename,
-      referer: isSupportedURL(context.referer) ? context.referer : "",
+      links,
+      referer: isSupportedURL(pageContext.referer) ? pageContext.referer : "",
       downloadPageReferer: pageReferrerURI?.spec || "",
       downloadPageCookies,
-      cookies,
       userAgent,
     });
 
