@@ -61,5 +61,5 @@ test("native Fluent source uses a directory pre-path for link resource IDs", () 
     /chrome:\/\/downloadit\/content\/locales\/\{locale\}\//,
   );
   assert.match(localization, /addResourceIds\(\[RESOURCE\]\)/);
-  assert.match(localization, /formatValue\("downloadit-root"\)/);
+  assert.match(localization, /formatValue\("downloadit-download"\)/);
 });

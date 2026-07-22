@@ -49,7 +49,7 @@ test("context menu insertion ignores anchors outside the context menu", () => {
   assert.equal(findContextMenuInsertionPoint(contextMenu), null);
 });
 
-test("context menu label can be refreshed after the application locale changes", () => {
+test("download item label can be refreshed after the application locale changes", () => {
   let localizedId = null;
   const menu = {
   };
@@ -64,7 +64,7 @@ test("context menu label can be refreshed after the application locale changes",
 
   refreshContextMenuLabel(document, menu);
 
-  assert.equal(localizedId, "downloadit-root");
+  assert.equal(localizedId, "downloadit-download");
 });
 
 test("context menu label refresh explicitly translates the dynamic menu", async () => {
@@ -82,4 +82,23 @@ test("context menu label refresh explicitly translates the dynamic menu", async 
   await refreshContextMenuLabel(document, menu);
 
   assert.equal(translated, menu);
+});
+
+test("context menu label refresh localizes the options submenu", async () => {
+  const localizedIds = new Map();
+  const downloadItem = {};
+  const optionsMenu = {};
+  const document = {
+    l10n: {
+      setAttributes(element, id) {
+        localizedIds.set(element, id);
+      },
+      async translateFragment() {},
+    },
+  };
+
+  await refreshContextMenuLabel(document, downloadItem, optionsMenu);
+
+  assert.equal(localizedIds.get(downloadItem), "downloadit-download");
+  assert.equal(localizedIds.get(optionsMenu), "downloadit-options");
 });
