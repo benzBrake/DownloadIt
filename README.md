@@ -14,6 +14,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Passes the URL, filename, referrer, cookies, and User-Agent to the download tool.
 - Provides Firefox settings for the default download manager and cookie-forwarding policy.
 - Supports Simplified Chinese and English in the UI and context menu.
+- Stores UI messages in Firefox's built-in Fluent resources.
 - Verifies the bundled `FlashGot.exe` during the build and at runtime.
 
 The following features are not implemented yet:
@@ -112,8 +113,12 @@ addon/
 └── chrome/content/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
+    ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration
     ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation
     ├── DownloadItUtils.sys.mjs           # Request encoding, domain, and cookie helpers
+    ├── locales/
+    │   ├── en-US/downloadit.ftl          # English Fluent messages
+    │   └── zh-CN/downloadit.ftl          # Simplified Chinese Fluent messages
     ├── options.xhtml                     # Settings page structure
     ├── options.js                        # Settings page logic
     └── options.css                       # Settings page styles
