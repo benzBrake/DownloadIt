@@ -24,6 +24,16 @@ test("supported Fluent resources contain the same message IDs", () => {
   assert.ok(english.size > 0);
 });
 
+test("remembered-extension removal uses an accessible Fluent label", () => {
+  for (const locale of ["en-US", "zh-CN"]) {
+    const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    assert.match(
+      source,
+      /downloadit-remove-extension\s*=\s*\r?\n\s+\.aria-label\s*=/,
+    );
+  }
+});
+
 test("runtime text uses Fluent resources instead of inline localization maps", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   const optionsScript = read("addon/chrome/content/options.js");

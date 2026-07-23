@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  canRememberLauncherExtension,
   DownloadItDownloadDialogController,
+  getLauncherExtension,
+  normalizeAutoExtensions,
+  registerDownloadItHelperAppHook,
+  unregisterDownloadItHelperAppHook,
   isDownloadDialogWindow,
 } from "../addon/chrome/content/DownloadItDownloadDialog.sys.mjs";
 
@@ -243,6 +248,8 @@ function createWindow({
           },
         },
         suggestedFileName: "file.zip",
+        MIMEInfo: { MIMEType: "application/zip" },
+        targetFileIsExecutable: false,
       },
       mContext: null,
       onOK() {
@@ -263,14 +270,32 @@ function createWindow({
   return window;
 }
 
-function createService({ fail = false, managers = ["Default", "Other"] } = {}) {
+function createService({
+  fail = false,
+  managers = ["Default", "Other"],
+  autoExtensions = [],
+  autoExtensionsLocked = false,
+} = {}) {
   const calls = [];
   const alerts = [];
+  const remembered = new Set(autoExtensions);
   return {
     managers,
     defaultManager: "Default",
+    autoExtensionsLocked,
     calls,
     alerts,
+    remembered,
+    hasAutoExtension(extension) {
+      return remembered.has(extension);
+    },
+    setAutoExtension(extension, enabled) {
+      if (enabled) {
+        remembered.add(extension);
+      } else {
+        remembered.delete(extension);
+      }
+    },
     async getManagersForDownloadDialog() {
       return [...managers];
     },
@@ -297,6 +322,44 @@ test("download dialog URL matching only accepts the native prompt", () => {
   }), true);
   assert.equal(isDownloadDialogWindow({
     location: { href: "chrome://browser/content/browser.xhtml" },
+  }), false);
+});
+
+test("automatic extension values are normalized and launcher filenames are parsed", () => {
+  assert.deepEqual(
+    normalizeAutoExtensions([" ZIP ", ".zip", "tar-gz", "bad.ext", "", "中文", true, 123]),
+    ["tar-gz", "zip"],
+  );
+  assert.equal(
+    getLauncherExtension({ suggestedFileName: "Archive.ZIP" }),
+    "zip",
+  );
+  assert.equal(getLauncherExtension({ suggestedFileName: ".profile" }), "");
+  assert.equal(getLauncherExtension({ suggestedFileName: "README" }), "");
+});
+
+test("automatic extension memory excludes install and unsupported launchers", () => {
+  const base = {
+    suggestedFileName: "file.zip",
+    source: { spec: "https://example.com/file.zip" },
+    MIMEInfo: { MIMEType: "application/zip" },
+  };
+  assert.equal(canRememberLauncherExtension(base), true);
+  assert.equal(canRememberLauncherExtension({
+    ...base,
+    suggestedFileName: "addon.xpi",
+  }), false);
+  assert.equal(canRememberLauncherExtension({
+    ...base,
+    MIMEInfo: { MIMEType: "application/x-xpinstall" },
+  }), false);
+  assert.equal(canRememberLauncherExtension({
+    ...base,
+    targetFileIsExecutable: true,
+  }), true);
+  assert.equal(canRememberLauncherExtension({
+    ...base,
+    source: { spec: "about:blank" },
   }), false);
 });
 
@@ -340,7 +403,7 @@ test("dialog shows managers without changing the configured default", async () =
   assert.equal(otherItem.getAttribute("selected"), "true");
   assert.equal(service.defaultManager, "Default");
   assert.equal(controller.radio.selected, true);
-  assert.equal(window.document.getElementById("rememberChoice").disabled, true);
+  assert.equal(window.document.getElementById("rememberChoice").disabled, false);
   assert.equal(window.document.getElementById("rememberChoice").checked, false);
 
   service.managers = ["Default", "Third"];
@@ -371,14 +434,14 @@ test("save-only dialog reveals DownloadIt and disables native open actions", asy
   assert.equal(window.document.getElementById("chooseButton").disabled, true);
   assert.equal(window.document.getElementById("handleInternally").hidden, true);
   assert.equal(window.document.getElementById("rememberChoice").parentNode.hidden, false);
-  assert.equal(window.document.getElementById("rememberChoice").disabled, true);
-  assert.equal(window.document.getElementById("rememberChoice").checked, false);
+  assert.equal(window.document.getElementById("rememberChoice").disabled, false);
+  assert.equal(window.document.getElementById("rememberChoice").checked, true);
   assert.equal(controller.option.parentNode, window.document.getElementById("mode"));
   assert.equal(window.sizeToContentCalls, 1);
 
   controller.radio.selected = false;
   window.document.getElementById("mode").dispatch("select");
-  assert.equal(window.document.getElementById("rememberChoice").disabled, true);
+  assert.equal(window.document.getElementById("rememberChoice").disabled, false);
 
   controller.destroy();
   assert.equal(window.document.getElementById("normalBox").collapsed, true);
@@ -429,6 +492,48 @@ test("DownloadIt action submits the edited filename and closes on success", asyn
   assert.equal(service.calls[0].manager, "Other");
   assert.equal(service.calls[0].filename, "file.zip");
   assert.equal(window.closed, true);
+  assert.equal(service.remembered.has("zip"), false);
+});
+
+test("remembering a DownloadIt extension updates the service after a successful handoff", async () => {
+  const window = createWindow();
+  const service = createService();
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+  await controller.init();
+  controller.radio.click();
+  window.document.getElementById("rememberChoice").checked = true;
+
+  await controller.submitExternal();
+
+  assert.equal(service.remembered.has("zip"), true);
+  assert.equal(window.closed, true);
+});
+
+test("executable launchers can remember their extensions", async () => {
+  const window = createWindow();
+  window.dialog.mLauncher.suggestedFileName = "setup.exe";
+  window.dialog.mLauncher.targetFileIsExecutable = true;
+  const service = createService();
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+  await controller.init();
+  controller.radio.click();
+
+  assert.equal(window.document.getElementById("rememberChoice").disabled, false);
+  assert.equal(window.document.getElementById("rememberChoice").checked, false);
+});
+
+test("locked extension preferences show the remembered state without allowing edits", async () => {
+  const window = createWindow();
+  const service = createService({
+    autoExtensions: ["zip"],
+    autoExtensionsLocked: true,
+  });
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+  await controller.init();
+  controller.radio.click();
+
+  assert.equal(window.document.getElementById("rememberChoice").checked, true);
+  assert.equal(window.document.getElementById("rememberChoice").disabled, true);
 });
 
 test("radio double-click submits through the selected manager", async () => {
@@ -460,6 +565,20 @@ test("failed external submission keeps the dialog open and reports a localized e
   assert.match(service.alerts[0].message, /downloadit-download-dialog-failed/);
   assert.equal(controller.action.disabled, false);
   assert.equal(controller.manager.disabled, false);
+});
+
+test("failed external submission does not change remembered extension state", async () => {
+  const window = createWindow();
+  const service = createService({ fail: true, autoExtensions: ["zip"] });
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+  await controller.init();
+  controller.radio.click();
+  window.document.getElementById("rememberChoice").checked = false;
+
+  await controller.submitExternal();
+
+  assert.equal(service.remembered.has("zip"), true);
+  assert.equal(window.closed, false);
 });
 
 test("unsupported URLs, empty manager lists, and missing localization leave native UI intact", async () => {
@@ -503,4 +622,211 @@ test("destroy during asynchronous initialization prevents late injection", async
 
   assert.equal(await initialization, false);
   assert.equal(window.document.getElementById("downloadit-download-option"), null);
+});
+
+test("helper-app hooks automatically hand off remembered extensions and restore cleanly", async () => {
+  const originalComponents = globalThis.Components;
+  globalThis.Components = { results: { NS_BINDING_ABORTED: "aborted" } };
+  class MockHelperDialog {
+    show(...args) {
+      this.originalShowArgs = args;
+      this.originalShowCalls = (this.originalShowCalls || 0) + 1;
+    }
+
+    promptForSaveToFileAsync(...args) {
+      this.originalPromptArgs = args;
+      this.originalPromptCalls = (this.originalPromptCalls || 0) + 1;
+    }
+  }
+
+  const calls = [];
+  const service = {
+    defaultManager: "Default",
+    hasAutoExtension: extension => extension === "zip",
+    async downloadLauncher(options) {
+      calls.push(options);
+    },
+  };
+  const launcher = {
+    source: { spec: "https://example.com/file.zip" },
+    suggestedFileName: "file.zip",
+    MIMEInfo: { MIMEType: "application/zip" },
+    cancelReason: null,
+    cancel(reason) {
+      this.cancelReason = reason;
+    },
+  };
+  const dialog = new MockHelperDialog();
+  try {
+    assert.equal(registerDownloadItHelperAppHook(service, {
+      helperDialogConstructor: MockHelperDialog,
+    }), true);
+    const registeredShow = MockHelperDialog.prototype.show;
+    assert.equal(registerDownloadItHelperAppHook(service, {
+      helperDialogConstructor: MockHelperDialog,
+    }), true);
+    assert.equal(MockHelperDialog.prototype.show, registeredShow);
+    dialog.show(launcher, "context", 0);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].manager, "Default");
+    assert.equal(dialog.originalShowCalls || 0, 0);
+    assert.equal(launcher.cancelReason, "aborted");
+
+    const promptLauncher = {
+      ...launcher,
+      cancelReason: null,
+      destination: "unset",
+      saveDestinationAvailable(value) {
+        this.destination = value;
+      },
+    };
+    dialog.promptForSaveToFileAsync(promptLauncher, "context", "file.zip", ".zip", false);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls.length, 2);
+    assert.equal(promptLauncher.destination, null);
+
+    const wrappedShow = MockHelperDialog.prototype.show;
+    unregisterDownloadItHelperAppHook(service);
+    assert.notEqual(MockHelperDialog.prototype.show, wrappedShow);
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+    if (originalComponents === undefined) {
+      delete globalThis.Components;
+    } else {
+      globalThis.Components = originalComponents;
+    }
+  }
+});
+
+test("helper-app hooks do not intercept a prompt from an already-open native dialog", async () => {
+  class MockHelperDialog {
+    show() {}
+
+    promptForSaveToFileAsync() {
+      this.promptCalls = (this.promptCalls || 0) + 1;
+    }
+  }
+  const service = {
+    defaultManager: "Default",
+    hasAutoExtension: extension => extension === "zip",
+    async downloadLauncher() {
+      throw new Error("should not be called");
+    },
+  };
+  const dialog = new MockHelperDialog();
+  dialog.mDialog = {};
+  const launcher = {
+    source: { spec: "https://example.com/file.zip" },
+    suggestedFileName: "file.zip",
+    MIMEInfo: { MIMEType: "application/zip" },
+  };
+  registerDownloadItHelperAppHook(service, { helperDialogConstructor: MockHelperDialog });
+  try {
+    dialog.promptForSaveToFileAsync(launcher, null, "file.zip", ".zip", false);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(dialog.promptCalls, 1);
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+  }
+});
+
+test("helper-app hook shutdown preserves methods replaced by another owner", () => {
+  class MockHelperDialog {
+    show() {}
+  }
+  const service = {
+    defaultManager: "",
+    hasAutoExtension: () => false,
+  };
+  const replacement = function () {};
+  registerDownloadItHelperAppHook(service, { helperDialogConstructor: MockHelperDialog });
+  try {
+    MockHelperDialog.prototype.show = replacement;
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+  }
+  assert.equal(MockHelperDialog.prototype.show, replacement);
+});
+
+test("helper-app hooks submit a launcher at most once while it is pending", async () => {
+  class MockHelperDialog {
+    show() {
+      this.showCalls = (this.showCalls || 0) + 1;
+    }
+  }
+  let resolveDownload;
+  let calls = 0;
+  const service = {
+    defaultManager: "Default",
+    hasAutoExtension: () => true,
+    downloadLauncher() {
+      calls += 1;
+      return new Promise(resolve => {
+        resolveDownload = resolve;
+      });
+    },
+  };
+  const dialog = new MockHelperDialog();
+  const launcher = {
+    source: { spec: "https://example.com/file.zip" },
+    suggestedFileName: "file.zip",
+    MIMEInfo: { MIMEType: "application/zip" },
+    cancel() {},
+  };
+  registerDownloadItHelperAppHook(service, { helperDialogConstructor: MockHelperDialog });
+  try {
+    dialog.show(launcher, null, 0);
+    dialog.show(launcher, null, 0);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls, 1);
+    resolveDownload();
+    await new Promise(resolve => setImmediate(resolve));
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+  }
+});
+
+test("helper-app hooks fall back for unremembered, forced, and failed downloads", async () => {
+  class MockHelperDialog {
+    show() {
+      this.showCalls = (this.showCalls || 0) + 1;
+    }
+
+    promptForSaveToFileAsync() {
+      this.promptCalls = (this.promptCalls || 0) + 1;
+    }
+  }
+  const service = {
+    defaultManager: "Default",
+    hasAutoExtension: extension => extension === "zip",
+    async downloadLauncher() {
+      throw new Error("failed");
+    },
+  };
+  const dialog = new MockHelperDialog();
+  const launcher = {
+    source: { spec: "https://example.com/file.zip" },
+    suggestedFileName: "file.zip",
+    MIMEInfo: { MIMEType: "application/zip" },
+    saveDestinationAvailable() {},
+  };
+  registerDownloadItHelperAppHook(service, { helperDialogConstructor: MockHelperDialog });
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    dialog.show({ ...launcher, suggestedFileName: "file.txt" }, null, 0);
+    dialog.show(launcher, null, 0);
+    dialog.promptForSaveToFileAsync(launcher, null, "file.zip", ".zip", false);
+    dialog.promptForSaveToFileAsync(launcher, null, "file.zip", ".zip", true);
+    await new Promise(resolve => setImmediate(resolve));
+    dialog.promptForSaveToFileAsync(launcher, null, "file.zip", ".zip", false);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(dialog.showCalls, 2);
+    assert.equal(dialog.promptCalls, 2);
+  } finally {
+    console.error = originalConsoleError;
+    unregisterDownloadItHelperAppHook(service);
+  }
 });

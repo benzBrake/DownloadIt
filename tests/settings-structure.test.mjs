@@ -28,6 +28,8 @@ test("settings dialog contains the current capability controls", () => {
     "section-managers",
     "default-manager",
     "refresh-managers",
+    "auto-extension-list",
+    "clear-auto-extensions",
     "section-privacy",
     "send-cookies",
     "section-about",
@@ -47,4 +49,20 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /renderedManagerNames/);
   assert.match(script, /refreshManagers\(\{ persistDefault: false \}\)/);
   assert.match(script, /state\.service\.applySettings\(state\.draft\)/);
+  assert.match(script, /autoExtensions/);
+  assert.match(script, /data-remove-extension/);
+  assert.match(script, /downloadit-remove-extension/);
+});
+
+test("remembered extensions are wired through service preferences and documentation", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const englishReadme = read("README.md");
+  const chineseReadme = read("README-zh_CN.md");
+
+  for (const source of [service, englishReadme, chineseReadme]) {
+    assert.match(source, /downloadit\.autoExtensions/);
+  }
+  assert.match(service, /autoExtensionsLocked/);
+  assert.match(service, /normalizeAutoExtensions\(autoExtensions\)/);
+  assert.match(service, /JSON\.stringify\(requestedAutoExtensions\)/);
 });
