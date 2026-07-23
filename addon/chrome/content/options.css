@@ -320,6 +320,22 @@ input:disabled {
   padding-bottom: 12px;
 }
 
+.auto-extension-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 10px;
+}
+
+.auto-extension-actions .field-help {
+  margin: 0;
+}
+
+.auto-extension-list {
+  margin-bottom: 0;
+}
+
 .group-heading {
   display: flex;
   align-items: flex-start;
@@ -466,6 +482,43 @@ button {
 .empty-mark {
   color: var(--warning);
   font-family: var(--font-mono);
+}
+
+.auto-extension-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0 4px;
+  border-top: 1px solid var(--line);
+}
+
+.auto-extension-row:first-child {
+  border-top: 0;
+}
+
+.auto-extension-name {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.icon-button:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .toggle-row {

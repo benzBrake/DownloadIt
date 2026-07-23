@@ -82,6 +82,26 @@ function bindEvents() {
   });
 
   document.getElementById("refresh-managers").addEventListener("click", refreshManagers);
+  document.getElementById("clear-auto-extensions").addEventListener("click", () => {
+    if (!state.draft || state.snapshot?.autoExtensionsLocked) {
+      return;
+    }
+    state.draft.autoExtensions = [];
+    clearFeedback();
+    render();
+  });
+  document.getElementById("auto-extension-list").addEventListener("click", event => {
+    const button = event.target.closest("[data-remove-extension]");
+    if (!button || !state.draft || state.snapshot?.autoExtensionsLocked) {
+      return;
+    }
+    const extension = button.dataset.removeExtension;
+    state.draft.autoExtensions = state.draft.autoExtensions.filter(
+      value => value !== extension,
+    );
+    clearFeedback();
+    render();
+  });
   document.getElementById("apply").addEventListener("click", applySettings);
   document.getElementById("cancel").addEventListener("click", () => window.close());
 }
@@ -92,7 +112,9 @@ function isDirty() {
     state.draft &&
     (
       state.initial.defaultManager !== state.draft.defaultManager ||
-      state.initial.omitCookies !== state.draft.omitCookies
+      state.initial.omitCookies !== state.draft.omitCookies ||
+      JSON.stringify(state.initial.autoExtensions) !==
+        JSON.stringify(state.draft.autoExtensions)
     )
   );
 }
@@ -124,6 +146,7 @@ function render() {
 
   renderServiceState();
   renderManagers();
+  renderAutoExtensions();
   renderPrivacy();
   renderAbout();
 
@@ -301,6 +324,56 @@ function renderPrivacy() {
   cookieLock.hidden = !snapshot?.omitCookiesLocked;
 }
 
+function renderAutoExtensions() {
+  const snapshot = state.snapshot;
+  const extensions = state.draft?.autoExtensions || snapshot?.autoExtensions || [];
+  const list = document.getElementById("auto-extension-list");
+  const clearButton = document.getElementById("clear-auto-extensions");
+  const lock = document.getElementById("auto-extension-lock");
+  list.replaceChildren();
+
+  if (!extensions.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty-row";
+    const mark = document.createElement("span");
+    mark.className = "empty-mark";
+    mark.textContent = "--";
+    const message = document.createElement("span");
+    empty.append(mark, message);
+    list.append(empty);
+    setLocalized(message, "downloadit-no-auto-extensions");
+  } else {
+    for (const extension of extensions) {
+      const row = document.createElement("li");
+      row.className = "auto-extension-row";
+
+      const name = document.createElement("code");
+      name.className = "auto-extension-name";
+      name.textContent = `.${extension}`;
+
+      const remove = document.createElement("button");
+      remove.className = "icon-button";
+      remove.type = "button";
+      remove.dataset.removeExtension = extension;
+      remove.textContent = "\u00d7";
+      setLocalized(
+        remove,
+        "downloadit-remove-extension",
+        { extension: `.${extension}` },
+      );
+      row.append(name, remove);
+      list.append(row);
+    }
+  }
+
+  const locked = Boolean(snapshot?.autoExtensionsLocked);
+  clearButton.disabled = locked || state.busy || !extensions.length;
+  lock.hidden = !locked;
+  for (const button of list.querySelectorAll("[data-remove-extension]")) {
+    button.disabled = locked || state.busy;
+  }
+}
+
 function renderAbout() {
   const snapshot = state.snapshot;
   document.getElementById("binary-path").textContent = snapshot?.binaryPath || "--";
@@ -317,6 +390,9 @@ function localizedError(error) {
   }
   if (/cookie preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-cookies");
+  }
+  if (/automatic extension preference is locked/i.test(message)) {
+    return localizedMessage("downloadit-error-locked-extensions");
   }
   if (/unsupported download manager/i.test(message)) {
     return localizedMessage("downloadit-error-unsupported-manager");
@@ -374,8 +450,12 @@ async function applySettings() {
     state.initial = {
       defaultManager: nextSnapshot.defaultManager,
       omitCookies: nextSnapshot.omitCookies,
+      autoExtensions: [...nextSnapshot.autoExtensions],
     };
-    state.draft = { ...state.initial };
+    state.draft = {
+      ...state.initial,
+      autoExtensions: [...state.initial.autoExtensions],
+    };
     state.scanState = "idle";
     setFeedback(localizedMessage("downloadit-applied"), "success");
   } catch (error) {
@@ -396,8 +476,12 @@ async function init() {
       state.initial = {
         defaultManager: state.snapshot.defaultManager,
         omitCookies: state.snapshot.omitCookies,
+        autoExtensions: [...state.snapshot.autoExtensions],
       };
-      state.draft = { ...state.initial };
+      state.draft = {
+        ...state.initial,
+        autoExtensions: [...state.initial.autoExtensions],
+      };
     }
     render();
   } catch (error) {

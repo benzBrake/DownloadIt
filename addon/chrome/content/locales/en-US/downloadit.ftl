@@ -25,6 +25,13 @@ downloadit-download-dialog-action =
 downloadit-download-dialog-default-manager = { $manager } (default)
 downloadit-download-dialog-no-manager = No supported download manager is available.
 downloadit-download-dialog-failed = Could not send this download to { $manager }: { $error }
+downloadit-auto-extensions-eyebrow = remembered types
+downloadit-auto-extensions-title = Automatic file types
+downloadit-auto-extensions-help = Downloads with these extensions are sent to the current default manager without opening the Firefox download prompt.
+downloadit-no-auto-extensions = No file types are remembered.
+downloadit-clear-auto-extensions = Clear all
+downloadit-remove-extension =
+    .aria-label = Remove { $extension } from automatic downloads
 downloadit-refresh-done =
     { $count ->
         [one] One supported download manager detected.
@@ -106,6 +113,7 @@ downloadit-cancel = Cancel
 downloadit-apply = Apply
 downloadit-error-locked-default = The default manager preference is locked.
 downloadit-error-locked-cookies = The cookie preference is locked.
+downloadit-error-locked-extensions = The remembered file types preference is locked.
 downloadit-error-unsupported-manager = The selected manager is no longer available.
 downloadit-error-service = The DownloadIt service is not ready.
 downloadit-error-unexpected = DownloadIt error: { $error }
