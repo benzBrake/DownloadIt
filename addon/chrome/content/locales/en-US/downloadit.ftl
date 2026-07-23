@@ -1,6 +1,10 @@
 downloadit-download =
     .label = DownloadIt
     .accesskey = D
+downloadit-toolbar-button =
+    .label = DownloadIt
+    .tooltiptext = Open DownloadIt controls
+    .aria-label = Open DownloadIt controls
 downloadit-download-selection =
     .label = Downloadit Selection
 downloadit-options =
@@ -39,6 +43,7 @@ downloadit-refresh-done =
     }
 downloadit-scan-failed = Could not detect download managers: { $error }
 downloadit-unsupported = This link type cannot be sent to DownloadIt.
+downloadit-panel-selection-error = Could not change the default download manager: { $error }
 
 downloadit-brand-subtitle = download bridge
 downloadit-nav =

@@ -704,7 +704,9 @@ interface CustomizableUIListener {
 interface CustomizableUIWidgetDescription {
   id: string;
   type?: "button" | "custom" | "view" | "toolbarbutton" | "toolbaritem";
+  viewId?: string;
   defaultArea?: string;
+  l10nId?: string;
   label?: string;
   tooltiptext?: string;
   localized?: boolean;
@@ -713,6 +715,8 @@ interface CustomizableUIWidgetDescription {
   onCommand?(event: Event): void;
   onCreated?(node: Element): void;
   onDestroyed?(node: Element): void;
+  onViewShowing?(event: Event): void | Promise<void>;
+  onViewHiding?(event: Event): void | Promise<void>;
   [property: string]: unknown;
 }
 

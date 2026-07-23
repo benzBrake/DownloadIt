@@ -5,6 +5,11 @@ import {
 } from "./DownloadItProtocol.sys.mjs";
 import { DownloadItContextMenuController } from "./DownloadItContextMenu.sys.mjs";
 import {
+  DOWNLOADIT_PANEL_VIEW_ID,
+  DOWNLOADIT_TOOLBAR_WIDGET_ID,
+  DownloadItPanelViewController,
+} from "./DownloadItPanelView.sys.mjs";
+import {
   DownloadItDownloadDialogController,
   normalizeAutoExtensions,
   registerDownloadItHelperAppHook,
@@ -57,6 +62,17 @@ const { NetUtil } = ChromeUtils.importESModule(
 const { Downloads } = ChromeUtils.importESModule(
   "resource://gre/modules/Downloads.sys.mjs"
 );
+let customizableUIModule;
+try {
+  customizableUIModule = ChromeUtils.importESModule(
+    "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs"
+  );
+} catch {
+  customizableUIModule = ChromeUtils.importESModule(
+    "resource:///modules/CustomizableUI.sys.mjs"
+  );
+}
+const { CustomizableUI } = customizableUIModule;
 const {
   clearTimeout: clearTimeoutPromise,
   setTimeout: setTimeoutPromise,
@@ -84,6 +100,7 @@ const DOWNLOAD_DIALOG_TOPIC = "domwindowopened";
 const APP_LOCALES_CHANGED_TOPIC = "intl:app-locales-changed";
 const SELECTION_ACTOR_NAME = "DownloadItSelection";
 const SELECTION_ACTOR_URI = "chrome://downloadit/content/DownloadItSelectionActor.sys.mjs";
+const TOOLBAR_ICON = "chrome://browser/skin/downloads/downloads.svg";
 
 let activeService = null;
 let selectionActorRegistered = false;
@@ -181,6 +198,7 @@ export class DownloadItService {
     this.customDownloaderDocument = createEmptyCustomDownloaderDocument();
     this.customDownloaderLoadError = null;
     this.controllers = new Map();
+    this.panelControllers = new Map();
     this.downloadDialogControllers = new Map();
     this.downloadDialogWatchers = new Map();
     this.temporaryFiles = new Set();
@@ -715,6 +733,12 @@ export class DownloadItService {
       }
     }
 
+    try {
+      this.registerToolbarWidget();
+    } catch (error) {
+      console.error("DownloadIt: toolbar widget registration failed", error);
+    }
+
     const openWindows = Services.wm.getEnumerator(null);
     while (openWindows.hasMoreElements()) {
       const window = openWindows.getNext();
@@ -759,6 +783,11 @@ export class DownloadItService {
       controller.destroy();
     }
     this.controllers.clear();
+    for (const controller of this.panelControllers.values()) {
+      controller.destroy();
+    }
+    this.panelControllers.clear();
+    this.unregisterToolbarWidget();
     for (const controller of this.downloadDialogControllers.values()) {
       controller.destroy();
     }
@@ -797,6 +826,11 @@ export class DownloadItService {
             console.error("DownloadIt: context-menu locale refresh failed", error);
           });
       }
+      for (const controller of this.panelControllers.values()) {
+        controller.refreshLocalization().catch(error => {
+          console.error("DownloadIt: panel locale refresh failed", error);
+        });
+      }
     }
   }
 
@@ -810,20 +844,70 @@ export class DownloadItService {
       return;
     }
 
+    let controller = null;
+    let panelController = null;
     try {
-      const controller = new DownloadItContextMenuController(
+      const localizationReady = initializeDownloadItLocalization(window);
+      const initializeLocalization = () => localizationReady;
+      controller = new DownloadItContextMenuController(
         this,
         window,
-        initializeDownloadItLocalization,
+        initializeLocalization,
+      );
+      panelController = new DownloadItPanelViewController(
+        this,
+        window,
+        initializeLocalization,
       );
       controller.init();
+      panelController.init();
       this.controllers.set(window, controller);
+      this.panelControllers.set(window, panelController);
       window.addEventListener("unload", () => {
         controller.destroy();
+        panelController.destroy();
         this.controllers.delete(window);
+        this.panelControllers.delete(window);
       }, { once: true });
     } catch (error) {
+      controller?.destroy();
+      panelController?.destroy();
       console.error("DownloadIt: browser window initialization failed", error);
+    }
+  }
+
+  registerToolbarWidget() {
+    if (CustomizableUI.getWidget(DOWNLOADIT_TOOLBAR_WIDGET_ID)) {
+      CustomizableUI.destroyWidget(DOWNLOADIT_TOOLBAR_WIDGET_ID);
+    }
+    CustomizableUI.createWidget({
+      id: DOWNLOADIT_TOOLBAR_WIDGET_ID,
+      type: "view",
+      viewId: DOWNLOADIT_PANEL_VIEW_ID,
+      defaultArea: CustomizableUI.AREA_NAVBAR,
+      removable: true,
+      l10nId: "downloadit-toolbar-button",
+      onCreated: node => {
+        node.setAttribute("image", TOOLBAR_ICON);
+      },
+      onViewShowing: event => {
+        const window = event.target?.ownerDocument?.defaultView;
+        this.panelControllers.get(window)?.onViewShowing(event);
+      },
+      onViewHiding: event => {
+        const window = event.target?.ownerDocument?.defaultView;
+        this.panelControllers.get(window)?.onViewHiding(event);
+      },
+    });
+  }
+
+  unregisterToolbarWidget() {
+    try {
+      if (CustomizableUI.getWidget(DOWNLOADIT_TOOLBAR_WIDGET_ID)) {
+        CustomizableUI.destroyWidget(DOWNLOADIT_TOOLBAR_WIDGET_ID);
+      }
+    } catch (error) {
+      console.error("DownloadIt: toolbar widget cleanup failed", error);
     }
   }
 

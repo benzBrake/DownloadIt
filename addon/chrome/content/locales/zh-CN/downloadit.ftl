@@ -1,6 +1,10 @@
 downloadit-download =
     .label = 使用 DownloadIt 下载
     .accesskey = D
+downloadit-toolbar-button =
+    .label = DownloadIt
+    .tooltiptext = 打开 DownloadIt 控制面板
+    .aria-label = 打开 DownloadIt 控制面板
 downloadit-download-selection =
     .label = 使用 DownloadIt 下载选中链接
 downloadit-options =
@@ -35,6 +39,7 @@ downloadit-remove-extension =
 downloadit-refresh-done = 检测到 { $count } 个支持的下载工具。
 downloadit-scan-failed = 无法检测下载工具：{ $error }
 downloadit-unsupported = 此链接类型无法发送到 DownloadIt。
+downloadit-panel-selection-error = 无法更改默认下载工具：{ $error }
 
 downloadit-brand-subtitle = 下载桥接器
 downloadit-nav =
