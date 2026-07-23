@@ -11,6 +11,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Adds a DownloadIt item to the context menu for web links.
 - Adds a Downloadit Selection item below it when selected page content contains links.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
+- Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
 - Lets you remember supported file extensions and automatically forward them to the current default manager.
 - Supports `http`, `https`, `ftp`, and `magnet` links.
@@ -35,12 +36,10 @@ Firefox context menu, native download prompt, or remembered extension hook
         │
         ▼
 DownloadIt background service
-        │  Temporary JSON file
-        ▼
-FlashGot.exe
         │
-        ▼
-External download manager
+        ├── flashgot provider ── temporary job JSON ── FlashGot.exe
+        ├── custom command provider ── native Firefox process API
+        └── custom aria2 provider ── JSON-RPC
 ```
 
 When the extension starts, it deploys `FlashGot.exe` from the XPI to `DownloadIt\FlashGot.exe` under the Firefox profile, then communicates with it through these command-line interfaces:
@@ -53,7 +52,7 @@ When the extension starts, it deploys `FlashGot.exe` from the XPI to `DownloadIt
 - Windows;
 - Firefox 136.0 or later;
 - A configured custom `userChrome.js-Loader` that is active in the target profile. The version released after 20250219 is recommended because it supports Firefox 135+;
-- At least one download manager supported by `FlashGot.exe`;
+- At least one download manager supported by `FlashGot.exe`, or a configured custom downloader;
 - If `addon/FlashGot.exe` is missing during the build, the script automatically downloads it from the [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly build. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
 - Node.js 18 or later for development and testing;
 - PowerShell 7 (`pwsh`) for building.
@@ -100,7 +99,7 @@ Open the settings page from “DownloadIt Settings” in the context menu or fro
 
 | Preference | Type | Description |
 | --- | --- | --- |
-| `downloadit.defaultDM` | String | Name of the default download manager. The name must come from the most recent detection result. |
+| `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"flashgot","id":"Internet Download Manager"}` or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
 | `downloadit.detectedManagers` | String | Cached download-manager detection results, maintained automatically by the extension. |
 | `downloadit.autoExtensions` | String | JSON array of file extensions that should be sent to the current default manager automatically. |
@@ -108,6 +107,41 @@ Open the settings page from “DownloadIt Settings” in the context menu or fro
 When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes. Remembered extensions can be removed individually or cleared from the settings page.
 
 Only explicitly remembered extensions are intercepted. Empty extensions, Firefox install packages (`.xpi`/`xpinstall`), and unsupported URL schemes always remain in Firefox's native flow. Executable extensions such as `.exe` can be remembered explicitly.
+
+### Custom downloaders
+
+Custom definitions are stored as formatted UTF-8 JSON in `DownloadIt\custom-downloaders.json` under the Firefox profile. The file is loaded at startup and can be reloaded from the settings page. Invalid JSON and unsupported versions are preserved without being overwritten; use the explicit reset action to replace a damaged file with an empty configuration.
+
+The file is created when custom definitions are first applied and uses stable, non-editable UUIDs:
+
+```json
+{
+  "version": 1,
+  "downloaders": [
+    {
+      "id": "123e4567-e89b-42d3-a456-426614174000",
+      "name": "My downloader",
+      "enabled": true,
+      "type": "command",
+      "startHidden": true,
+      "command": {
+        "executablePath": "C:\\Tools\\downloader.exe",
+        "argumentsTemplate": "[URL]"
+      }
+    }
+  ]
+}
+```
+
+Executable and aria2 configuration paths inside Firefox's chrome configuration directory (`UChrm`, normally `<profile>/chrome`) are stored with forward slashes relative to that directory, for example `UserTools/aria2/aria2c.exe` and `UserTools/aria2/aria2.conf`. Relative paths are always resolved from `UChrm`; files outside it keep their absolute paths.
+
+Custom downloaders hide process windows by default. Clear **Hide process window** to run command-line processes, or an automatically started aria2c process, in the foreground for debugging. Existing JSON files without `startHidden` retain hidden execution.
+
+Command-line downloaders select an executable and an arguments template. The editor provides quick templates for `aria2c`, `wget`, and `curl`. DownloadIt invokes the executable directly with Firefox's native process API and never passes the template through a command shell. Supported FlashGot-compatible placeholders are `URL`, `FNAME`, `COMMENT`, `REFERER`, `COOKIE`, `CFILE`, `FOLDER`, `POST`, `RAWPOST`, `HEADERS`, `ULIST`, `UFILE`, `USERPASS`, and `UA`. A template containing `ULIST` or `UFILE` starts one process for the batch; otherwise one process is started per link.
+
+aria2 definitions connect to an HTTP or HTTPS JSON-RPC endpoint and support an optional secret and server-side download directory. Multiple links are submitted with `system.multicall`. The optional local-startup settings include `executablePath` and `configurationPath`; the executable becomes required only when automatic startup is enabled, while the configuration file may remain empty. When supplied, DownloadIt passes the resolved configuration file as `--conf-path`. Optional aria2c startup is restricted to HTTP loopback endpoints; DownloadIt controls the configuration path, RPC enablement, listen address, port, and secret arguments, waits up to five seconds for readiness, and retries the request once. RPC secrets are stored as plain text in the JSON file and are never written to DownloadIt logs.
+
+The provider registry also reserves the `native` namespace for future JavaScript-based detection and invocation without `FlashGot.exe`.
 
 ## Project structure
 
@@ -121,6 +155,7 @@ addon/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
+    ├── DownloadItDownloaders.sys.mjs    # Provider references, custom schema, templates, and aria2 protocol
     ├── DownloadItXUL.sys.mjs             # Shared Firefox XUL element construction helper
     ├── DownloadItSelectionActor.sys.mjs # Selection link extraction Actor
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration
