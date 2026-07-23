@@ -91,7 +91,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the context-menu insertion point, remembered-extension interception and fallback, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 ## Installation and upgrade
 
@@ -104,7 +104,9 @@ To upgrade, install the newly built `addon.xpi` over the existing installation. 
 
 ## Configuration
 
-Open the settings page from “DownloadIt Settings” in the context menu or from the extension settings in `about:addons`.
+The DownloadIt toolbar button opens a native Firefox panel. Select an available tool to change the default download manager immediately, use “Detect download managers again” to refresh the detected-tool list, or open DownloadIt settings from the panel footer. The button is added to the navigation bar initially and can be moved or removed through Firefox's Customize Toolbar interface.
+
+Open the settings page from the toolbar panel, from “DownloadIt Settings” in the context menu, or from the extension settings in `about:addons`.
 
 | Preference | Type | Description |
 | --- | --- | --- |
