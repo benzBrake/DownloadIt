@@ -12,9 +12,11 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Adds a Downloadit Selection item below it when selected page content contains links.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
+- Lets you remember supported file extensions and automatically forward them to the current default manager.
 - Supports `http`, `https`, `ftp`, and `magnet` links.
 - Passes the URL, filename, referrer, cookies, and User-Agent to the download tool.
 - Provides Firefox settings for the default download manager and cookie-forwarding policy.
+- Provides a settings list for remembered automatic file extensions.
 - Supports Simplified Chinese and English in the UI and context menu.
 - Stores UI messages in Firefox's built-in Fluent resources.
 - Verifies the bundled `FlashGot.exe` during the build and at runtime.
@@ -22,14 +24,14 @@ The project is currently being migrated. Its target platform is Windows, and the
 The following features are not implemented yet:
 
 - Downloading all links;
-- Unknown file-type interception;
+- Broad unknown file-type interception;
 - Media sniffing;
 - The complete original FlashGot options page and other advanced features.
 
 ## How it works
 
 ```text
-Firefox context menu or native download prompt
+Firefox context menu, native download prompt, or remembered extension hook
         │
         ▼
 DownloadIt background service
@@ -81,7 +83,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the context-menu insertion point, the native download prompt integration, and the basic structure of the settings page.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the context-menu insertion point, remembered-extension interception and fallback, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 ## Installation and upgrade
 
@@ -101,8 +103,11 @@ Open the settings page from “DownloadIt Settings” in the context menu or fro
 | `downloadit.defaultDM` | String | Name of the default download manager. The name must come from the most recent detection result. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
 | `downloadit.detectedManagers` | String | Cached download-manager detection results, maintained automatically by the extension. |
+| `downloadit.autoExtensions` | String | JSON array of file extensions that should be sent to the current default manager automatically. |
 
-When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes.
+When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes. Remembered extensions can be removed individually or cleared from the settings page.
+
+Only explicitly remembered extensions are intercepted. Empty extensions, Firefox install packages (`.xpi`/`xpinstall`), and unsupported URL schemes always remain in Firefox's native flow. Executable extensions such as `.exe` can be remembered explicitly.
 
 ## Project structure
 
