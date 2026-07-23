@@ -53,16 +53,25 @@ DownloadIt 后台服务
 - Firefox 136.0 或更高版本；
 - 已安装并正常配置的定制 `userChrome.js-Loader`。建议使用该 Loader 20250219 之后的版本（兼容 Firefox 135+）；
 - 至少安装一个 `FlashGot.exe` 支持的下载管理器，或配置一个自定义下载器；
-- 构建时如果缺少 `addon/FlashGot.exe`，脚本会从 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 的 nightly build 自动下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
+- 构建时如果缺少 `addon/FlashGot.exe`，PowerShell 脚本会从 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 的 nightly build 下载，Linux 脚本则不调用 GitHub API，而是解析最新 GitHub Release 页面并下载其中发布的 `FlashGot-v*.zip` 资产。如果上游尚无正式 Release，使用 Linux 脚本前需自行提供 `addon/FlashGot.exe`。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
 - 开发和测试需要 Node.js 18 或更高版本；
-- 构建需要 PowerShell 7（`pwsh`）。
+- 在 Windows 上构建需要 PowerShell 7（`pwsh`）；
+- 在 Linux 上构建需要 Bash、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils。
 
 ## 构建
 
-在仓库根目录执行：
+在仓库根目录执行对应平台的命令。
+
+Windows：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
+```
+
+Linux：
+
+```bash
+./pack.sh
 ```
 
 脚本会把 `addon/` 打包为根目录下的 `addon.xpi`，并检查 XPI 至少包含：
@@ -72,7 +81,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
 - `chrome.manifest`；
 - `FlashGot.exe`。
 
-`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时 `pack.ps1` 会自动获取最新 nightly build。
+`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时，`pack.ps1` 会获取最新 nightly build，`pack.sh` 则不调用 GitHub API，而是解析最新正式 Release 页面并下载匹配的压缩包。如果上游尚无正式 Release，请先把 `FlashGot.exe` 放入 `addon/` 再运行 `pack.sh`。
 
 ## 测试
 
@@ -168,6 +177,7 @@ addon/
     ├── options.js                        # 设置页面逻辑
     └── options.css                       # 设置页面样式
 pack.ps1                                  # XPI 打包脚本
+pack.sh                                   # Linux XPI 打包脚本
 tests/                                    # Node.js 单元测试
 ```
 

@@ -53,16 +53,25 @@ When the extension starts, it deploys `FlashGot.exe` from the XPI to `DownloadIt
 - Firefox 136.0 or later;
 - A configured custom `userChrome.js-Loader` that is active in the target profile. The version released after 20250219 is recommended because it supports Firefox 135+;
 - At least one download manager supported by `FlashGot.exe`, or a configured custom downloader;
-- If `addon/FlashGot.exe` is missing during the build, the script automatically downloads it from the [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly build. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
+- If `addon/FlashGot.exe` is missing during the build, the PowerShell script downloads it from the [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly build, while the Linux script parses the latest GitHub Release page and downloads the published `FlashGot-v*.zip` asset without using the GitHub API. If no formal release exists, provide `addon/FlashGot.exe` locally before using the Linux script. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
 - Node.js 18 or later for development and testing;
-- PowerShell 7 (`pwsh`) for building.
+- PowerShell 7 (`pwsh`) for building on Windows;
+- Bash, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux.
 
 ## Build
 
-Run the following command from the repository root:
+Run the command for your platform from the repository root.
+
+Windows:
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
+```
+
+Linux:
+
+```bash
+./pack.sh
 ```
 
 The script packages `addon/` into `addon.xpi` in the repository root and verifies that the XPI contains at least:
@@ -72,7 +81,7 @@ The script packages `addon/` into `addon.xpi` in the repository root and verifie
 - `chrome.manifest`;
 - `FlashGot.exe`.
 
-`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control; when it is missing, `pack.ps1` automatically fetches the latest nightly build.
+`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control. When it is missing, `pack.ps1` fetches the latest nightly build, while `pack.sh` parses the latest formal Release page and downloads its matching archive without calling the GitHub API. If the upstream project has no formal release, place `FlashGot.exe` in `addon/` before running `pack.sh`.
 
 ## Testing
 
@@ -168,6 +177,7 @@ addon/
     ├── options.js                        # Settings page logic
     └── options.css                       # Settings page styles
 pack.ps1                                  # XPI packaging script
+pack.sh                                   # Linux XPI packaging script
 tests/                                    # Node.js unit tests
 ```
 
