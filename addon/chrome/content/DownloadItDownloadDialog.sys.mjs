@@ -11,6 +11,234 @@ const DOWNLOADIT_OPTION_ID = "downloadit-download-option";
 const DOWNLOADIT_MANAGER_ID = "downloadit-download-manager";
 const DOWNLOADIT_MANAGER_POPUP_ID = "downloadit-download-manager-popup";
 const DOWNLOADIT_ACTION_ID = "downloadit-download-action";
+const HELPER_APP_DIALOG_MODULE = "resource://gre/modules/HelperAppDlg.sys.mjs";
+
+let helperAppHook = null;
+
+function bindingAbortedResult () {
+  if (typeof Cr !== "undefined") {
+    return Cr.NS_BINDING_ABORTED;
+  }
+  if (typeof Components !== "undefined") {
+    return Components.results.NS_BINDING_ABORTED;
+  }
+  return undefined;
+}
+
+export function normalizeAutoExtensions (value) {
+  if (!Array.isArray(value)) {
+    throw new TypeError("Automatic download extensions must be an array");
+  }
+
+  const extensions = [];
+  const seen = new Set();
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const extension = entry
+      .trim()
+      .toLowerCase()
+      .replace(/^\.+/, "");
+    if (
+      !extension ||
+      !/^[a-z0-9][a-z0-9_-]*$/.test(extension) ||
+      seen.has(extension)
+    ) {
+      continue;
+    }
+    seen.add(extension);
+    extensions.push(extension);
+  }
+  return extensions.sort();
+}
+
+export function getLauncherExtension (launcher) {
+  const filename = String(launcher?.suggestedFileName || "").trim();
+  const separator = filename.lastIndexOf(".");
+  if (separator <= 0 || separator === filename.length - 1) {
+    return "";
+  }
+  return normalizeAutoExtensions([filename.slice(separator + 1)])[0] || "";
+}
+
+export function canRememberLauncherExtension (launcher) {
+  const extension = getLauncherExtension(launcher);
+  const mimeType = String(
+    launcher?.MIMEInfo?.MIMEType || launcher?.MIMEInfo?.type || "",
+  ).toLowerCase();
+  return Boolean(
+    extension &&
+    extension !== "xpi" &&
+    !mimeType.includes("xpinstall") &&
+    isSupportedURL(launcher?.source?.spec || ""),
+  );
+}
+
+function shouldAutomaticallyHandle (service, launcher) {
+  try {
+    const extension = getLauncherExtension(launcher);
+    return Boolean(
+      service?.defaultManager &&
+      canRememberLauncherExtension(launcher) &&
+      service.hasAutoExtension?.(extension),
+    );
+  } catch (error) {
+    console.error("DownloadIt: automatic extension check failed", error);
+    return false;
+  }
+}
+
+function startAutomaticDownload ({
+  state,
+  launcher,
+  context,
+  fallback,
+  complete,
+}) {
+  const service = state.service;
+  if (!shouldAutomaticallyHandle(service, launcher)) {
+    return false;
+  }
+  if (state.pendingLaunchers.has(launcher)) {
+    return true;
+  }
+
+  state.pendingLaunchers.add(launcher);
+  const manager = service.defaultManager;
+  Promise.resolve().then(() => service.downloadLauncher({
+    launcher,
+    context,
+    manager,
+    filename: launcher.suggestedFileName || "",
+  })).then(() => {
+    try {
+      complete();
+    } catch (error) {
+      console.error("DownloadIt: automatic launcher completion failed", error);
+    }
+  }, error => {
+    state.pendingLaunchers.delete(launcher);
+    console.error("DownloadIt: automatic download failed; showing Firefox UI", error);
+    try {
+      fallback();
+    } catch (fallbackError) {
+      console.error("DownloadIt: Firefox fallback failed", fallbackError);
+    }
+  });
+  return true;
+}
+
+export function registerDownloadItHelperAppHook (
+  service,
+  { helperDialogConstructor = null } = {},
+) {
+  if (helperAppHook) {
+    helperAppHook.service = service;
+    return true;
+  }
+
+  let constructor = helperDialogConstructor;
+  if (!constructor) {
+    try {
+      constructor = ChromeUtils.importESModule(
+        HELPER_APP_DIALOG_MODULE,
+      ).nsUnknownContentTypeDialog;
+    } catch (error) {
+      console.error("DownloadIt: Firefox helper-app module is unavailable", error);
+      return false;
+    }
+  }
+
+  const prototype = constructor?.prototype;
+  if (typeof prototype?.show !== "function") {
+    console.error("DownloadIt: Firefox helper-app show hook is unavailable");
+    return false;
+  }
+
+  const state = {
+    service,
+    prototype,
+    originalShow: prototype.show,
+    originalPromptForSaveToFileAsync:
+      typeof prototype.promptForSaveToFileAsync === "function"
+        ? prototype.promptForSaveToFileAsync
+        : null,
+    wrappedShow: null,
+    wrappedPromptForSaveToFileAsync: null,
+    pendingLaunchers: new WeakSet(),
+  };
+
+  try {
+    state.wrappedShow = function (...args) {
+      const [launcher, context] = args;
+      const handled = startAutomaticDownload({
+        state,
+        launcher,
+        context,
+        fallback: () => state.originalShow.apply(this, args),
+        complete: () => launcher.cancel(bindingAbortedResult()),
+      });
+      if (!handled) {
+        return state.originalShow.apply(this, args);
+      }
+      return undefined;
+    };
+    prototype.show = state.wrappedShow;
+
+    if (state.originalPromptForSaveToFileAsync) {
+      state.wrappedPromptForSaveToFileAsync = function (...args) {
+        const [launcher, context, , , forcePrompt] = args;
+        const handled = !forcePrompt && !this.mDialog && startAutomaticDownload({
+          state,
+          launcher,
+          context,
+          fallback: () => state.originalPromptForSaveToFileAsync.apply(this, args),
+          complete: () => launcher.saveDestinationAvailable(null),
+        });
+        if (!handled) {
+          return state.originalPromptForSaveToFileAsync.apply(this, args);
+        }
+        return undefined;
+      };
+      prototype.promptForSaveToFileAsync = state.wrappedPromptForSaveToFileAsync;
+    }
+  } catch (error) {
+    if (prototype.show === state.wrappedShow) {
+      prototype.show = state.originalShow;
+    }
+    if (
+      state.wrappedPromptForSaveToFileAsync &&
+      prototype.promptForSaveToFileAsync === state.wrappedPromptForSaveToFileAsync
+    ) {
+      prototype.promptForSaveToFileAsync = state.originalPromptForSaveToFileAsync;
+    }
+    console.error("DownloadIt: Firefox helper-app hook registration failed", error);
+    return false;
+  }
+
+  helperAppHook = state;
+  return true;
+}
+
+export function unregisterDownloadItHelperAppHook (service) {
+  const state = helperAppHook;
+  if (!state || (service && state.service !== service)) {
+    return;
+  }
+
+  state.service = null;
+  if (state.prototype.show === state.wrappedShow) {
+    state.prototype.show = state.originalShow;
+  }
+  if (
+    state.wrappedPromptForSaveToFileAsync &&
+    state.prototype.promptForSaveToFileAsync === state.wrappedPromptForSaveToFileAsync
+  ) {
+    state.prototype.promptForSaveToFileAsync = state.originalPromptForSaveToFileAsync;
+  }
+  helperAppHook = null;
+}
 
 function documentURL (window) {
   return String(window?.location?.href || "").replace(/\?.*$/, "");
@@ -34,6 +262,9 @@ export class DownloadItDownloadDialogController {
     this.manager = null;
     this.managerPopup = null;
     this.action = null;
+    this.rememberChoice = null;
+    this.rememberChoiceState = null;
+    this.downloadItModeActive = false;
     this.availableManagers = [];
     this.defaultManager = "";
     this.defaultManagerLabel = "";
@@ -60,6 +291,13 @@ export class DownloadItDownloadDialogController {
     }
 
     this.dialog = dialog;
+    this.rememberChoice = this.document.getElementById(REMEMBER_CHOICE_ID);
+    if (this.rememberChoice) {
+      this.rememberChoiceState = {
+        checked: Boolean(this.rememberChoice.checked),
+        disabled: Boolean(this.rememberChoice.disabled),
+      };
+    }
     this.localizationReady = Promise.resolve(
       this.initializeLocalization?.(this.window),
     );
@@ -110,6 +348,10 @@ export class DownloadItDownloadDialogController {
     this.manager = null;
     this.managerPopup = null;
     this.action = null;
+    this.restoreRememberChoiceState();
+    this.rememberChoice = null;
+    this.rememberChoiceState = null;
+    this.downloadItModeActive = false;
     this.availableManagers = [];
     this.defaultManager = "";
     this.defaultManagerLabel = "";
@@ -207,11 +449,6 @@ export class DownloadItDownloadDialogController {
       }
     }
 
-    const rememberChoice = this.document.getElementById(REMEMBER_CHOICE_ID);
-    if (rememberChoice) {
-      this.setTemporaryAttribute(rememberChoice, "disabled", "true");
-      this.setTemporaryProperty(rememberChoice, "checked", false);
-    }
   }
 
   setTemporaryAttribute (element, name, value) {
@@ -297,19 +534,40 @@ export class DownloadItDownloadDialogController {
   }
 
   updateModeState () {
-    const rememberChoice = this.document.getElementById(REMEMBER_CHOICE_ID);
+    const rememberChoice = this.rememberChoice;
     if (this.radio?.selected) {
       if (rememberChoice) {
-        rememberChoice.disabled = true;
-        rememberChoice.checked = false;
+        const extension = getLauncherExtension(this.dialog?.mLauncher);
+        const canRemember = canRememberLauncherExtension(this.dialog?.mLauncher);
+        const canEdit = canRemember && !this.service.autoExtensionsLocked;
+        if (!this.downloadItModeActive) {
+          rememberChoice.checked = canRemember &&
+            this.service.hasAutoExtension?.(extension);
+        }
+        rememberChoice.disabled = !canEdit;
+        if (!canRemember) {
+          rememberChoice.checked = false;
+        }
       }
+      this.downloadItModeActive = true;
       const accept = this.getAcceptButton();
       if (accept) {
         accept.disabled = false;
       }
-    } else if (rememberChoice) {
-      rememberChoice.disabled = this.saveOnlyLayout;
+    } else {
+      if (this.downloadItModeActive) {
+        this.restoreRememberChoiceState();
+      }
+      this.downloadItModeActive = false;
     }
+  }
+
+  restoreRememberChoiceState () {
+    if (!this.rememberChoice || !this.rememberChoiceState) {
+      return;
+    }
+    this.rememberChoice.checked = this.rememberChoiceState.checked;
+    this.rememberChoice.disabled = this.rememberChoiceState.disabled;
   }
 
   getAcceptButton () {
@@ -355,6 +613,20 @@ export class DownloadItDownloadDialogController {
         manager,
         filename: this.getFilename(),
       });
+      if (
+        this.rememberChoice &&
+        !this.service.autoExtensionsLocked &&
+        canRememberLauncherExtension(this.dialog.mLauncher)
+      ) {
+        try {
+          this.service.setAutoExtension?.(
+            getLauncherExtension(this.dialog.mLauncher),
+            Boolean(this.rememberChoice?.checked),
+          );
+        } catch (error) {
+          console.error("DownloadIt: could not update the remembered file type", error);
+        }
+      }
       this.window.close();
     } catch (error) {
       this.submitting = false;

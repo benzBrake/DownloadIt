@@ -6,6 +6,9 @@ import {
 import { DownloadItContextMenuController } from "./DownloadItContextMenu.sys.mjs";
 import {
   DownloadItDownloadDialogController,
+  normalizeAutoExtensions,
+  registerDownloadItHelperAppHook,
+  unregisterDownloadItHelperAppHook,
   isDownloadDialogWindow,
 } from "./DownloadItDownloadDialog.sys.mjs";
 import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
@@ -40,6 +43,7 @@ const PROFILE_DIRECTORY = "DownloadIt";
 const PREF_DEFAULT_MANAGER = "downloadit.defaultDM";
 const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
 const PREF_OMIT_COOKIES = "downloadit.omitCookies";
+const PREF_AUTO_EXTENSIONS = "downloadit.autoExtensions";
 
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
@@ -152,6 +156,45 @@ export class DownloadItService {
     Services.prefs.setStringPref(PREF_DEFAULT_MANAGER, String(value || ""));
   }
 
+  get autoExtensions() {
+    try {
+      const value = JSON.parse(
+        Services.prefs.getStringPref(PREF_AUTO_EXTENSIONS, "[]"),
+      );
+      return Array.isArray(value) ? normalizeAutoExtensions(value) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  get autoExtensionsLocked() {
+    return Services.prefs.prefIsLocked(PREF_AUTO_EXTENSIONS);
+  }
+
+  hasAutoExtension(value) {
+    const extension = normalizeAutoExtensions([value])[0] || "";
+    return Boolean(extension && this.autoExtensions.includes(extension));
+  }
+
+  setAutoExtension(value, enabled) {
+    if (this.autoExtensionsLocked) {
+      throw new Error("The automatic extension preference is locked");
+    }
+    const extension = normalizeAutoExtensions([value])[0] || "";
+    if (!extension) {
+      return this.autoExtensions;
+    }
+    const current = new Set(this.autoExtensions);
+    if (enabled) {
+      current.add(extension);
+    } else {
+      current.delete(extension);
+    }
+    const next = normalizeAutoExtensions([...current]);
+    Services.prefs.setStringPref(PREF_AUTO_EXTENSIONS, JSON.stringify(next));
+    return next;
+  }
+
   readSettings() {
     const configuredDefaultManager = Services.prefs.getStringPref(
       PREF_DEFAULT_MANAGER,
@@ -165,16 +208,26 @@ export class DownloadItService {
         ? configuredDefaultManager
         : managers[0] || "",
       omitCookies: Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false),
+      autoExtensions: this.autoExtensions,
       defaultManagerLocked: Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER),
       omitCookiesLocked: Services.prefs.prefIsLocked(PREF_OMIT_COOKIES),
+      autoExtensionsLocked: this.autoExtensionsLocked,
       binaryPath: this.binaryPath,
       serviceReady: Boolean(this.binaryPath),
       platformSupported: Services.appinfo.OS === "WINNT",
     };
   }
 
-  applySettings({ defaultManager = "", omitCookies = false } = {}) {
+  applySettings({
+    defaultManager = "",
+    omitCookies = false,
+    autoExtensions = null,
+  } = {}) {
     const manager = String(defaultManager || "");
+    const currentAutoExtensions = this.autoExtensions;
+    const requestedAutoExtensions = autoExtensions == null
+      ? currentAutoExtensions
+      : normalizeAutoExtensions(autoExtensions);
     const configuredDefaultManager = Services.prefs.getStringPref(
       PREF_DEFAULT_MANAGER,
       "",
@@ -200,12 +253,26 @@ export class DownloadItService {
     ) {
       throw new Error("The cookie preference is locked");
     }
+    if (
+      this.autoExtensionsLocked &&
+      JSON.stringify(requestedAutoExtensions) !== JSON.stringify(currentAutoExtensions)
+    ) {
+      throw new Error("The automatic extension preference is locked");
+    }
 
     if (manager && !defaultManagerLocked) {
       this.defaultManager = manager;
     }
     if (Boolean(omitCookies) !== currentOmitCookies) {
       Services.prefs.setBoolPref(PREF_OMIT_COOKIES, Boolean(omitCookies));
+    }
+    if (
+      JSON.stringify(requestedAutoExtensions) !== JSON.stringify(currentAutoExtensions)
+    ) {
+      Services.prefs.setStringPref(
+        PREF_AUTO_EXTENSIONS,
+        JSON.stringify(requestedAutoExtensions),
+      );
     }
     return this.readSettings();
   }
@@ -237,6 +304,8 @@ export class DownloadItService {
       }
     }
 
+    registerDownloadItHelperAppHook(this);
+
     try {
       await this.refreshManagers();
     } catch (error) {
@@ -245,6 +314,7 @@ export class DownloadItService {
   }
 
   async shutdown() {
+    unregisterDownloadItHelperAppHook(this);
     try {
       Services.obs.removeObserver(this, "browser-delayed-startup-finished");
     } catch {}
