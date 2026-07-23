@@ -54,8 +54,22 @@ export function getCookieHeader(uri, browser, {
   now = Date.now(),
   onLookupError = console.warn,
 } = {}) {
+  return getCookiesForURI(uri, browser, {
+    cookieService,
+    eTLDService,
+    now,
+    onLookupError,
+  }).map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
+}
+
+export function getCookiesForURI(uri, browser, {
+  cookieService,
+  eTLDService,
+  now = Date.now(),
+  onLookupError = console.warn,
+} = {}) {
   if (!uri?.schemeIs("http") && !uri?.schemeIs("https")) {
-    return "";
+    return [];
   }
 
   const baseDomain = getBaseDomain(uri, eTLDService);
@@ -82,9 +96,9 @@ export function getCookieHeader(uri, browser, {
       const key = `${cookie.host}\u0001${cookie.path}\u0001${cookie.name}`;
       if (!seen.has(key) && cookieMatchesURI(cookie, uri, now)) {
         seen.add(key);
-        cookies.push(`${cookie.name}=${cookie.value}`);
+        cookies.push(cookie);
       }
     }
   }
-  return cookies.join("; ");
+  return cookies;
 }

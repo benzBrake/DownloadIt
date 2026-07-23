@@ -152,6 +152,8 @@ interface nsIFileOutputStream extends nsISupports {
   close(): void;
 }
 
+interface BrowsingContext extends nsISupports {}
+
 interface nsIFilePicker extends nsISupports {
   modeOpen: number;
   modeSave: number;
@@ -171,7 +173,12 @@ interface nsIFilePicker extends nsISupports {
   displayDirectory: nsIFile | null;
   defaultString: string;
   defaultExtension: string;
-  init(parent: Window | null, title: string, mode: number): void;
+  init(
+    parent: BrowsingContext | Window,
+    title: string,
+    mode: number,
+    global?: nsISupports,
+  ): void;
   appendFilter(title: string, filter: string): void;
   appendFilters(filterMask: number): void;
   open(callback: (result: number) => void): void;
@@ -201,9 +208,13 @@ interface nsIAppStartup extends nsISupports {
 }
 
 interface nsIProcess extends nsISupports {
+  startHidden: boolean;
+  readonly exitValue: number;
   init(executable: nsIFile): void;
   run(blocking: boolean, args: string[], count: number): void;
   runw(blocking: boolean, args: string[], count: number): void;
+  runAsync(args: string[], count: number, observer: nsIObserver): void;
+  runwAsync(args: string[], count: number, observer: nsIObserver): void;
 }
 
 interface nsIConsoleService extends nsISupports {
@@ -758,6 +769,9 @@ interface Document {
 }
 
 interface Window {
+  readonly browsingContext: BrowsingContext & {
+    readonly originAttributes: Record<string, unknown>;
+  };
   readonly gBrowser: TabBrowser;
   readonly gURLBar: UrlbarInput;
   readonly gBrowserInit: BrowserWindowInitializer;

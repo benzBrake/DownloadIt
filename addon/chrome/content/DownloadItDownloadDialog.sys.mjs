@@ -15,6 +15,29 @@ const HELPER_APP_DIALOG_MODULE = "resource://gre/modules/HelperAppDlg.sys.mjs";
 
 let helperAppHook = null;
 
+function normalizeDownloader(value) {
+  if (typeof value === "string") {
+    return {
+      key: value,
+      name: value,
+      custom: false,
+    };
+  }
+  return value;
+}
+
+const DOWNLOAD_ERROR_MESSAGES = {
+  "command-launch-failed": "downloadit-error-command-launch",
+  "command-partial-failure": "downloadit-error-command-partial",
+  "aria2-unavailable": "downloadit-error-aria2-unavailable",
+  "aria2-http-error": "downloadit-error-aria2-http",
+  "aria2-response-invalid": "downloadit-error-aria2-response",
+  "aria2-rpc-error": "downloadit-error-aria2-rpc",
+  "aria2-partial-failure": "downloadit-error-aria2-partial",
+  "aria2-autostart-local-only": "downloadit-error-aria2-local",
+  "aria2-start-timeout": "downloadit-error-aria2-start-timeout",
+};
+
 function bindingAbortedResult () {
   if (typeof Cr !== "undefined") {
     return Cr.NS_BINDING_ABORTED;
@@ -363,10 +386,16 @@ export class DownloadItDownloadDialogController {
 
   async buildOption (mode, managers) {
     const document = this.document;
-    const defaultManager = this.service.defaultManager || managers[0] || "";
+    managers = managers.map(normalizeDownloader);
+    const defaultManager = this.service.defaultManager || managers[0]?.key || "";
+    const defaultDownloader = managers.find(
+      downloader => downloader.key === defaultManager,
+    ) || managers[0];
     const defaultManagerLabel = await this.formatMessage(
-      "downloadit-download-dialog-default-manager",
-      { manager: defaultManager },
+      defaultDownloader?.custom
+        ? "downloadit-download-dialog-custom-default-manager"
+        : "downloadit-download-dialog-default-manager",
+      { manager: defaultDownloader?.name || defaultManager },
     );
     const managerAriaLabel = await this.formatMessage(
       "downloadit-download-dialog-manager",
@@ -489,28 +518,39 @@ export class DownloadItDownloadDialogController {
   }
 
   populateManagerPopup () {
-    const managers = this.service.managers?.length
+    const managers = (this.service.managers?.length
       ? [...this.service.managers]
-      : [...this.availableManagers];
+      : [...this.availableManagers]).map(normalizeDownloader);
     this.managerPopup.replaceChildren();
-    for (const manager of managers) {
+    for (const downloader of managers) {
+      const isDefault = downloader.key === this.defaultManager;
       const item = createXULElement(this.document, "menuitem", {
-        label: manager === this.defaultManager
+        label: isDefault
           ? this.defaultManagerLabel
-          : manager,
-        manager,
+          : downloader.name,
+        value: downloader.key,
+        manager: downloader.key,
       });
-      if (manager === this.defaultManager) {
+      item.downloadItManagerKey = downloader.key;
+      if (downloader.custom && !isDefault) {
+        this.setLocalized(item, "downloadit-custom-downloader-menu-label", {
+          name: downloader.name,
+        });
+      }
+      if (isDefault) {
         item.setAttribute("default", "true");
       }
       item.addEventListener("command", event => this.handleManagerCommand(event));
       this.managerPopup.appendChild(item);
     }
+    Promise.resolve(this.document.l10n?.translateFragment?.(this.managerPopup)).catch(
+      error => console.error("DownloadIt: download manager translation failed", error),
+    );
   }
 
   handleManagerCommand (event) {
     const target = event.currentTarget || event.target;
-    const manager = target?.getAttribute("manager");
+    const manager = target?.downloadItManagerKey;
     if (!manager) {
       return;
     }
@@ -635,8 +675,8 @@ export class DownloadItDownloadDialogController {
       const message = await this.formatMessage(
         "downloadit-download-dialog-failed",
         {
-          manager,
-          error: error?.message || String(error),
+          manager: this.service.resolveDownloader?.(manager)?.name || manager,
+          error: await this.formatDownloadError(error),
         },
       );
       this.service.alert(this.window, message);
@@ -660,6 +700,13 @@ export class DownloadItDownloadDialogController {
       ? await this.document.l10n?.formatValue(id)
       : await this.document.l10n?.formatValue(id, args);
     return message || id;
+  }
+
+  async formatDownloadError (error) {
+    const id = DOWNLOAD_ERROR_MESSAGES[error?.code];
+    return id
+      ? this.formatMessage(id, error.args || null)
+      : error?.message || String(error);
   }
 }
 

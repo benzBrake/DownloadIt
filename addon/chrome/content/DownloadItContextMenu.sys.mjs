@@ -1,6 +1,24 @@
 import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
 import { createXULElement } from "./DownloadItXUL.sys.mjs";
 
+function normalizeDownloader(value) {
+  return typeof value === "string"
+    ? { key: value, name: value, custom: false }
+    : value;
+}
+
+const DOWNLOAD_ERROR_MESSAGES = {
+  "command-launch-failed": "downloadit-error-command-launch",
+  "command-partial-failure": "downloadit-error-command-partial",
+  "aria2-unavailable": "downloadit-error-aria2-unavailable",
+  "aria2-http-error": "downloadit-error-aria2-http",
+  "aria2-response-invalid": "downloadit-error-aria2-response",
+  "aria2-rpc-error": "downloadit-error-aria2-rpc",
+  "aria2-partial-failure": "downloadit-error-aria2-partial",
+  "aria2-autostart-local-only": "downloadit-error-aria2-local",
+  "aria2-start-timeout": "downloadit-error-aria2-start-timeout",
+};
+
 const CONTEXT_MENU_ID = "contentAreaContextMenu";
 const DOWNLOADIT_MENU_ID = "downloadit-context-menu";
 const DOWNLOADIT_POPUP_ID = "downloadit-context-popup";
@@ -185,6 +203,13 @@ export class DownloadItContextMenuController {
     return message || id;
   }
 
+  async formatDownloadError(error) {
+    const id = DOWNLOAD_ERROR_MESSAGES[error?.code];
+    return id
+      ? this.formatMessage(id, error.args || null)
+      : error?.message || String(error);
+  }
+
   updateContext() {
     this.refreshMenuLabel();
     const contextMenu = this.window.gContextMenu;
@@ -280,16 +305,26 @@ export class DownloadItContextMenuController {
     this.popup.replaceChildren();
 
     const defaultManager = this.service.defaultManager;
-    for (const manager of this.service.managers) {
+    for (const value of this.service.managers) {
+      const downloader = normalizeDownloader(value);
       const item = createXULElement(this.document, "menuitem", {
-        label: manager,
+        label: downloader.name,
         type: "radio",
         name: "downloadit-download-manager",
-        checked: manager === defaultManager ? "true" : null,
+        value: downloader.key,
+        checked: downloader.key === defaultManager ? "true" : null,
       });
+      item.downloadItManagerKey = downloader.key;
+      item.checked = downloader.key === defaultManager;
+      if (downloader.custom) {
+        this.setLocalized(item, "downloadit-custom-downloader-menu-label", {
+          name: downloader.name,
+        });
+      }
       item.addEventListener("command", () => {
-        this.service.defaultManager = manager;
-        this.download(manager);
+        this.service.defaultManager = downloader.key;
+        this.syncPopupSelection(downloader.key);
+        this.download(downloader.key);
       });
       this.popup.appendChild(item);
     }
@@ -319,6 +354,26 @@ export class DownloadItContextMenuController {
     settingsItem.addEventListener("command", () => this.service.openSettings(this.window));
     this.popup.appendChild(settingsItem);
     this.setLocalized(settingsItem, "downloadit-settings");
+    Promise.resolve(this.document.l10n?.translateFragment?.(this.popup)).then(() => {
+      this.syncPopupSelection();
+    }).catch(error => {
+      console.error("DownloadIt: manager menu translation failed", error);
+    });
+  }
+
+  syncPopupSelection(defaultManager = this.service.defaultManager) {
+    for (const item of this.popup?.children || []) {
+      if (!item.downloadItManagerKey) {
+        continue;
+      }
+      const checked = item.downloadItManagerKey === defaultManager;
+      item.checked = checked;
+      if (checked) {
+        item.setAttribute("checked", "true");
+      } else {
+        item.removeAttribute("checked");
+      }
+    }
   }
 
   async download(manager) {
@@ -332,7 +387,10 @@ export class DownloadItContextMenuController {
         ? "downloadit-unsupported"
         : "downloadit-download-failed";
       const args = messageId === "downloadit-download-failed"
-        ? { manager, error: error.message || String(error) }
+        ? {
+            manager: this.service.resolveDownloader?.(manager)?.name || manager,
+            error: await this.formatDownloadError(error),
+          }
         : null;
       this.service.alert(
         this.window,
@@ -352,7 +410,10 @@ export class DownloadItContextMenuController {
         ? "downloadit-unsupported"
         : "downloadit-download-selection-failed";
       const args = messageId === "downloadit-download-selection-failed"
-        ? { manager, error: error.message || String(error) }
+        ? {
+            manager: this.service.resolveDownloader?.(manager)?.name || manager,
+            error: await this.formatDownloadError(error),
+          }
         : null;
       this.service.alert(
         this.window,
