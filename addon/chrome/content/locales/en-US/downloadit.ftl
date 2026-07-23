@@ -61,8 +61,8 @@ downloadit-service-unavailable = Service unavailable
 downloadit-manager-count = { NUMBER($count) }
 downloadit-manager-count-label =
     { $count ->
-        [one] available download manager
-       *[other] available download managers
+        [one] FlashGot manager detected
+       *[other] FlashGot managers detected
     }
 downloadit-detection-idle = Current detection cache
 downloadit-detection-loading = Scanning for download managers...
@@ -117,3 +117,121 @@ downloadit-error-locked-extensions = The remembered file types preference is loc
 downloadit-error-unsupported-manager = The selected manager is no longer available.
 downloadit-error-service = The DownloadIt service is not ready.
 downloadit-error-unexpected = DownloadIt error: { $error }
+
+downloadit-custom-downloader-menu-label =
+    .label = { $name } (custom)
+downloadit-download-dialog-custom-default-manager = { $manager } (custom, default)
+downloadit-reload-custom-downloaders =
+    .title = Reload custom downloaders from disk
+    .aria-label = Reload custom downloaders from disk
+downloadit-add-custom-downloader = Add custom downloader
+downloadit-retry-custom-downloaders = Retry loading
+downloadit-reset-custom-downloaders = Reset custom configuration
+downloadit-custom-editor-eyebrow = custom route
+downloadit-custom-editor-add-title = Add custom downloader
+downloadit-custom-editor-edit-title = Edit custom downloader
+downloadit-custom-editor-close =
+    .title = Close custom downloader editor
+    .aria-label = Close custom downloader editor
+downloadit-custom-editor-save = Save to draft
+downloadit-custom-name-label = Display name
+downloadit-custom-enabled-title = Enable this downloader
+downloadit-custom-enabled-help = Enabled and valid downloaders appear in DownloadIt menus.
+downloadit-custom-type-label = Downloader type
+downloadit-custom-type-control =
+    .aria-label = Downloader type
+downloadit-custom-type-command = Command line
+downloadit-custom-type-aria2 = aria2 JSON-RPC
+downloadit-custom-start-hidden-title = Hide process window
+downloadit-custom-start-hidden-help = Applies to command launches and aria2c auto-start. Turn this off to show the process window while debugging.
+downloadit-command-path-label = Executable
+downloadit-executable-path-help = Executables inside Firefox's chrome configuration directory are stored as portable relative paths.
+downloadit-command-template-label = Arguments template
+downloadit-command-preset =
+    .aria-label = Insert a command-line template preset
+downloadit-command-preset-placeholder = Quick preset
+downloadit-command-placeholder =
+    .aria-label = Command placeholder
+downloadit-command-placeholder-insert =
+    .title = Insert selected placeholder
+    .aria-label = Insert selected placeholder
+downloadit-browse = Browse
+downloadit-clear = Clear
+downloadit-aria2-url-label = JSON-RPC URL
+downloadit-aria2-secret-label = RPC secret (stored as plain text)
+downloadit-aria2-directory-label = Server download directory (optional)
+downloadit-aria2-autostart-title = Start aria2c automatically
+downloadit-aria2-autostart-help = Only HTTP loopback RPC endpoints can be started by DownloadIt.
+downloadit-aria2-path-label = aria2c executable (required for auto-start)
+downloadit-aria2-configuration-label = aria2 configuration file (optional)
+downloadit-aria2-configuration-help = When selected, DownloadIt uses this file when starting aria2c. Files inside Firefox's chrome directory are stored as relative paths.
+downloadit-aria2-arguments-label = Additional startup arguments
+downloadit-aria2-test = Test connection
+downloadit-aria2-testing = Testing connection...
+downloadit-aria2-test-success = Connected to aria2 { $version }
+downloadit-aria2-test-failed = Connection failed: { $error }
+downloadit-custom-config-load-error = Custom configuration could not be loaded: { $error }
+downloadit-no-downloaders = No available or configured downloader.
+downloadit-manager-custom = custom
+downloadit-manager-unavailable = unavailable
+downloadit-manager-disabled = disabled
+downloadit-enable-custom =
+    .title = Enable { $name }
+    .aria-label = Enable custom downloader { $name }
+downloadit-disable-custom =
+    .title = Disable { $name }
+    .aria-label = Disable custom downloader { $name }
+downloadit-edit-custom =
+    .title = Edit { $name }
+    .aria-label = Edit custom downloader { $name }
+downloadit-remove-custom =
+    .title = Remove { $name }
+    .aria-label = Remove custom downloader { $name }
+downloadit-confirm-reload-custom = Discard unsaved custom-downloader changes and reload the file?
+downloadit-confirm-reset-custom = Replace the custom-downloader file with an empty configuration? The current file will be overwritten.
+downloadit-confirm-remove-custom = Remove the custom downloader “{ $name }” from the draft?
+downloadit-custom-reloaded = Custom downloaders reloaded
+downloadit-custom-reset = Custom downloader configuration reset
+downloadit-browse-executable-title = Select downloader executable
+downloadit-browse-aria2-configuration-title = Select aria2 configuration file
+downloadit-aria2-configuration-filter = aria2 configuration (*.conf)
+downloadit-error-custom-file-root = The custom-downloader file has an invalid structure.
+downloadit-error-custom-file-version = This custom-downloader file version is not supported.
+downloadit-error-custom-entry = A custom-downloader entry is invalid.
+downloadit-error-custom-id = A custom downloader has an invalid or duplicate ID.
+downloadit-error-custom-name-duplicate = Custom downloader names must be unique.
+downloadit-error-custom-name-required = Enter a custom downloader name.
+downloadit-error-custom-name-too-long = The custom downloader name is too long.
+downloadit-error-custom-type = Select a supported custom downloader type.
+downloadit-error-command-path = Select the command-line downloader executable.
+downloadit-error-command-url = The arguments template must include URL, ULIST, or UFILE.
+downloadit-error-command-quote = The arguments template contains an unterminated quote.
+downloadit-error-command-placeholder = The arguments template contains an invalid placeholder.
+downloadit-error-aria2-url = Enter a valid HTTP or HTTPS aria2 JSON-RPC URL.
+downloadit-error-aria2-path = Select aria2c before enabling automatic startup.
+downloadit-error-aria2-local = Automatic startup requires an HTTP loopback aria2 URL.
+downloadit-error-aria2-managed-argument = Additional arguments cannot override DownloadIt-managed aria2 RPC options.
+downloadit-error-executable-relative-path = The selected file's relative path must remain inside Firefox's chrome configuration directory.
+downloadit-error-custom-config-blocked = Reload or reset the damaged custom configuration before editing it.
+downloadit-error-command-launch = The command-line downloader could not be started.
+downloadit-error-command-partial =
+    { $succeeded ->
+        [one] One command process started
+       *[other] { NUMBER($succeeded) } command processes started
+    }; { $failed ->
+        [one] one could not be started.
+       *[other] { NUMBER($failed) } could not be started.
+    }
+downloadit-error-aria2-unavailable = The aria2 JSON-RPC service is unavailable.
+downloadit-error-aria2-http = The aria2 service returned HTTP status { $status }.
+downloadit-error-aria2-response = The aria2 service returned an invalid response.
+downloadit-error-aria2-rpc = aria2 rejected the request: { $error }
+downloadit-error-aria2-partial =
+    aria2 accepted { NUMBER($succeeded) } { $succeeded ->
+        [one] task
+       *[other] tasks
+    } and rejected { NUMBER($failed) } { $failed ->
+        [one] task.
+       *[other] tasks.
+    }
+downloadit-error-aria2-start-timeout = aria2c started, but its JSON-RPC service did not become ready in time.
