@@ -34,6 +34,16 @@ test("remembered-extension removal uses an accessible Fluent label", () => {
   }
 });
 
+test("custom XUL menu labels use the Fluent label attribute", () => {
+  for (const locale of ["en-US", "zh-CN"]) {
+    const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    assert.match(
+      source,
+      /downloadit-custom-downloader-menu-label\s*=\s*\r?\n\s+\.label\s*=/,
+    );
+  }
+});
+
 test("runtime text uses Fluent resources instead of inline localization maps", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   const optionsScript = read("addon/chrome/content/options.js");

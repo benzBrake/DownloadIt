@@ -140,3 +140,41 @@ test("message formatting omits absent Fluent arguments", async () => {
     "downloadit-unsupported",
   );
 });
+
+test("context menu explicitly synchronizes the selected downloader", () => {
+  function item(key) {
+    return {
+      downloadItManagerKey: key,
+      checked: false,
+      attributes: new Map(),
+      setAttribute(name, value) {
+        this.attributes.set(name, String(value));
+      },
+      removeAttribute(name) {
+        this.attributes.delete(name);
+      },
+      getAttribute(name) {
+        return this.attributes.get(name) || null;
+      },
+    };
+  }
+
+  const flashGot = item('{"provider":"flashgot","id":"aria2"}');
+  const custom = item('{"provider":"custom","id":"123"}');
+  const controller = new DownloadItContextMenuController(
+    { defaultManager: custom.downloadItManagerKey },
+    { document: {} },
+    null,
+  );
+  controller.popup = { children: [flashGot, custom, {}] };
+
+  controller.syncPopupSelection();
+  assert.equal(flashGot.checked, false);
+  assert.equal(flashGot.getAttribute("checked"), null);
+  assert.equal(custom.checked, true);
+  assert.equal(custom.getAttribute("checked"), "true");
+
+  controller.syncPopupSelection(flashGot.downloadItManagerKey);
+  assert.equal(flashGot.checked, true);
+  assert.equal(custom.checked, false);
+});
