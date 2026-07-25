@@ -12,6 +12,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Adds a Downloadit Selection item below it when selected page content contains links.
 - Adds a DownloadIt Links selector for collecting, filtering, and batch-downloading explicit page links from the current document and its frames.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
+- Shows POST, cookie, batch, and download-directory capabilities for each downloader.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
@@ -111,6 +112,8 @@ To upgrade, install the newly built `addon.xpi` over the existing installation. 
 ## Configuration
 
 The DownloadIt toolbar button opens a native Firefox panel. Use “DownloadIt Links” to open the batch-link selector for the active tab, select an available tool to change the default download manager immediately, use “Detect download managers again” to refresh the detected-tool list, or open DownloadIt settings from the panel footer. The button is added to the navigation bar initially and can be moved or removed through Firefox's Customize Toolbar interface.
+
+The discovered-tool list in settings shows capability metadata for the active DownloadIt integration route: `+` means supported, `-` means unsupported, and `?` means the capability is not yet known. The labels cover POST request bodies, cookie forwarding, DownloadIt batch submissions, and caller-provided download directories. FlashGot capabilities follow the integrations implemented by the bundled bridge, custom command capabilities are inferred from their argument placeholders, and aria2 capabilities follow the JSON-RPC provider. These labels describe what DownloadIt can pass through the configured route, not every feature offered by the downloader itself.
 
 Open the settings page from the toolbar panel, from “DownloadIt Settings” in the context menu, or from the extension settings in `about:addons`.
 

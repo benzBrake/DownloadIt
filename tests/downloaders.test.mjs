@@ -12,15 +12,71 @@ import {
   CustomDownloaderConfigError,
   DownloaderProviderRegistry,
   expandCommandTemplate,
+  getCustomDownloaderCapabilities,
+  getFlashGotDownloaderCapabilities,
   inspectAria2Response,
   isLoopbackAria2URL,
   normalizeCustomDownloaderDocument,
+  normalizeDownloaderCapabilities,
   parseDownloaderRef,
   serializeDownloaderRef,
   stringifyCustomDownloaderDocument,
   tokenizeArguments,
   validateCustomDownloaderDocument,
 } from "../addon/chrome/content/DownloadItDownloaders.sys.mjs";
+
+test("downloader capabilities are normalized as tri-state metadata", () => {
+  assert.deepEqual(normalizeDownloaderCapabilities({
+    post: true,
+    cookies: false,
+    batch: "yes",
+  }), {
+    post: true,
+    cookies: false,
+    batch: null,
+    directory: null,
+  });
+});
+
+test("FlashGot capability metadata is conservative for unknown managers", () => {
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("Internet Download Manager"),
+    { post: true, cookies: true, batch: true, directory: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("Future Download Manager"),
+    { post: null, cookies: null, batch: null, directory: false },
+  );
+});
+
+test("custom downloader capabilities follow command placeholders and provider features", () => {
+  assert.deepEqual(getCustomDownloaderCapabilities({
+    type: "command",
+    command: {
+      argumentsTemplate: "[URL] [--data=POST] [--load-cookies=CFILE] [--dir=FOLDER]",
+    },
+  }), {
+    post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+  });
+  assert.deepEqual(getCustomDownloaderCapabilities({
+    type: "command",
+    command: { argumentsTemplate: "[URL]" },
+  }), {
+    post: false,
+    cookies: false,
+    batch: true,
+    directory: false,
+  });
+  assert.deepEqual(getCustomDownloaderCapabilities({ type: "aria2" }), {
+    post: false,
+    cookies: true,
+    batch: true,
+    directory: true,
+  });
+});
 
 const COMMAND_ID = "123e4567-e89b-42d3-a456-426614174000";
 const ARIA2_ID = "123e4567-e89b-42d3-a456-426614174001";

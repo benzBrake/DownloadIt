@@ -117,6 +117,10 @@ test("settings dialog exposes custom downloader controls", () => {
   assert.match(service, /process\.startHidden = Boolean\(startHidden\)/);
   assert.match(script, /configurationPath: state\.service\.normalizeCustomFilePathForStorage/);
   assert.match(downloaders, /`--conf-path=\$\{configurationPath\}`/);
+  assert.match(script, /createManagerCapabilities/);
+  assert.match(script, /DOWNLOADER_CAPABILITY_KEYS/);
+  assert.match(service, /getFlashGotDownloaderCapabilities/);
+  assert.match(service, /getCustomDownloaderCapabilities/);
 });
 
 test("custom downloader persistence is profile-scoped and atomic", () => {

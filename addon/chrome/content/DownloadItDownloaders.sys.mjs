@@ -3,6 +3,99 @@ export const FLASHGOT_PROVIDER = "flashgot";
 export const CUSTOM_PROVIDER = "custom";
 export const NATIVE_PROVIDER = "native";
 
+export const DOWNLOADER_CAPABILITY_KEYS = Object.freeze([
+  "post",
+  "cookies",
+  "batch",
+  "directory",
+]);
+
+const FLASHGOT_DEFAULT_CAPABILITIES = Object.freeze({
+  post: null,
+  cookies: null,
+  batch: null,
+  directory: false,
+});
+
+// These describe the current Grabby-FlashGot bridge, not the applications in
+// isolation. In particular, its JSON protocol has no download-directory field.
+const FLASHGOT_CAPABILITIES = Object.freeze({
+  "AB Download Manager": { post: false, cookies: true, batch: true },
+  BitComet: { post: false, cookies: false, batch: true },
+  "Download Accelerator Plus": { post: false, cookies: true, batch: true },
+  "Download Accelerator Manager": { post: true, cookies: true, batch: true },
+  "Download Master": { post: false, cookies: true, batch: true },
+  EagleGet: { post: true, cookies: true, batch: true },
+  FlareGet: { post: true, cookies: true, batch: false },
+  FlashGet: { post: false, cookies: true, batch: true },
+  "FlashGet 2": { post: false, cookies: true, batch: true },
+  "FlashGet 2.x": { post: false, cookies: true, batch: true },
+  "Free Download Manager": { post: false, cookies: true, batch: true },
+  "Free Download Manager 3": { post: false, cookies: true, batch: true },
+  FreshDownload: { post: false, cookies: true, batch: true },
+  GetGo: { post: false, cookies: false, batch: true },
+  GigaGet: { post: false, cookies: true, batch: true },
+  InstantGet: { post: false, cookies: true, batch: true },
+  "Internet Download Accelerator": { post: false, cookies: true, batch: true },
+  "Internet Download Manager": { post: true, cookies: true, batch: true },
+  LeechGet: { post: false, cookies: true, batch: false },
+  "LeechGet 2002": { post: false, cookies: true, batch: false },
+  "Mass Downloader": { post: false, cookies: true, batch: true },
+  NetAnts: { post: false, cookies: true, batch: true },
+  "Neat Download Manager": { post: true, cookies: true, batch: true },
+  ReGet: { post: true, cookies: true, batch: true },
+  "ReGet(Legacy)": { post: true, cookies: true, batch: true },
+  "Star Downloader": { post: false, cookies: false, batch: true },
+  Thunder: { post: false, cookies: true, batch: true },
+  "Thunder (Old)": { post: false, cookies: true, batch: true },
+  TrueDownloader: { post: false, cookies: true, batch: true },
+  "wxDownload Fast": { post: false, cookies: false, batch: true },
+});
+
+export function normalizeDownloaderCapabilities(value = {}) {
+  const normalized = {};
+  for (const key of DOWNLOADER_CAPABILITY_KEYS) {
+    normalized[key] = typeof value?.[key] === "boolean" ? value[key] : null;
+  }
+  return normalized;
+}
+
+export function getFlashGotDownloaderCapabilities(name) {
+  const values = FLASHGOT_CAPABILITIES[String(name || "")];
+  if (!values) {
+    return normalizeDownloaderCapabilities(FLASHGOT_DEFAULT_CAPABILITIES);
+  }
+  return normalizeDownloaderCapabilities({
+    ...values,
+    directory: false,
+  });
+}
+
+export function getCustomDownloaderCapabilities(downloader) {
+  if (downloader?.type === "aria2") {
+    return normalizeDownloaderCapabilities({
+      post: false,
+      cookies: true,
+      batch: true,
+      directory: true,
+    });
+  }
+  if (downloader?.type !== "command") {
+    return normalizeDownloaderCapabilities();
+  }
+
+  const placeholders = new Set(findCommandPlaceholders(
+    downloader.command?.argumentsTemplate,
+  ));
+  return normalizeDownloaderCapabilities({
+    post: placeholders.has("POST") || placeholders.has("RAWPOST"),
+    cookies: placeholders.has("COOKIE") || placeholders.has("CFILE") ||
+      placeholders.has("HEADERS"),
+    batch: true,
+    directory: placeholders.has("FOLDER"),
+  });
+}
+
 export const COMMAND_PLACEHOLDERS = Object.freeze([
   "URL",
   "FNAME",

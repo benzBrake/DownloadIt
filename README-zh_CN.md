@@ -12,6 +12,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 在有选区且选区包含链接时，在其下方提供“使用 DownloadIt 下载选中链接”。
 - 提供“使用 DownloadIt 批量下载”链接选择器，可收集、筛选并批量下载当前文档及其 frame 中的显式页面链接。
 - 自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
+- 显示每个下载器对 POST、Cookie、批量提交和下载目录的支持情况。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
@@ -111,6 +112,8 @@ DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中�
 ## 配置
 
 DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 DownloadIt 批量下载”可为当前标签页打开批量链接选择器；选择可用工具可立即切换默认下载工具；“重新检测下载工具”会刷新已检测工具列表；面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
+
+设置页的已发现工具列表会显示当前 DownloadIt 集成路径的能力元数据：`+` 表示支持，`-` 表示不支持，`?` 表示目前尚不明确。标签分别表示 POST 请求正文、Cookie 转发、DownloadIt 批量提交，以及由调用方指定下载目录。FlashGot 能力取决于随附桥接程序实现的集成，自定义命令的能力根据参数占位符推导，aria2 的能力则取决于 JSON-RPC provider。这些标签描述的是 DownloadIt 能否通过当前路径传递相应数据，并不代表下载器本身提供的全部功能。
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 

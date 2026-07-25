@@ -14,6 +14,8 @@ const { createXULElement } = ChromeUtils.importESModule(
 const {
   COMMAND_PLACEHOLDERS,
   COMMAND_TEMPLATE_PRESETS,
+  DOWNLOADER_CAPABILITY_KEYS,
+  getCustomDownloaderCapabilities,
   validateCustomDownloaderDocument,
 } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItDownloaders.sys.mjs",
@@ -465,6 +467,7 @@ function draftDownloaders() {
       unavailableReason: unchanged
         ? saved.unavailableReason
         : entry.enabled ? "invalid-configuration" : "disabled",
+      capabilities: getCustomDownloaderCapabilities(entry),
     };
   });
   return [...detected, ...custom];
@@ -604,10 +607,13 @@ function renderManagers() {
     const dot = document.createElement("span");
     dot.className = `manager-dot ${downloader.available ? "is-ready" : "is-error"}`;
     dot.setAttribute("aria-hidden", "true");
+    const identity = document.createElement("span");
+    identity.className = "manager-identity";
     const name = document.createElement("span");
     name.className = "manager-name";
     name.textContent = downloader.name;
-    row.append(dot, name);
+    identity.append(name, createManagerCapabilities(downloader.capabilities));
+    row.append(dot, identity);
 
     if (downloader.custom) {
       const customBadge = document.createElement("span");
@@ -650,6 +656,34 @@ function renderManagers() {
     }
     list.append(row);
   }
+}
+
+function createManagerCapabilities(capabilities = {}) {
+  const container = document.createElement("span");
+  container.className = "manager-capabilities";
+  for (const capability of DOWNLOADER_CAPABILITY_KEYS) {
+    const value = capabilities[capability];
+    const stateName = value === true
+      ? "supported"
+      : value === false ? "unsupported" : "unknown";
+    const chip = document.createElement("span");
+    chip.className = `manager-capability is-${stateName}`;
+    const marker = document.createElement("span");
+    marker.className = "manager-capability-marker";
+    marker.setAttribute("aria-hidden", "true");
+    marker.textContent = stateName === "supported"
+      ? "+"
+      : stateName === "unsupported" ? "-" : "?";
+    const label = document.createElement("span");
+    label.setAttribute("data-l10n-attrs", "title,aria-label");
+    setLocalized(
+      label,
+      `downloadit-manager-capability-${capability}-${stateName}`,
+    );
+    chip.append(marker, label);
+    container.append(chip);
+  }
+  return container;
 }
 
 function customActionButton(messageId, attribute, id, glyph, name) {

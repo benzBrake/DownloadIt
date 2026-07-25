@@ -43,6 +43,8 @@ import {
   downloaderRefKey,
   expandCommandTemplate,
   FLASHGOT_PROVIDER,
+  getCustomDownloaderCapabilities,
+  getFlashGotDownloaderCapabilities,
   inspectAria2Response,
   isLoopbackAria2URL,
   NATIVE_PROVIDER,
@@ -290,6 +292,7 @@ export class DownloadItService {
       enabled: true,
       available: true,
       unavailableReason: "",
+      capabilities: getFlashGotDownloaderCapabilities(name),
     }));
   }
 
@@ -335,6 +338,7 @@ export class DownloadItService {
         available: !unavailableReason,
         unavailableReason,
         configuration,
+        capabilities: getCustomDownloaderCapabilities(configuration),
       });
     });
   }

@@ -643,9 +643,9 @@ button {
 .empty-row {
   display: flex;
   align-items: center;
-  min-height: 46px;
+  min-height: 58px;
   gap: 11px;
-  padding: 0 4px;
+  padding: 7px 4px;
   border-top: 1px solid var(--line);
 }
 
@@ -654,12 +654,59 @@ button {
   border-top: 0;
 }
 
-.manager-name {
+.manager-identity {
   min-width: 0;
   flex: 1;
+  display: grid;
+  gap: 5px;
+}
+
+.manager-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.manager-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.manager-capability {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  gap: 3px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.manager-capability-marker {
+  width: 8px;
+  color: currentColor;
+  font-weight: 800;
+  text-align: center;
+}
+
+.manager-capability.is-supported {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--line));
+  color: var(--success);
+}
+
+.manager-capability.is-unsupported {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.manager-capability.is-unknown {
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .manager-badge {

@@ -44,6 +44,21 @@ test("custom XUL menu labels use the Fluent label attribute", () => {
   }
 });
 
+test("downloader capability states have accessible Fluent labels", () => {
+  for (const locale of ["en-US", "zh-CN"]) {
+    const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    for (const capability of ["post", "cookies", "batch", "directory"]) {
+      for (const state of ["supported", "unsupported", "unknown"]) {
+        const id = `downloadit-manager-capability-${capability}-${state}`;
+        const pattern = new RegExp(
+          `${id}\\s*=.*\\r?\\n\\s+\\.title\\s*=.*\\r?\\n\\s+\\.aria-label\\s*=`,
+        );
+        assert.match(source, pattern);
+      }
+    }
+  }
+});
+
 test("IDM bridge help localizes the LinkSwift link through DOM Overlay", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   const linkUrl = "https://github.com/hmjz100/LinkSwift";
