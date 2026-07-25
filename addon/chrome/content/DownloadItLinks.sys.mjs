@@ -12,6 +12,202 @@ export const LINK_TYPE_VALUES = [
   "other",
 ];
 
+export const BUILT_IN_LINK_GROUP_KEYS = [
+  "image",
+  "video",
+  "audio",
+  "document",
+  "archive",
+  "program",
+];
+
+const LINK_GROUP_KEY_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const LINK_EXTENSION_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+const RESERVED_LINK_GROUP_KEYS = new Set([...BUILT_IN_LINK_GROUP_KEYS, "other"]);
+
+const BUILT_IN_LINK_GROUP_EXTENSIONS = new Map([
+  ["image", [
+    "avif", "bmp", "gif", "heic", "heif", "ico", "jfif", "jpeg", "jpg",
+    "png", "svg", "tif", "tiff", "webp",
+  ]],
+  ["video", [
+    "3gp", "avi", "flv", "m2ts", "m4v", "mkv", "mov", "mp4", "mpeg",
+    "mpg", "ogv", "ts", "webm", "wmv",
+  ]],
+  ["audio", [
+    "aac", "flac", "m4a", "mid", "midi", "mp3", "oga", "ogg", "opus",
+    "wav", "wma",
+  ]],
+  ["document", [
+    "csv", "doc", "docx", "epub", "md", "odp", "ods", "odt", "pdf",
+    "ppt", "pptx", "rtf", "txt", "xls", "xlsx",
+  ]],
+  ["archive", [
+    "7z", "bz2", "gz", "iso", "rar", "tar", "tgz", "xz", "zip", "zst",
+  ]],
+  ["program", [
+    "apk", "appx", "deb", "dmg", "exe", "msi", "msix", "pkg", "rpm", "xpi",
+  ]],
+]);
+
+export class LinkGroupValidationError extends Error {
+  constructor(code, args = {}) {
+    super(code);
+    this.name = "LinkGroupValidationError";
+    this.code = code;
+    this.args = args;
+  }
+}
+
+export function createDefaultLinkGroupSettings() {
+  return {
+    version: 1,
+    groups: BUILT_IN_LINK_GROUP_KEYS.map(key => ({
+      key,
+      builtIn: true,
+      enabled: true,
+      extensions: [...BUILT_IN_LINK_GROUP_EXTENSIONS.get(key)],
+    })),
+  };
+}
+
+function normalizeLinkGroupKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeLinkGroupExtensions(values, key, { required = false } = {}) {
+  if (!Array.isArray(values)) {
+    throw new LinkGroupValidationError("extensions-invalid", { key });
+  }
+  const extensions = [];
+  const seen = new Set();
+  for (const value of values) {
+    const extension = String(value || "").trim().toLowerCase().replace(/^\.+/, "");
+    if (!extension || !LINK_EXTENSION_PATTERN.test(extension)) {
+      throw new LinkGroupValidationError("extension-invalid", {
+        key,
+        extension: String(value || ""),
+      });
+    }
+    if (seen.has(extension)) {
+      throw new LinkGroupValidationError("extension-duplicate", {
+        extension,
+        firstKey: key,
+        secondKey: key,
+      });
+    }
+    seen.add(extension);
+    extensions.push(extension);
+  }
+  if (required && extensions.length === 0) {
+    throw new LinkGroupValidationError("extensions-required", { key });
+  }
+  return extensions.sort();
+}
+
+export function validateLinkGroupSettings(value) {
+  if (!value || value.version !== 1 || !Array.isArray(value.groups)) {
+    throw new LinkGroupValidationError("settings-invalid");
+  }
+
+  const builtIn = new Map();
+  const custom = [];
+  const keys = new Set();
+  for (const entry of value.groups) {
+    if (!entry || typeof entry !== "object") {
+      throw new LinkGroupValidationError("group-invalid");
+    }
+    const key = normalizeLinkGroupKey(entry.key);
+    if (!key) {
+      throw new LinkGroupValidationError("key-required");
+    }
+    if (!LINK_GROUP_KEY_PATTERN.test(key) || key.length > 40) {
+      throw new LinkGroupValidationError("key-invalid", { key });
+    }
+    if (keys.has(key)) {
+      throw new LinkGroupValidationError("key-duplicate", { key });
+    }
+    keys.add(key);
+
+    if (entry.builtIn === true) {
+      if (!BUILT_IN_LINK_GROUP_EXTENSIONS.has(key) || builtIn.has(key)) {
+        throw new LinkGroupValidationError("built-in-invalid", { key });
+      }
+      builtIn.set(key, {
+        key,
+        builtIn: true,
+        enabled: entry.enabled !== false,
+        extensions: normalizeLinkGroupExtensions(entry.extensions, key),
+      });
+      continue;
+    }
+
+    if (RESERVED_LINK_GROUP_KEYS.has(key)) {
+      throw new LinkGroupValidationError("key-reserved", { key });
+    }
+    const name = String(entry.name || "").trim();
+    if (!name) {
+      throw new LinkGroupValidationError("name-required", { key });
+    }
+    if (name.length > 80) {
+      throw new LinkGroupValidationError("name-too-long", { key });
+    }
+    custom.push({
+      key,
+      name,
+      builtIn: false,
+      enabled: entry.enabled !== false,
+      extensions: normalizeLinkGroupExtensions(entry.extensions, key, {
+        required: true,
+      }),
+    });
+  }
+
+  for (const key of BUILT_IN_LINK_GROUP_KEYS) {
+    if (!builtIn.has(key)) {
+      throw new LinkGroupValidationError("built-in-missing", { key });
+    }
+  }
+
+  const extensionOwners = new Map();
+  const groups = [
+    ...BUILT_IN_LINK_GROUP_KEYS.map(key => builtIn.get(key)),
+    ...custom,
+  ];
+  for (const group of groups) {
+    for (const extension of group.extensions) {
+      const firstKey = extensionOwners.get(extension);
+      if (firstKey) {
+        throw new LinkGroupValidationError("extension-duplicate", {
+          extension,
+          firstKey,
+          secondKey: group.key,
+        });
+      }
+      extensionOwners.set(extension, group.key);
+    }
+  }
+
+  return { version: 1, groups };
+}
+
+function normalizedLinkGroupSettings(value) {
+  return validateLinkGroupSettings(value || createDefaultLinkGroupSettings());
+}
+
+function createExtensionTypeMap(settings) {
+  const types = new Map();
+  for (const group of normalizedLinkGroupSettings(settings).groups) {
+    if (!group.enabled) {
+      continue;
+    }
+    for (const extension of group.extensions) {
+      types.set(extension, group.key);
+    }
+  }
+  return types;
+}
+
 export function openPageLinksDialog(window, context) {
   if (
     !context?.browser ||
@@ -26,37 +222,6 @@ export function openPageLinksDialog(window, context) {
     { wrappedJSObject: { ...context } },
   );
 }
-
-const EXTENSION_TYPES = new Map();
-
-function registerExtensions(type, values) {
-  for (const value of values) {
-    EXTENSION_TYPES.set(value, type);
-  }
-}
-
-registerExtensions("image", [
-  "avif", "bmp", "gif", "heic", "heif", "ico", "jfif", "jpeg", "jpg",
-  "png", "svg", "tif", "tiff", "webp",
-]);
-registerExtensions("video", [
-  "3gp", "avi", "flv", "m2ts", "m4v", "mkv", "mov", "mp4", "mpeg",
-  "mpg", "ogv", "ts", "webm", "wmv",
-]);
-registerExtensions("audio", [
-  "aac", "flac", "m4a", "mid", "midi", "mp3", "oga", "ogg", "opus",
-  "wav", "wma",
-]);
-registerExtensions("document", [
-  "csv", "doc", "docx", "epub", "md", "odp", "ods", "odt", "pdf",
-  "ppt", "pptx", "rtf", "txt", "xls", "xlsx",
-]);
-registerExtensions("archive", [
-  "7z", "bz2", "gz", "iso", "rar", "tar", "tgz", "xz", "zip", "zst",
-]);
-registerExtensions("program", [
-  "apk", "appx", "deb", "dmg", "exe", "msi", "msix", "pkg", "rpm", "xpi",
-]);
 
 function filenameFromURL(value) {
   try {
@@ -83,11 +248,11 @@ export function getLinkExtension(link) {
   return /^[a-z0-9][a-z0-9_-]*$/.test(extension) ? extension : "";
 }
 
-export function classifyLinkType(link) {
-  return EXTENSION_TYPES.get(getLinkExtension(link)) || "other";
+export function classifyLinkType(link, settings = null) {
+  return createExtensionTypeMap(settings).get(getLinkExtension(link)) || "other";
 }
 
-export function createLinkRecord(link, index = 0) {
+function createLinkRecordWithTypes(link, index, extensionTypes) {
   const url = String(link?.url || "");
   const description = String(link?.description || "").trim() || url;
   const filename = String(link?.filename || "").trim();
@@ -98,9 +263,13 @@ export function createLinkRecord(link, index = 0) {
     description,
     filename,
     extension,
-    type: EXTENSION_TYPES.get(extension) || "other",
+    type: extensionTypes.get(extension) || "other",
     searchText: `${description}\n${filename}\n${url}`.toLowerCase(),
   };
+}
+
+export function createLinkRecord(link, index = 0, settings = null) {
+  return createLinkRecordWithTypes(link, index, createExtensionTypeMap(settings));
 }
 
 function normalizeFilterValues(values, allowedValues = null) {
@@ -127,8 +296,7 @@ export function filterLinkRecords(records, {
   extensions = [],
   search = "",
 } = {}) {
-  const allowedTypes = new Set(LINK_TYPE_VALUES);
-  const normalizedTypes = normalizeFilterValues(types, allowedTypes);
+  const normalizedTypes = normalizeFilterValues(types);
   const normalizedExtensions = normalizeFilterValues(extensions);
   const normalizedSearch = String(search || "").trim().toLowerCase();
   return records.filter(record =>
@@ -157,8 +325,11 @@ export function getExtensionOptions(records) {
 }
 
 export class LinkSelectionModel {
-  constructor(links = []) {
-    this.records = links.map((link, index) => createLinkRecord(link, index));
+  constructor(links = [], settings = null) {
+    const extensionTypes = createExtensionTypeMap(settings);
+    this.records = links.map(
+      (link, index) => createLinkRecordWithTypes(link, index, extensionTypes),
+    );
     this.selectedURLs = new Set();
   }
 

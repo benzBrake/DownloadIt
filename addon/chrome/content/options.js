@@ -18,6 +18,9 @@ const {
 } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItDownloaders.sys.mjs",
 );
+const { validateLinkGroupSettings } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItLinks.sys.mjs",
+);
 const localizationReady = initializeDownloadItLocalization(window);
 
 const SECTION_META = {
@@ -31,11 +34,42 @@ const SECTION_META = {
     "downloadit-privacy-title",
     "downloadit-privacy-description",
   ],
+  "link-groups": [
+    "downloadit-link-groups-kicker",
+    "downloadit-link-groups-title",
+    "downloadit-link-groups-description",
+  ],
   about: [
     "downloadit-about-kicker",
     "downloadit-about-title",
     "downloadit-about-description",
   ],
+};
+
+const BUILT_IN_GROUP_MESSAGE_IDS = {
+  image: "downloadit-links-type-image",
+  video: "downloadit-links-type-video",
+  audio: "downloadit-links-type-audio",
+  document: "downloadit-links-type-document",
+  archive: "downloadit-links-type-archive",
+  program: "downloadit-links-type-program",
+};
+
+const LINK_GROUP_ERROR_MESSAGES = {
+  "settings-invalid": "downloadit-error-link-group-settings",
+  "group-invalid": "downloadit-error-link-group-settings",
+  "built-in-invalid": "downloadit-error-link-group-settings",
+  "built-in-missing": "downloadit-error-link-group-settings",
+  "key-required": "downloadit-error-link-group-key-required",
+  "key-invalid": "downloadit-error-link-group-key-invalid",
+  "key-duplicate": "downloadit-error-link-group-key-duplicate",
+  "key-reserved": "downloadit-error-link-group-key-reserved",
+  "name-required": "downloadit-error-link-group-name-required",
+  "name-too-long": "downloadit-error-link-group-name-too-long",
+  "extensions-invalid": "downloadit-error-link-group-extensions-invalid",
+  "extensions-required": "downloadit-error-link-group-extensions-required",
+  "extension-invalid": "downloadit-error-link-group-extension-invalid",
+  "extension-duplicate": "downloadit-error-link-group-extension-duplicate",
 };
 
 const CUSTOM_ERROR_MESSAGES = {
@@ -77,6 +111,7 @@ const state = {
   feedback: null,
   feedbackKind: "",
   editor: null,
+  linkGroupEditor: null,
   editorReturnFocus: null,
   defaultManagerTouched: false,
 };
@@ -109,6 +144,7 @@ function createSettingsState(snapshot) {
     omitCookies: snapshot.omitCookies,
     idmBridgeEnabled: snapshot.idmBridgeEnabled,
     autoExtensions: [...snapshot.autoExtensions],
+    linkGroups: clone(snapshot.linkGroups),
     customDownloaders: clone(snapshot.customDownloaders),
   };
 }
@@ -193,6 +229,40 @@ function bindEvents() {
     clearFeedback();
     render();
   });
+  document.getElementById("add-custom-link-group").addEventListener(
+    "click",
+    () => openLinkGroupEditor(),
+  );
+  for (const id of ["built-in-link-group-list", "custom-link-group-list"]) {
+    const list = document.getElementById(id);
+    list.addEventListener("change", event => {
+      const toggle = event.target.closest("[data-toggle-link-group]");
+      if (toggle) {
+        toggleLinkGroup(toggle.dataset.toggleLinkGroup, toggle.checked);
+      }
+    });
+    list.addEventListener("click", event => {
+      const edit = event.target.closest("[data-edit-link-group]");
+      const remove = event.target.closest("[data-remove-link-group]");
+      if (edit) {
+        openLinkGroupEditor(edit.dataset.editLinkGroup);
+      } else if (remove) {
+        removeCustomLinkGroup(remove.dataset.removeLinkGroup);
+      }
+    });
+  }
+  document.getElementById("link-group-editor-save").addEventListener(
+    "click",
+    saveLinkGroupEditor,
+  );
+  for (const id of ["link-group-editor-close", "link-group-editor-cancel"]) {
+    document.getElementById(id).addEventListener("click", closeLinkGroupEditor);
+  }
+  document.getElementById("link-group-editor").addEventListener("click", event => {
+    if (event.target.id === "link-group-editor") {
+      closeLinkGroupEditor();
+    }
+  });
 
   for (const button of document.querySelectorAll("[data-custom-type]")) {
     button.addEventListener("click", () => setEditorType(button.dataset.customType));
@@ -246,13 +316,20 @@ function bindEvents() {
     },
   );
   document.addEventListener("keydown", event => {
-    if (!state.editor) {
+    if (!state.editor && !state.linkGroupEditor) {
       return;
     }
     if (event.key === "Escape") {
-      closeCustomEditor();
+      if (state.linkGroupEditor) {
+        closeLinkGroupEditor();
+      } else {
+        closeCustomEditor();
+      }
     } else if (event.key === "Tab") {
-      trapEditorFocus(event);
+      trapEditorFocus(
+        event,
+        state.linkGroupEditor ? "link-group-editor" : "custom-downloader-editor",
+      );
     }
   });
   document.getElementById("apply").addEventListener("click", applySettings);
@@ -303,6 +380,7 @@ function render() {
   renderServiceState();
   renderManagers();
   renderAutoExtensions();
+  renderLinkGroups();
   renderPrivacy();
   renderAbout();
 
@@ -642,6 +720,136 @@ function renderAutoExtensions() {
   }
 }
 
+function linkGroupDisplayName(group) {
+  return group.builtIn ? group.key : group.name;
+}
+
+function setLinkGroupName(element, group) {
+  if (group.builtIn) {
+    setLocalized(element, BUILT_IN_GROUP_MESSAGE_IDS[group.key]);
+  } else {
+    element.textContent = group.name;
+  }
+}
+
+function renderLinkGroupRow(group, locked) {
+  const row = document.createElement("li");
+  row.className = `link-group-row${group.enabled ? "" : " is-disabled"}`;
+
+  const toggle = document.createElement("label");
+  toggle.className = "mini-toggle";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = group.enabled;
+  checkbox.disabled = locked || state.busy;
+  checkbox.dataset.toggleLinkGroup = group.key;
+  setLocalized(checkbox, "downloadit-link-group-toggle", {
+    group: linkGroupDisplayName(group),
+  });
+  const track = document.createElement("span");
+  track.className = "toggle-track";
+  track.setAttribute("aria-hidden", "true");
+  const thumb = document.createElement("span");
+  thumb.className = "toggle-thumb";
+  track.append(thumb);
+  toggle.append(checkbox, track);
+
+  const details = document.createElement("div");
+  details.className = "link-group-details";
+  const heading = document.createElement("div");
+  heading.className = "link-group-row-heading";
+  const name = document.createElement("strong");
+  setLinkGroupName(name, group);
+  const key = document.createElement("code");
+  key.className = "link-group-key";
+  key.textContent = group.key;
+  heading.append(name, key);
+  const extensions = document.createElement("div");
+  extensions.className = "link-group-extensions";
+  if (group.extensions.length) {
+    for (const extension of group.extensions) {
+      const chip = document.createElement("code");
+      chip.textContent = `.${extension}`;
+      extensions.append(chip);
+    }
+  } else {
+    const empty = document.createElement("span");
+    setLocalized(empty, "downloadit-link-group-no-extensions");
+    extensions.append(empty);
+  }
+  details.append(heading, extensions);
+
+  const actions = document.createElement("div");
+  actions.className = "link-group-actions";
+  const edit = document.createElement("button");
+  edit.className = "icon-button";
+  edit.type = "button";
+  edit.dataset.editLinkGroup = group.key;
+  edit.textContent = "\u270e";
+  edit.disabled = locked || state.busy;
+  setLocalized(edit, "downloadit-edit-link-group", {
+    group: linkGroupDisplayName(group),
+  });
+  actions.append(edit);
+  if (!group.builtIn) {
+    const remove = document.createElement("button");
+    remove.className = "icon-button link-group-remove";
+    remove.type = "button";
+    remove.dataset.removeLinkGroup = group.key;
+    remove.textContent = "\u00d7";
+    remove.disabled = locked || state.busy;
+    setLocalized(remove, "downloadit-remove-link-group", { group: group.name });
+    actions.append(remove);
+  }
+
+  row.append(toggle, details, actions);
+  return row;
+}
+
+function renderLinkGroups() {
+  const settings = state.draft?.linkGroups || state.snapshot?.linkGroups;
+  const builtInList = document.getElementById("built-in-link-group-list");
+  const customList = document.getElementById("custom-link-group-list");
+  const lock = document.getElementById("link-group-lock");
+  const addButton = document.getElementById("add-custom-link-group");
+  builtInList.replaceChildren();
+  customList.replaceChildren();
+  const groups = settings?.groups || [];
+  const builtIn = groups.filter(group => group.builtIn);
+  const custom = groups.filter(group => !group.builtIn);
+  const locked = Boolean(state.snapshot?.linkGroupsLocked);
+
+  for (const group of builtIn) {
+    builtInList.append(renderLinkGroupRow(group, locked));
+  }
+  if (custom.length) {
+    for (const group of custom) {
+      customList.append(renderLinkGroupRow(group, locked));
+    }
+  } else {
+    const empty = document.createElement("li");
+    empty.className = "empty-row link-group-empty";
+    const mark = document.createElement("span");
+    mark.className = "empty-mark";
+    mark.textContent = "--";
+    const message = document.createElement("span");
+    setLocalized(message, "downloadit-no-custom-link-groups");
+    empty.append(mark, message);
+    customList.append(empty);
+  }
+
+  setLocalized(document.getElementById("link-group-count"), "downloadit-link-group-count", {
+    count: groups.filter(group => group.enabled).length,
+  });
+  setLocalized(
+    document.getElementById("custom-link-group-count"),
+    "downloadit-custom-link-group-count",
+    { count: custom.length },
+  );
+  lock.hidden = !locked;
+  addButton.disabled = locked || state.busy || !state.service;
+}
+
 function renderAbout() {
   const snapshot = state.snapshot;
   document.getElementById("binary-path").textContent = snapshot?.binaryPath || "--";
@@ -652,6 +860,12 @@ function errorText(error) {
 }
 
 function localizedError(error) {
+  if (
+    error?.name === "LinkGroupValidationError" &&
+    LINK_GROUP_ERROR_MESSAGES[error.code]
+  ) {
+    return localizedMessage(LINK_GROUP_ERROR_MESSAGES[error.code], error.args || null);
+  }
   if (CUSTOM_ERROR_MESSAGES[error?.code]) {
     return localizedMessage(CUSTOM_ERROR_MESSAGES[error.code], error.args || null);
   }
@@ -664,6 +878,9 @@ function localizedError(error) {
   }
   if (/automatic extension preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-extensions");
+  }
+  if (/link group preference is locked/i.test(message)) {
+    return localizedMessage("downloadit-error-locked-link-groups");
   }
   if (/IDM bridge preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-idm-bridge");
@@ -753,6 +970,138 @@ async function resetCustomDownloaders() {
   render();
 }
 
+function openLinkGroupEditor(key = "") {
+  if (!state.draft?.linkGroups || state.snapshot?.linkGroupsLocked) {
+    return;
+  }
+  const existing = state.draft.linkGroups.groups.find(group => group.key === key);
+  const group = existing ? clone(existing) : {
+    key: "",
+    name: "",
+    builtIn: false,
+    enabled: true,
+    extensions: [],
+  };
+  state.linkGroupEditor = { existingKey: existing?.key || "", group };
+  state.editorReturnFocus = document.activeElement;
+  const nameField = document.getElementById("link-group-name-field");
+  const nameInput = document.getElementById("link-group-name");
+  const keyInput = document.getElementById("link-group-key");
+  nameField.hidden = group.builtIn;
+  nameInput.value = group.name || "";
+  keyInput.value = group.key;
+  keyInput.readOnly = group.builtIn;
+  document.getElementById("link-group-enabled").checked = group.enabled;
+  document.getElementById("link-group-extensions").value =
+    group.extensions.join("\n");
+  document.getElementById("link-group-editor-error").hidden = true;
+  setLocalized(
+    document.getElementById("link-group-editor-title"),
+    group.builtIn
+      ? "downloadit-link-group-editor-built-in-title"
+      : existing
+        ? "downloadit-link-group-editor-edit-title"
+        : "downloadit-link-group-editor-add-title",
+  );
+  document.getElementById("link-group-editor").hidden = false;
+  document.getElementById("app").inert = true;
+  (group.builtIn ? document.getElementById("link-group-extensions") : nameInput).focus();
+}
+
+function closeLinkGroupEditor() {
+  state.linkGroupEditor = null;
+  document.getElementById("link-group-editor").hidden = true;
+  document.getElementById("app").inert = false;
+  if (state.editorReturnFocus?.isConnected) {
+    state.editorReturnFocus.focus();
+  }
+  state.editorReturnFocus = null;
+}
+
+function parseLinkGroupExtensions(value) {
+  return String(value || "")
+    .split(/[\s,;]+/)
+    .map(extension => extension.trim())
+    .filter(Boolean);
+}
+
+function saveLinkGroupEditor() {
+  const current = state.linkGroupEditor;
+  if (!current || !state.draft?.linkGroups) {
+    return;
+  }
+  try {
+    const group = {
+      key: current.group.builtIn
+        ? current.group.key
+        : document.getElementById("link-group-key").value.trim(),
+      ...(current.group.builtIn
+        ? { builtIn: true }
+        : {
+            builtIn: false,
+            name: document.getElementById("link-group-name").value.trim(),
+          }),
+      enabled: document.getElementById("link-group-enabled").checked,
+      extensions: parseLinkGroupExtensions(
+        document.getElementById("link-group-extensions").value,
+      ),
+    };
+    const settings = clone(state.draft.linkGroups);
+    const index = settings.groups.findIndex(entry => entry.key === current.existingKey);
+    if (index >= 0) {
+      settings.groups[index] = group;
+    } else {
+      settings.groups.push(group);
+    }
+    state.draft.linkGroups = validateLinkGroupSettings(settings);
+  } catch (error) {
+    const message = localizedError(error);
+    document.getElementById("link-group-editor-error").hidden = false;
+    setLocalizedMessage(document.getElementById("link-group-editor-error-message"), message);
+    return;
+  }
+  closeLinkGroupEditor();
+  clearFeedback();
+  render();
+}
+
+function toggleLinkGroup(key, enabled) {
+  if (!state.draft?.linkGroups || state.snapshot?.linkGroupsLocked) {
+    return;
+  }
+  const group = state.draft.linkGroups.groups.find(entry => entry.key === key);
+  if (!group) {
+    return;
+  }
+  group.enabled = Boolean(enabled);
+  clearFeedback();
+  render();
+}
+
+async function removeCustomLinkGroup(key) {
+  if (!state.draft?.linkGroups || state.snapshot?.linkGroupsLocked) {
+    return;
+  }
+  const group = state.draft.linkGroups.groups.find(
+    entry => entry.key === key && !entry.builtIn,
+  );
+  if (!group) {
+    return;
+  }
+  const message = await document.l10n.formatValue(
+    "downloadit-confirm-remove-link-group",
+    { group: group.name },
+  );
+  if (!window.confirm(message)) {
+    return;
+  }
+  state.draft.linkGroups.groups = state.draft.linkGroups.groups.filter(
+    entry => entry.key !== key,
+  );
+  clearFeedback();
+  render();
+}
+
 function openCustomEditor(id = "") {
   const existing = state.draft.customDownloaders.downloaders.find(
     downloader => downloader.id === id,
@@ -810,8 +1159,8 @@ function closeCustomEditor() {
   state.editorReturnFocus = null;
 }
 
-function trapEditorFocus(event) {
-  const dialog = document.querySelector(".editor-dialog");
+function trapEditorFocus(event, editorId) {
+  const dialog = document.querySelector(`#${editorId} .editor-dialog`);
   const controls = [...dialog.querySelectorAll(
     "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
   )].filter(element => !element.closest("[hidden]"));

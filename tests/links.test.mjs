@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 
 import {
   classifyLinkType,
+  createDefaultLinkGroupSettings,
   filterLinkRecords,
   getExtensionOptions,
   getLinkExtension,
   LinkSelectionModel,
   PAGE_LINKS_QUERY,
   queryPageLinks,
+  validateLinkGroupSettings,
 } from "../addon/chrome/content/DownloadItLinks.sys.mjs";
 
 test("link extensions prefer download filenames and ignore URL queries", () => {
@@ -37,6 +39,89 @@ test("common extensions map to the supported link type filters", () => {
   for (const [filename, type] of expectations) {
     assert.equal(classifyLinkType({ filename }), type, filename);
   }
+});
+
+test("link group settings support disabled built-ins and custom classifications", () => {
+  const settings = createDefaultLinkGroupSettings();
+  settings.groups.find(group => group.key === "image").enabled = false;
+  settings.groups.push({
+    key: "package-index",
+    name: "Package indexes",
+    builtIn: false,
+    enabled: true,
+    extensions: [".TORRENT"],
+  });
+  const normalized = validateLinkGroupSettings(settings);
+
+  assert.equal(classifyLinkType({ filename: "photo.jpg" }, normalized), "other");
+  assert.equal(
+    classifyLinkType({ filename: "release.torrent" }, normalized),
+    "package-index",
+  );
+  assert.deepEqual(normalized.groups.at(-1), {
+    key: "package-index",
+    name: "Package indexes",
+    builtIn: false,
+    enabled: true,
+    extensions: ["torrent"],
+  });
+});
+
+test("custom link groups require names, keys, suffixes, and unique ownership", () => {
+  const missingFields = createDefaultLinkGroupSettings();
+  missingFields.groups.push({
+    key: "",
+    name: "",
+    builtIn: false,
+    enabled: true,
+    extensions: [],
+  });
+  assert.throws(
+    () => validateLinkGroupSettings(missingFields),
+    error => error.code === "key-required",
+  );
+
+  const missingName = createDefaultLinkGroupSettings();
+  missingName.groups.push({
+    key: "source-code",
+    name: "",
+    builtIn: false,
+    enabled: true,
+    extensions: ["js"],
+  });
+  assert.throws(
+    () => validateLinkGroupSettings(missingName),
+    error => error.code === "name-required",
+  );
+
+  const missingSuffix = createDefaultLinkGroupSettings();
+  missingSuffix.groups.push({
+    key: "source-code",
+    name: "Source code",
+    builtIn: false,
+    enabled: true,
+    extensions: [],
+  });
+  assert.throws(
+    () => validateLinkGroupSettings(missingSuffix),
+    error => error.code === "extensions-required",
+  );
+
+  const conflict = createDefaultLinkGroupSettings();
+  conflict.groups.find(group => group.key === "image").enabled = false;
+  conflict.groups.push({
+    key: "screenshots",
+    name: "Screenshots",
+    builtIn: false,
+    enabled: true,
+    extensions: ["png"],
+  });
+  assert.throws(
+    () => validateLinkGroupSettings(conflict),
+    error => error.code === "extension-duplicate" &&
+      error.args.firstKey === "image" &&
+      error.args.secondKey === "screenshots",
+  );
 });
 
 test("multi-value filters use OR within groups and AND across groups", () => {

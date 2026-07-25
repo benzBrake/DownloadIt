@@ -97,6 +97,8 @@ The test suite covers single- and multi-link download-task JSON, URL and filenam
 
 DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature.
 
+The **Link groups** settings tab can enable or disable each built-in suffix group and edit the suffixes it manages. Custom groups require a display name, a unique kebab-case key, and at least one suffix; enabled custom groups appear in the type filter. A suffix can belong to only one group, including disabled groups, so a group can be enabled later without creating ambiguous classification rules. Suffixes from disabled groups and unmatched suffixes are classified as **Other**.
+
 ## Installation and upgrade
 
 1. Install `userChrome.js-Loader` and confirm that it is active in the target Firefox profile.
@@ -119,6 +121,7 @@ Open the settings page from the toolbar panel, from “DownloadIt Settings” in
 | `downloadit.idmBridgeEnabled` | Boolean | Intercepts compatible IDM local HTTP requests and sends them to the current default downloader. The default is `false`. |
 | `downloadit.detectedManagers` | String | Cached download-manager detection results, maintained automatically by the extension. |
 | `downloadit.autoExtensions` | String | JSON array of file extensions that should be sent to the current default manager automatically. |
+| `downloadit.linkGroups` | String | Versioned JSON configuration for built-in and custom batch-link suffix groups. |
 
 When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes. Remembered extensions can be removed individually or cleared from the settings page.
 

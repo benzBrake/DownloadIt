@@ -31,7 +31,7 @@ test("links dialog exposes filtering, selection, and downloader controls", () =>
   assert.match(markup, /<button[^>]+id="extension-filter"[^>]+aria-expanded="false"[^>]+aria-controls="extension-filter-menu"/s);
   assert.match(markup, /id="type-filter-menu"[^>]+role="group"/);
   assert.match(markup, /id="extension-filter-menu"[^>]+role="group"/);
-  assert.equal((markup.match(/data-filter-type="types"/g) || []).length, 7);
+  assert.match(markup, /id="type-filter-options"/);
   assert.match(markup, /id="extension-filter-options"/);
   assert.doesNotMatch(markup, /<select[^>]+id="(?:type|extension)-filter"/);
 });
@@ -53,6 +53,8 @@ test("multi-select filters preserve choices and expose dismiss and keyboard beha
   assert.match(script, /extensions:\s*new Set\(\)/);
   assert.match(script, /state\.filters\[checkbox\.dataset\.filterType\]/);
   assert.match(script, /getExtensionOptions\(state\.model\.records\)/);
+  assert.match(script, /renderTypeOptions\(\)/);
+  assert.match(script, /new LinkSelectionModel\(links, state\.linkGroups\)/);
   assert.match(script, /\["ArrowDown",\s*"ArrowUp",\s*"Home",\s*"End"\]/);
   assert.match(script, /event\.key === "Escape"/);
   assert.match(script, /document\.addEventListener\("pointerdown"/);

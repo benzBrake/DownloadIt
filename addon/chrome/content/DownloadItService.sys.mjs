@@ -19,6 +19,10 @@ import {
 import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
 import { DownloadItIDMBridge } from "./DownloadItIDMBridge.sys.mjs";
 import {
+  createDefaultLinkGroupSettings,
+  validateLinkGroupSettings,
+} from "./DownloadItLinks.sys.mjs";
+import {
   BINARY_SIZE,
   BINARY_SHA256,
 } from "./DownloadItBinaryMetadata.sys.mjs";
@@ -95,6 +99,7 @@ const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
 const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 const PREF_AUTO_EXTENSIONS = "downloadit.autoExtensions";
 const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
+const PREF_LINK_GROUPS = "downloadit.linkGroups";
 
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
@@ -539,6 +544,21 @@ export class DownloadItService {
     return Services.prefs.prefIsLocked(PREF_AUTO_EXTENSIONS);
   }
 
+  get linkGroups() {
+    try {
+      const fallback = createDefaultLinkGroupSettings();
+      const raw = Services.prefs.getStringPref(PREF_LINK_GROUPS, "");
+      return raw ? validateLinkGroupSettings(JSON.parse(raw)) : fallback;
+    } catch (error) {
+      console.error("DownloadIt: invalid link group preference", error);
+      return createDefaultLinkGroupSettings();
+    }
+  }
+
+  get linkGroupsLocked() {
+    return Services.prefs.prefIsLocked(PREF_LINK_GROUPS);
+  }
+
   hasAutoExtension(value) {
     const extension = normalizeAutoExtensions([value])[0] || "";
     return Boolean(extension && this.autoExtensions.includes(extension));
@@ -594,10 +614,12 @@ export class DownloadItService {
       ),
       idmBridgeActive: this.idmBridge.running,
       autoExtensions: this.autoExtensions,
+      linkGroups: this.linkGroups,
       defaultManagerLocked: Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER),
       omitCookiesLocked: Services.prefs.prefIsLocked(PREF_OMIT_COOKIES),
       idmBridgeLocked: Services.prefs.prefIsLocked(PREF_IDM_BRIDGE),
       autoExtensionsLocked: this.autoExtensionsLocked,
+      linkGroupsLocked: this.linkGroupsLocked,
       binaryPath: this.binaryPath,
       serviceReady: Boolean(this.binaryPath),
       platformSupported: Services.appinfo.OS === "WINNT",
@@ -609,6 +631,7 @@ export class DownloadItService {
     omitCookies = false,
     idmBridgeEnabled = null,
     autoExtensions = null,
+    linkGroups = null,
     customDownloaders = null,
   } = {}) {
     const defaultManagerRequested = defaultManager !== null &&
@@ -618,6 +641,10 @@ export class DownloadItService {
     const requestedAutoExtensions = autoExtensions == null
       ? currentAutoExtensions
       : normalizeAutoExtensions(autoExtensions);
+    const currentLinkGroups = this.linkGroups;
+    const requestedLinkGroups = linkGroups == null
+      ? currentLinkGroups
+      : validateLinkGroupSettings(linkGroups);
     const configuredDefaultRef = this.configuredDefaultRef;
     const configuredDefaultKey = configuredDefaultRef
       ? downloaderRefKey(configuredDefaultRef)
@@ -692,6 +719,12 @@ export class DownloadItService {
     ) {
       throw new Error("The automatic extension preference is locked");
     }
+    if (
+      this.linkGroupsLocked &&
+      JSON.stringify(requestedLinkGroups) !== JSON.stringify(currentLinkGroups)
+    ) {
+      throw new Error("The link group preference is locked");
+    }
 
     if (customDownloadersChanged) {
       await this.writeCustomDownloaders(requestedCustomDownloaders);
@@ -748,6 +781,9 @@ export class DownloadItService {
         PREF_AUTO_EXTENSIONS,
         JSON.stringify(requestedAutoExtensions),
       );
+    }
+    if (JSON.stringify(requestedLinkGroups) !== JSON.stringify(currentLinkGroups)) {
+      Services.prefs.setStringPref(PREF_LINK_GROUPS, JSON.stringify(requestedLinkGroups));
     }
     return this.readSettings();
   }

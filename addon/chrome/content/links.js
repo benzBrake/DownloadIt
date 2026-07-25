@@ -8,6 +8,7 @@ const { initializeDownloadItLocalization } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItLocalization.sys.mjs",
 );
 const {
+  createDefaultLinkGroupSettings,
   getExtensionOptions,
   LinkSelectionModel,
   queryPageLinks,
@@ -52,6 +53,7 @@ const state = {
   loading: true,
   busy: false,
   managers: [],
+  linkGroups: createDefaultLinkGroupSettings(),
   openFilter: "",
 };
 
@@ -322,7 +324,7 @@ function renderFilterSummary(name) {
   }
   const [value] = values;
   if (name === "types") {
-    setLocalized(summary, TYPE_MESSAGE_IDS[value]);
+    setTypeLabel(summary, value);
   } else if (value) {
     setLocalized(summary, "downloadit-links-extension-selected", {
       extension: value,
@@ -330,6 +332,42 @@ function renderFilterSummary(name) {
   } else {
     setLocalized(summary, "downloadit-links-extension-none");
   }
+}
+
+function typeGroups() {
+  return [
+    ...state.linkGroups.groups.filter(group => group.enabled),
+    { key: "other", builtIn: true, enabled: true, extensions: [] },
+  ];
+}
+
+function setTypeLabel(element, key) {
+  const group = typeGroups().find(value => value.key === key);
+  if (group?.builtIn && TYPE_MESSAGE_IDS[key]) {
+    setLocalized(element, TYPE_MESSAGE_IDS[key]);
+  } else {
+    element.removeAttribute("data-l10n-id");
+    element.textContent = group?.name || key;
+  }
+}
+
+function renderTypeOptions() {
+  const container = document.getElementById("type-filter-options");
+  const elements = typeGroups().map(group => {
+    const label = document.createElement("label");
+    label.className = "multi-select-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = group.key;
+    checkbox.dataset.filterType = "types";
+    checkbox.checked = state.filters.types.has(group.key);
+    const text = document.createElement("span");
+    setTypeLabel(text, group.key);
+    label.append(checkbox, text);
+    return label;
+  });
+  container.replaceChildren(...elements);
+  syncFilterCheckboxes("types");
 }
 
 async function renderExtensionOptions() {
@@ -385,7 +423,7 @@ function createLinkRow(record) {
   const type = document.createElement("span");
   type.className = "type-label";
   type.dataset.type = record.type;
-  setLocalized(type, TYPE_MESSAGE_IDS[record.type]);
+  setTypeLabel(type, record.type);
 
   const copy = document.createElement("span");
   copy.className = "link-copy";
@@ -535,9 +573,11 @@ async function init() {
     await localizationReady;
     state.context = window.arguments?.[0]?.wrappedJSObject || {};
     state.service = getActiveService();
+    state.linkGroups = state.service?.linkGroups || createDefaultLinkGroupSettings();
     document.getElementById("page-url").textContent =
       state.context.referer || state.context.browser?.currentURI?.spec || "";
     bindEvents();
+    renderTypeOptions();
     await renderManagers();
     renderSelectionState();
 
@@ -550,7 +590,7 @@ async function init() {
     }
 
     const links = await queryPageLinks(state.context.browser);
-    state.model = new LinkSelectionModel(links);
+    state.model = new LinkSelectionModel(links, state.linkGroups);
     state.loading = false;
     document.getElementById("loading-state").hidden = true;
     await renderExtensionOptions();

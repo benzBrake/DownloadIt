@@ -97,6 +97,8 @@ node --test .\tests\*.test.mjs
 
 DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。
 
+设置页的“链接分组”标签可以启用或禁用各个内置后缀分组，也可以修改其管理的后缀。自定义分组必须填写显示名称、唯一的 kebab-case key 和至少一个后缀；启用后会出现在类型筛选器中。每个后缀只能属于一个分组，禁用的分组也参与冲突检查，以保证以后重新启用时不会产生含糊的分类规则。禁用分组中的后缀和未命中的后缀会归入“其他”。
+
 ## 安装与升级
 
 1. 先安装并确认 `userChrome.js-Loader` 已在目标 Firefox profile 中生效。
@@ -119,6 +121,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.idmBridgeEnabled` | 布尔值 | 接管兼容的 IDM 本地 HTTP 请求并发送到当前默认下载器；默认值为 `false`。 |
 | `downloadit.detectedManagers` | 字符串 | 下载管理器检测缓存，由扩展自动维护。 |
 | `downloadit.autoExtensions` | 字符串 | 应自动发送到当前默认下载工具的文件扩展名 JSON 数组。 |
+| `downloadit.linkGroups` | 字符串 | 内置及自定义批量链接后缀分组的版本化 JSON 配置。 |
 
 当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。已记住的扩展名可以在设置页面逐项移除或全部清除。
 

@@ -30,6 +30,14 @@ test("settings dialog contains the current capability controls", () => {
     "refresh-managers",
     "auto-extension-list",
     "clear-auto-extensions",
+    "section-link-groups",
+    "built-in-link-group-list",
+    "custom-link-group-list",
+    "add-custom-link-group",
+    "link-group-editor",
+    "link-group-name",
+    "link-group-key",
+    "link-group-extensions",
     "section-privacy",
     "send-cookies",
     "idm-bridge",
@@ -57,6 +65,8 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /refreshManagers\(\{ persistDefault: false \}\)/);
   assert.match(script, /await state\.service\.applySettings\(payload\)/);
   assert.match(script, /autoExtensions/);
+  assert.match(script, /linkGroups/);
+  assert.match(script, /validateLinkGroupSettings/);
   assert.match(script, /idmBridgeEnabled/);
   assert.match(script, /data-remove-extension/);
   assert.match(script, /downloadit-remove-extension/);
@@ -173,6 +183,21 @@ test("remembered extensions are wired through service preferences and documentat
   assert.match(service, /autoExtensionsLocked/);
   assert.match(service, /normalizeAutoExtensions\(autoExtensions\)/);
   assert.match(service, /JSON\.stringify\(requestedAutoExtensions\)/);
+});
+
+test("link groups are validated, policy-aware, and documented", () => {
+  const links = read("addon/chrome/content/DownloadItLinks.sys.mjs");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const englishReadme = read("README.md");
+  const chineseReadme = read("README-zh_CN.md");
+
+  assert.match(links, /validateLinkGroupSettings/);
+  assert.match(links, /extension-duplicate/);
+  assert.match(service, /PREF_LINK_GROUPS = "downloadit\.linkGroups"/);
+  assert.match(service, /linkGroupsLocked/);
+  for (const source of [englishReadme, chineseReadme]) {
+    assert.match(source, /downloadit\.linkGroups/);
+  }
 });
 
 test("IDM bridge is staged, policy-aware, packaged, and documented", () => {
