@@ -10,6 +10,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 
 - 在网页链接的右键菜单中提供 DownloadIt 菜单。
 - 在有选区且选区包含链接时，在其下方提供“使用 DownloadIt 下载选中链接”。
+- 提供“使用 DownloadIt 批量下载”链接选择器，可收集、筛选并批量下载当前文档及其 frame 中的显式页面链接。
 - 自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
@@ -25,7 +26,6 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 
 当前尚未实现：
 
-- “全部链接”下载；
 - 广泛的未知文件类型拦截；
 - 媒体嗅探；
 - 原 FlashGot 的完整选项页及其他高级功能。
@@ -93,7 +93,9 @@ Linux：
 node --test .\tests\*.test.mjs
 ```
 
-测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区链接提取、下载管理器解析、工具栏 PanelView 与右键菜单插入点、已记住扩展名的自动接管与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
+测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型与后缀筛选、选择状态、下载管理器解析、工具栏 PanelView 与右键菜单插入点、已记住扩展名的自动接管与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
+
+DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。
 
 ## 安装与升级
 
@@ -106,7 +108,7 @@ node --test .\tests\*.test.mjs
 
 ## 配置
 
-DownloadIt 工具栏按钮会打开 Firefox 原生面板。选择可用工具可立即切换默认下载工具；“重新检测下载工具”会刷新已检测工具列表；面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
+DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 DownloadIt 批量下载”可为当前标签页打开批量链接选择器；选择可用工具可立即切换默认下载工具；“重新检测下载工具”会刷新已检测工具列表；面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
@@ -179,7 +181,8 @@ addon/
     ├── DownloadItIDMBridge.sys.mjs      # Firefox 请求 hook 和回环响应桥
     ├── DownloadItIDMProtocol.sys.mjs    # IDM 本地端点和字节级消息解析
     ├── DownloadItXUL.sys.mjs             # 共享的 Firefox XUL 元素构造工具
-    ├── DownloadItSelectionActor.sys.mjs # 选区链接提取 Actor
+    ├── DownloadItSelectionActor.sys.mjs # 选区与页面链接提取 Actor
+    ├── DownloadItLinks.sys.mjs           # 页面链接查询、分类、筛选与选择状态
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent 资源注册
     ├── DownloadItProtocol.sys.mjs       # 下载任务协议和校验
     ├── DownloadItUtils.sys.mjs           # 请求编码、域名和 Cookie 工具函数
@@ -188,7 +191,10 @@ addon/
     │   └── zh-CN/downloadit.ftl          # 简体中文 Fluent 消息
     ├── options.xhtml                     # 设置页面结构
     ├── options.js                        # 设置页面逻辑
-    └── options.css                       # 设置页面样式
+    ├── options.css                       # 设置页面样式
+    ├── links.xhtml                       # 批量链接选择器结构
+    ├── links.js                          # 批量链接选择器行为
+    └── links.css                         # 批量链接选择器样式
 pack.ps1                                  # XPI 打包脚本
 pack.sh                                   # Linux XPI 打包脚本
 tests/                                    # Node.js 单元测试

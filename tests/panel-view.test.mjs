@@ -206,19 +206,29 @@ class MockService {
   }
 }
 
-function createController(service = new MockService()) {
+function createController(service = new MockService(), {
+  browser = { currentURI: { spec: "https://example.com/page" } },
+} = {}) {
   const document = new MockDocument();
-  const window = { document };
+  const dialogCalls = [];
+  const window = {
+    document,
+    gBrowser: { selectedBrowser: browser },
+    openDialog(...args) {
+      dialogCalls.push(args);
+      return { opened: true };
+    },
+  };
   const controller = new DownloadItPanelViewController(
     service,
     window,
     async () => {},
   );
   controller.init();
-  return { controller, document, service, window };
+  return { controller, dialogCalls, document, service, window };
 }
 
-test("panel view builds native manager, refresh, and settings controls", () => {
+test("panel view builds native links, manager, refresh, and settings controls", () => {
   const { controller, document } = createController();
 
   assert.equal(controller.view.localName, "panelview");
@@ -228,9 +238,19 @@ test("panel view builds native manager, refresh, and settings controls", () => {
     controller.view,
   );
   assert.match(controller.view.getAttribute("class"), /PanelUI-subView/);
+  assert.equal(controller.view.children[0].children[0], controller.linksButton);
   assert.equal(controller.managerButtons.length, 2);
   assert.equal(controller.managerButtons[0].getAttribute("checked"), "true");
   assert.equal(controller.managerButtons[1].getAttribute("checked"), null);
+  assert.equal(
+    controller.linksButton.getAttribute("data-l10n-id"),
+    "downloadit-download-links",
+  );
+  assert.match(
+    controller.linksButton.getAttribute("image"),
+    /downloads\.svg$/,
+  );
+  assert.equal(controller.linksButton.disabled, false);
   assert.equal(
     controller.managerButtons[1].getAttribute("data-l10n-id"),
     "downloadit-custom-downloader-menu-label",
@@ -241,6 +261,26 @@ test("panel view builds native manager, refresh, and settings controls", () => {
     controller.settingsButton.getAttribute("data-l10n-id"),
     "downloadit-settings",
   );
+});
+
+test("panel links command opens the batch selector for the active browser", () => {
+  const { controller, dialogCalls, service } = createController();
+
+  controller.handleEvent({ type: "command", target: controller.linksButton });
+
+  assert.equal(dialogCalls.length, 1);
+  const call = dialogCalls[0];
+  assert.equal(call[0], "chrome://downloadit/content/links.xhtml");
+  assert.match(call[2], /\bmodal\b/);
+  assert.equal(
+    call[3].wrappedJSObject.browser,
+    controller.window.gBrowser.selectedBrowser,
+  );
+  assert.equal(
+    call[3].wrappedJSObject.referer,
+    "https://example.com/page",
+  );
+  assert.equal(service.defaultManager, "flashgot:idm");
 });
 
 test("manager selection updates only the default manager", () => {
@@ -273,6 +313,12 @@ test("locked and empty manager states cannot change the preference", () => {
   );
   assert.equal(empty.controller.managerList.children[0].disabled, true);
   assert.equal(empty.controller.managerList.children[0].getAttribute("disabled"), "true");
+  assert.equal(empty.controller.linksButton.disabled, true);
+
+  const noBrowser = createController(new MockService(), { browser: null });
+  assert.equal(noBrowser.controller.linksButton.disabled, true);
+  assert.equal(noBrowser.controller.openLinksDialog(), null);
+  assert.equal(noBrowser.dialogCalls.length, 0);
 });
 
 test("refresh prevents re-entry and rebuilds the manager list in place", async () => {

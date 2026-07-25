@@ -24,7 +24,11 @@ required_entries=(
     "chrome/content/DownloadItDownloaders.sys.mjs"
     "chrome/content/DownloadItIDMBridge.sys.mjs"
     "chrome/content/DownloadItIDMProtocol.sys.mjs"
+    "chrome/content/DownloadItLinks.sys.mjs"
     "chrome/content/DownloadItPanelView.sys.mjs"
+    "chrome/content/links.xhtml"
+    "chrome/content/links.js"
+    "chrome/content/links.css"
     "chrome/content/locales/en-US/downloadit.ftl"
     "chrome/content/locales/zh-CN/downloadit.ftl"
 )

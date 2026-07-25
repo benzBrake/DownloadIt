@@ -122,6 +122,52 @@ test("context menu label refresh localizes the selection item", async () => {
   assert.equal(localizedIds.get(selectionItem), "downloadit-download-selection");
 });
 
+test("context menu label refresh localizes the page-links item", async () => {
+  const localizedIds = new Map();
+  const downloadItem = {};
+  const linksItem = {};
+  const document = {
+    l10n: {
+      setAttributes(element, id) {
+        localizedIds.set(element, id);
+      },
+      async translateFragment() {},
+    },
+  };
+
+  await refreshContextMenuLabel(document, downloadItem, null, null, linksItem);
+
+  assert.equal(localizedIds.get(linksItem), "downloadit-download-links");
+});
+
+test("page-links dialog receives the current browser context without changing defaults", () => {
+  const browser = {};
+  let call = null;
+  const window = {
+    document: {},
+    openDialog(...args) {
+      call = args;
+      return { opened: true };
+    },
+  };
+  const service = {
+    defaultManager: "default-manager",
+    managers: [{ key: "default-manager" }],
+  };
+  const controller = new DownloadItContextMenuController(service, window, null);
+  controller.linksContext = {
+    browser,
+    referer: "https://example.com/page",
+    downloadPageReferer: "https://example.com/",
+  };
+
+  assert.deepEqual(controller.openLinksDialog(), { opened: true });
+  assert.equal(call[0], "chrome://downloadit/content/links.xhtml");
+  assert.match(call[2], /\bmodal\b/);
+  assert.equal(call[3].wrappedJSObject.browser, browser);
+  assert.equal(service.defaultManager, "default-manager");
+});
+
 test("message formatting omits absent Fluent arguments", async () => {
   const window = {
     document: {

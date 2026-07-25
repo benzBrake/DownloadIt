@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://downloadit/content/links.css" type="text/css"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="localization" href="downloadit.ftl" />
+    <title data-l10n-id="downloadit-links-window-title"></title>
+    <script type="application/javascript" src="chrome://downloadit/content/links.js"></script>
+  </head>
+  <body>
+    <main id="app">
+      <header class="titlebar">
+        <div class="brand-mark" aria-hidden="true">DI</div>
+        <div class="title-copy">
+          <h1 data-l10n-id="downloadit-links-title"></h1>
+          <div id="page-url" class="page-url"></div>
+        </div>
+        <div id="result-count" class="result-count" role="status"></div>
+      </header>
+
+      <section class="filterbar" data-l10n-id="downloadit-links-filter-region" data-l10n-attrs="aria-label">
+        <div class="search-field">
+          <span class="search-icon" aria-hidden="true"></span>
+          <input
+            id="search"
+            type="search"
+            data-l10n-id="downloadit-links-search"
+            data-l10n-attrs="placeholder,aria-label"
+          />
+        </div>
+        <div class="filter-field multi-select" data-multi-select="types">
+          <span id="type-filter-label" data-l10n-id="downloadit-links-type-label"></span>
+          <button
+            id="type-filter"
+            class="multi-select-button"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="type-filter-menu"
+            aria-labelledby="type-filter-label type-filter-summary"
+          >
+            <span id="type-filter-summary" data-l10n-id="downloadit-links-type-all"></span>
+            <span class="menu-chevron" aria-hidden="true"></span>
+          </button>
+          <div id="type-filter-menu" class="multi-select-menu" role="group" aria-labelledby="type-filter-label" hidden="hidden">
+            <div class="multi-select-options">
+              <label class="multi-select-option">
+                <input type="checkbox" value="image" data-filter-type="types" />
+                <span data-l10n-id="downloadit-links-type-image"></span>
+              </label>
+              <label class="multi-select-option">
+                <input type="checkbox" value="video" data-filter-type="types" />
+                <span data-l10n-id="downloadit-links-type-video"></span>
+              </label>
+              <label class="multi-select-option">
+                <input type="checkbox" value="audio" data-filter-type="types" />
+                <span data-l10n-id="downloadit-links-type-audio"></span>
+              </label>
+              <label class="multi-select-option">
+                <input type="checkbox" value="document" data-filter-type="types" />
+                <span data-l10n-id="downloadit-links-type-document"></span>
+              </label>
+              <label class="multi-select-option">
+                <input type="checkbox" value="archive" data-filter-type="types" />
+                <span data-l10n-id="downloadit-links-type-archive"></span>
+              </label>
+              <label class="multi-select-option">
+                <input type="checkbox" value="program" data-filter-type="types" />
+                <span data-l10n-id="downloadit-links-type-program"></span>
+              </label>
+              <label class="multi-select-option">
+                <input type="checkbox" value="other" data-filter-type="types" />
+                <span data-l10n-id="downloadit-links-type-other"></span>
+              </label>
+            </div>
+            <button id="clear-type-filter" class="multi-select-clear" type="button" data-l10n-id="downloadit-links-show-all-types"></button>
+          </div>
+        </div>
+        <div class="filter-field multi-select" data-multi-select="extensions">
+          <span id="extension-filter-label" data-l10n-id="downloadit-links-extension-label"></span>
+          <button
+            id="extension-filter"
+            class="multi-select-button"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="extension-filter-menu"
+            aria-labelledby="extension-filter-label extension-filter-summary"
+          >
+            <span id="extension-filter-summary" data-l10n-id="downloadit-links-extension-all"></span>
+            <span class="menu-chevron" aria-hidden="true"></span>
+          </button>
+          <div id="extension-filter-menu" class="multi-select-menu" role="group" aria-labelledby="extension-filter-label" hidden="hidden">
+            <div id="extension-filter-options" class="multi-select-options suffix-options"></div>
+            <button id="clear-extension-filter" class="multi-select-clear" type="button" data-l10n-id="downloadit-links-show-all-extensions"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="link-pane" data-l10n-id="downloadit-links-list-region" data-l10n-attrs="aria-label">
+        <header class="list-header">
+          <label class="select-visible" for="select-visible">
+            <input
+              id="select-visible"
+              type="checkbox"
+              data-l10n-id="downloadit-links-select-visible"
+              data-l10n-attrs="aria-label"
+            />
+            <span data-l10n-id="downloadit-links-select-visible-label"></span>
+          </label>
+          <span class="column-type" data-l10n-id="downloadit-links-column-type"></span>
+          <span class="column-link" data-l10n-id="downloadit-links-column-link"></span>
+          <span class="column-extension" data-l10n-id="downloadit-links-column-extension"></span>
+        </header>
+
+        <div id="link-list" class="link-list"></div>
+
+        <div id="loading-state" class="pane-state">
+          <span class="spinner" aria-hidden="true"></span>
+          <span data-l10n-id="downloadit-links-loading"></span>
+        </div>
+        <div id="empty-state" class="pane-state" hidden="hidden">
+          <span class="state-mark" aria-hidden="true">0</span>
+          <span id="empty-state-message" data-l10n-id="downloadit-links-empty"></span>
+        </div>
+      </section>
+
+      <div id="feedback" class="feedback" role="status" hidden="hidden"></div>
+
+      <footer class="actionbar">
+        <div class="selection-summary">
+          <span id="selection-count"></span>
+          <button id="clear-selection" class="text-button" type="button" data-l10n-id="downloadit-links-clear-selection"></button>
+        </div>
+        <div class="action-controls">
+          <label class="manager-field" for="manager">
+            <span data-l10n-id="downloadit-links-manager-label"></span>
+            <select id="manager"></select>
+          </label>
+          <button id="cancel" class="secondary-button" type="button" data-l10n-id="downloadit-cancel"></button>
+          <button id="download" class="primary-button" type="button"></button>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -71,7 +71,9 @@ test("IDM bridge help localizes the LinkSwift link through DOM Overlay", () => {
 
 test("runtime text uses Fluent resources instead of inline localization maps", () => {
   const markup = read("addon/chrome/content/options.xhtml");
+  const linksMarkup = read("addon/chrome/content/links.xhtml");
   const optionsScript = read("addon/chrome/content/options.js");
+  const linksScript = read("addon/chrome/content/links.js");
   const contextScript = read("addon/chrome/content/DownloadItContextMenu.sys.mjs");
   const panelScript = read("addon/chrome/content/DownloadItPanelView.sys.mjs");
   const dialogScript = read("addon/chrome/content/DownloadItDownloadDialog.sys.mjs");
@@ -87,10 +89,13 @@ test("runtime text uses Fluent resources instead of inline localization maps", (
     "downloadit-download-deck",
     "downloadit-download-manager-popup",
     "downloadit-download-action",
+    "downloadit-links",
   ]);
   const references = new Set([
     ...[...markup.matchAll(/data-l10n-id="([^"]+)"/g)].map(match => match[1]),
+    ...[...linksMarkup.matchAll(/data-l10n-id="([^"]+)"/g)].map(match => match[1]),
     ...[...optionsScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)].map(match => match[1]),
+    ...[...linksScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)].map(match => match[1]),
     ...[...contextScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)].map(match => match[1]),
     ...[...dialogScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)].map(match => match[1]),
     ...[...panelScript.matchAll(/this\.setLocalized\([^,]+,\s*"(downloadit-[a-z0-9-]+)"/g)]
@@ -102,7 +107,9 @@ test("runtime text uses Fluent resources instead of inline localization maps", (
   ]);
 
   assert.doesNotMatch(markup, /data-i18n/);
+  assert.doesNotMatch(linksMarkup, /data-i18n/);
   assert.doesNotMatch(optionsScript, /const TEXT\s*=|%s/);
+  assert.doesNotMatch(linksScript, /const TEXT\s*=|%s/);
   assert.doesNotMatch(serviceScript, /const MESSAGES\s*=|\.message\(/);
   for (const id of references) {
     if (nonMessageIds.has(id)) {

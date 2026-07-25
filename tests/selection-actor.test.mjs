@@ -1,7 +1,75 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { collectSelectionLinks } from "../addon/chrome/content/DownloadItSelectionActor.sys.mjs";
+import {
+  collectPageLinks,
+  collectSelectionLinks,
+} from "../addon/chrome/content/DownloadItSelectionActor.sys.mjs";
+
+function link({
+  href,
+  text = "",
+  download = "",
+  ariaLabel = "",
+} = {}) {
+  return {
+    href,
+    textContent: text,
+    getAttribute(name) {
+      return {
+        download,
+        "aria-label": ariaLabel,
+      }[name] || null;
+    },
+  };
+}
+
+test("page-link Actor scans document links and open shadow roots", () => {
+  const pageLink = link({
+    href: "https://example.com/page.zip",
+    text: " Page ",
+    download: "page.zip",
+  });
+  const areaLink = link({
+    href: "https://example.com/map.pdf",
+    ariaLabel: "Map document",
+  });
+  const shadowLink = link({
+    href: "https://example.com/shadow.mp4",
+    text: "Shadow video",
+  });
+  const shadowRoot = {
+    querySelectorAll(selector) {
+      return selector === "a[href], area[href]" ? [shadowLink] : [];
+    },
+  };
+  const host = { shadowRoot };
+  const document = {
+    querySelectorAll(selector) {
+      return selector === "a[href], area[href]"
+        ? [pageLink, areaLink]
+        : [host];
+    },
+  };
+
+  assert.deepEqual(collectPageLinks(document), [
+    {
+      url: "https://example.com/page.zip",
+      description: "Page",
+      filename: "page.zip",
+    },
+    {
+      url: "https://example.com/map.pdf",
+      description: "Map document",
+      filename: "",
+    },
+    {
+      url: "https://example.com/shadow.mp4",
+      description: "Shadow video",
+      filename: "",
+    },
+  ]);
+});
 
 test("selection Actor returns links intersecting the current selection", () => {
   const first = {

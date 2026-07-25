@@ -7,6 +7,76 @@ downloadit-toolbar-button =
     .aria-label = Open DownloadIt controls
 downloadit-download-selection =
     .label = Downloadit Selection
+downloadit-download-links =
+    .label = DownloadIt Links
+    .accesskey = L
+downloadit-links-window-title = DownloadIt Links
+downloadit-links-title = Page links
+downloadit-links-filter-region =
+    .aria-label = Link filters
+downloadit-links-search =
+    .placeholder = Search name, filename, or URL
+    .aria-label = Search page links
+downloadit-links-type-label = Type
+downloadit-links-type-all = All types
+downloadit-links-type-image = Images
+downloadit-links-type-video = Video
+downloadit-links-type-audio = Audio
+downloadit-links-type-document = Documents
+downloadit-links-type-archive = Archives
+downloadit-links-type-program = Programs
+downloadit-links-type-other = Other
+downloadit-links-types-selected =
+    { $count ->
+        [one] 1 type selected
+       *[other] { NUMBER($count) } types selected
+    }
+downloadit-links-show-all-types = Show all types
+downloadit-links-extension-label = Suffix
+downloadit-links-extension-all = All suffixes
+downloadit-links-extension-selected = .{ $extension }
+downloadit-links-extension-none = No suffix
+downloadit-links-extensions-selected =
+    { $count ->
+        [one] 1 suffix selected
+       *[other] { NUMBER($count) } suffixes selected
+    }
+downloadit-links-show-all-extensions = Show all suffixes
+downloadit-links-list-region =
+    .aria-label = Page links
+downloadit-links-select-visible =
+    .aria-label = Select or clear all shown links
+downloadit-links-select-visible-label = Select shown
+downloadit-links-column-type = Type
+downloadit-links-column-link = Link
+downloadit-links-column-extension = Suffix
+downloadit-links-loading = Collecting page links...
+downloadit-links-empty = No supported links were found on this page.
+downloadit-links-no-matches = No links match the current filters.
+downloadit-links-clear-selection = Clear selection
+downloadit-links-manager-label = Downloader
+downloadit-links-result-count = { NUMBER($visible) } of { NUMBER($total) } shown
+downloadit-links-selection-count = { NUMBER($selected) } of { NUMBER($total) } selected
+downloadit-links-download-button =
+    { $count ->
+        [one] Download 1 link
+       *[other] Download { NUMBER($count) } links
+    }
+downloadit-links-no-manager = No available downloader
+downloadit-links-custom-manager = { $manager } (custom)
+downloadit-links-extension-none-option = No suffix ({ NUMBER($count) })
+downloadit-links-extension-option = .{ $extension } ({ NUMBER($count) })
+downloadit-links-select-link =
+    .aria-label = Select { $name }
+downloadit-links-no-extension = none
+downloadit-links-submitting =
+    { $count ->
+        [one] Sending 1 link to the downloader...
+       *[other] Sending { NUMBER($count) } links to the downloader...
+    }
+downloadit-links-submit-failed = Could not send the selected links to { $manager }: { $error }
+downloadit-links-service-unavailable = The DownloadIt service or page context is unavailable.
+downloadit-links-load-failed = Could not collect page links: { $error }
 downloadit-options =
     .label = DownloadIt options
     .accesskey = O

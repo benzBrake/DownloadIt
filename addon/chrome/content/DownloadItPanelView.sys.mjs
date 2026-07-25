@@ -1,10 +1,12 @@
 import { createXULElement } from "./DownloadItXUL.sys.mjs";
+import { openPageLinksDialog } from "./DownloadItLinks.sys.mjs";
 
 export const DOWNLOADIT_TOOLBAR_WIDGET_ID = "downloadit-toolbar-button";
 export const DOWNLOADIT_PANEL_VIEW_ID = "downloadit-panel-view";
 
 const MANAGER_LIST_ID = "downloadit-panel-manager-list";
 const STATUS_ID = "downloadit-panel-status";
+const LINKS_ID = "downloadit-panel-links";
 const REFRESH_ID = "downloadit-panel-refresh";
 const SETTINGS_ID = "downloadit-panel-settings";
 
@@ -24,6 +26,7 @@ export class DownloadItPanelViewController {
     this.view = null;
     this.managerList = null;
     this.status = null;
+    this.linksButton = null;
     this.refreshButton = null;
     this.settingsButton = null;
     this.managerButtons = [];
@@ -62,6 +65,12 @@ export class DownloadItPanelViewController {
       role: "status",
       "aria-live": "polite",
     });
+    this.linksButton = createXULElement(this.document, "toolbarbutton", {
+      id: LINKS_ID,
+      class: "subviewbutton subviewbutton-iconic",
+      image: "chrome://browser/skin/downloads/downloads.svg",
+    });
+    this.setLocalized(this.linksButton, "downloadit-download-links");
     this.refreshButton = createXULElement(this.document, "toolbarbutton", {
       id: REFRESH_ID,
       class: "subviewbutton subviewbutton-iconic",
@@ -75,6 +84,8 @@ export class DownloadItPanelViewController {
       "vbox",
       { class: "panel-subview-body" },
       [
+        this.linksButton,
+        createXULElement(this.document, "toolbarseparator"),
         heading,
         this.managerList,
         this.status,
@@ -120,6 +131,7 @@ export class DownloadItPanelViewController {
     this.view = null;
     this.managerList = null;
     this.status = null;
+    this.linksButton = null;
     this.refreshButton = null;
     this.settingsButton = null;
   }
@@ -129,7 +141,9 @@ export class DownloadItPanelViewController {
       return;
     }
     const target = event.target;
-    if (target === this.refreshButton) {
+    if (target === this.linksButton) {
+      this.openLinksDialog();
+    } else if (target === this.refreshButton) {
       this.refreshManagers();
     } else if (target === this.settingsButton) {
       this.service.openSettings(this.window);
@@ -152,6 +166,18 @@ export class DownloadItPanelViewController {
   }
 
   onViewHiding() {}
+
+  openLinksDialog() {
+    const browser = this.window.gBrowser?.selectedBrowser;
+    if (!browser || this.service.managers.length === 0) {
+      return null;
+    }
+    return openPageLinksDialog(this.window, {
+      browser,
+      referer: browser.currentURI?.spec || "",
+      downloadPageReferer: "",
+    });
+  }
 
   renderManagers() {
     if (!this.managerList) {
@@ -274,6 +300,19 @@ export class DownloadItPanelViewController {
         this.refreshButton.setAttribute("disabled", "true");
       } else {
         this.refreshButton.removeAttribute("disabled");
+      }
+    }
+    if (this.linksButton) {
+      const disabled = Boolean(
+        refreshing ||
+        !this.window.gBrowser?.selectedBrowser ||
+        this.service.managers.length === 0
+      );
+      this.linksButton.disabled = disabled;
+      if (disabled) {
+        this.linksButton.setAttribute("disabled", "true");
+      } else {
+        this.linksButton.removeAttribute("disabled");
       }
     }
     if (this.view) {

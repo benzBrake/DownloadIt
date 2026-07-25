@@ -1,4 +1,5 @@
 import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
+import { openPageLinksDialog } from "./DownloadItLinks.sys.mjs";
 import { createXULElement } from "./DownloadItXUL.sys.mjs";
 
 function normalizeDownloader(value) {
@@ -24,6 +25,7 @@ const DOWNLOADIT_MENU_ID = "downloadit-context-menu";
 const DOWNLOADIT_POPUP_ID = "downloadit-context-popup";
 const DOWNLOADIT_DOWNLOAD_ID = "downloadit-download-default";
 const DOWNLOADIT_SELECTION_ID = "downloadit-download-selection";
+const DOWNLOADIT_LINKS_ID = "downloadit-download-links";
 const SELECTION_QUERY = "DownloadIt:GetSelectionLinks";
 
 // Firefox keeps this group at the end of the content context menu. The old
@@ -49,6 +51,7 @@ export async function refreshContextMenuLabel(
   downloadItem,
   optionsMenu = null,
   selectionItem = null,
+  linksItem = null,
 ) {
   if (!document?.l10n || !downloadItem) {
     return;
@@ -57,6 +60,9 @@ export async function refreshContextMenuLabel(
   if (selectionItem) {
     document.l10n.setAttributes(selectionItem, "downloadit-download-selection");
   }
+  if (linksItem) {
+    document.l10n.setAttributes(linksItem, "downloadit-download-links");
+  }
   if (optionsMenu) {
     document.l10n.setAttributes(optionsMenu, "downloadit-options");
   }
@@ -64,6 +70,9 @@ export async function refreshContextMenuLabel(
     await document.l10n.translateFragment(downloadItem);
     if (selectionItem) {
       await document.l10n.translateFragment(selectionItem);
+    }
+    if (linksItem) {
+      await document.l10n.translateFragment(linksItem);
     }
     if (optionsMenu) {
       await document.l10n.translateFragment(optionsMenu);
@@ -80,6 +89,7 @@ export class DownloadItContextMenuController {
     this.localizationReady = Promise.resolve();
     this.context = null;
     this.selectionContext = null;
+    this.linksContext = null;
     this.selectionGeneration = 0;
     this.menu = null;
     this.popup = null;
@@ -98,6 +108,7 @@ export class DownloadItContextMenuController {
     this.document.getElementById(DOWNLOADIT_MENU_ID)?.remove();
     this.document.getElementById(DOWNLOADIT_DOWNLOAD_ID)?.remove();
     this.document.getElementById(DOWNLOADIT_SELECTION_ID)?.remove();
+    this.document.getElementById(DOWNLOADIT_LINKS_ID)?.remove();
     this.downloadItem = createXULElement(this.document, "menuitem", {
       id: DOWNLOADIT_DOWNLOAD_ID,
       class: "menuitem-iconic",
@@ -117,6 +128,15 @@ export class DownloadItContextMenuController {
     this.selectionDownloadItem.addEventListener("command", () => {
       this.downloadSelection(this.service.defaultManager);
     });
+    this.linksDownloadItem = createXULElement(this.document, "menuitem", {
+      id: DOWNLOADIT_LINKS_ID,
+      class: "menuitem-iconic",
+      disabled: "true",
+      style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
+    });
+    this.linksDownloadItem.addEventListener("command", () => {
+      this.openLinksDialog();
+    });
     this.menu = createXULElement(this.document, "menu", {
       id: DOWNLOADIT_MENU_ID,
       class: "menu-iconic",
@@ -131,12 +151,14 @@ export class DownloadItContextMenuController {
     if (insertionPoint) {
       this.contextMenu.insertBefore(this.downloadItem, insertionPoint);
       this.contextMenu.insertBefore(this.selectionDownloadItem, insertionPoint);
+      this.contextMenu.insertBefore(this.linksDownloadItem, insertionPoint);
       this.contextMenu.insertBefore(this.menu, insertionPoint);
     } else {
       // Keep the failure mode deterministic when Firefox changes its menu
       // markup again: append to this menu, never fall back to another group.
       this.contextMenu.appendChild(this.downloadItem);
       this.contextMenu.appendChild(this.selectionDownloadItem);
+      this.contextMenu.appendChild(this.linksDownloadItem);
       this.contextMenu.appendChild(this.menu);
     }
 
@@ -153,12 +175,15 @@ export class DownloadItContextMenuController {
     this.popup?.removeEventListener("popupshowing", this);
     this.downloadItem?.remove();
     this.selectionDownloadItem?.remove();
+    this.linksDownloadItem?.remove();
     this.menu?.remove();
     this.context = null;
     this.selectionContext = null;
+    this.linksContext = null;
     this.selectionGeneration += 1;
     this.downloadItem = null;
     this.selectionDownloadItem = null;
+    this.linksDownloadItem = null;
     this.menu = null;
     this.popup = null;
     this.contextMenu = null;
@@ -181,6 +206,7 @@ export class DownloadItContextMenuController {
       this.downloadItem,
       this.menu,
       this.selectionDownloadItem,
+      this.linksDownloadItem,
     ).catch(error => {
       console.error("DownloadIt: context-menu label refresh failed", error);
     });
@@ -237,7 +263,25 @@ export class DownloadItContextMenuController {
     if (hasTextSelection && browser) {
       this.loadSelectionContext(browser, referer, downloadPageReferer, selectionGeneration);
     }
+    this.linksContext = browser ? {
+      browser,
+      referer,
+      downloadPageReferer,
+    } : null;
+    this.linksDownloadItem.hidden = false;
+    this.linksDownloadItem.disabled = !this.linksContext || this.service.managers.length === 0;
     this.menu.hidden = false;
+  }
+
+  openLinksDialog() {
+    if (
+      !this.linksContext ||
+      this.service.managers.length === 0 ||
+      typeof this.window.openDialog !== "function"
+    ) {
+      return null;
+    }
+    return openPageLinksDialog(this.window, this.linksContext);
   }
 
   async loadSelectionContext(browser, referer, downloadPageReferer, generation) {

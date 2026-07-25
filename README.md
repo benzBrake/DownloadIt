@@ -10,6 +10,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 
 - Adds a DownloadIt item to the context menu for web links.
 - Adds a Downloadit Selection item below it when selected page content contains links.
+- Adds a DownloadIt Links selector for collecting, filtering, and batch-downloading explicit page links from the current document and its frames.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
@@ -25,7 +26,6 @@ The project is currently being migrated. Its target platform is Windows, and the
 
 The following features are not implemented yet:
 
-- Downloading all links;
 - Broad unknown file-type interception;
 - Media sniffing;
 - The complete original FlashGot options page and other advanced features.
@@ -93,7 +93,9 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+
+DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature.
 
 ## Installation and upgrade
 
@@ -106,7 +108,7 @@ To upgrade, install the newly built `addon.xpi` over the existing installation. 
 
 ## Configuration
 
-The DownloadIt toolbar button opens a native Firefox panel. Select an available tool to change the default download manager immediately, use “Detect download managers again” to refresh the detected-tool list, or open DownloadIt settings from the panel footer. The button is added to the navigation bar initially and can be moved or removed through Firefox's Customize Toolbar interface.
+The DownloadIt toolbar button opens a native Firefox panel. Use “DownloadIt Links” to open the batch-link selector for the active tab, select an available tool to change the default download manager immediately, use “Detect download managers again” to refresh the detected-tool list, or open DownloadIt settings from the panel footer. The button is added to the navigation bar initially and can be moved or removed through Firefox's Customize Toolbar interface.
 
 Open the settings page from the toolbar panel, from “DownloadIt Settings” in the context menu, or from the extension settings in `about:addons`.
 
@@ -179,7 +181,8 @@ addon/
     ├── DownloadItIDMBridge.sys.mjs      # Firefox request hook and loopback response bridge
     ├── DownloadItIDMProtocol.sys.mjs    # IDM local endpoint and byte-level message parser
     ├── DownloadItXUL.sys.mjs             # Shared Firefox XUL element construction helper
-    ├── DownloadItSelectionActor.sys.mjs # Selection link extraction Actor
+    ├── DownloadItSelectionActor.sys.mjs # Selection and page-link extraction Actor
+    ├── DownloadItLinks.sys.mjs           # Page-link query, classification, filtering, and selection state
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration
     ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation
     ├── DownloadItUtils.sys.mjs           # Request encoding, domain, and cookie helpers
@@ -188,7 +191,10 @@ addon/
     │   └── zh-CN/downloadit.ftl          # Simplified Chinese Fluent messages
     ├── options.xhtml                     # Settings page structure
     ├── options.js                        # Settings page logic
-    └── options.css                       # Settings page styles
+    ├── options.css                       # Settings page styles
+    ├── links.xhtml                       # Batch-link selector structure
+    ├── links.js                          # Batch-link selector behavior
+    └── links.css                         # Batch-link selector styles
 pack.ps1                                  # XPI packaging script
 pack.sh                                   # Linux XPI packaging script
 tests/                                    # Node.js unit tests
