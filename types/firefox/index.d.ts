@@ -132,11 +132,100 @@ interface nsISubstitutingProtocolHandler extends nsIProtocolHandler {
 interface nsIResProtocolHandler extends nsISubstitutingProtocolHandler {}
 
 interface nsIInputStream extends nsISupports {
+  available(): number;
   close(): void;
 }
 
+interface nsIOutputStream extends nsISupports {
+  write(data: string, count: number): number;
+  flush(): void;
+  close(): void;
+}
+
+interface nsISeekableStream extends nsISupports {
+  readonly NS_SEEK_SET: 0;
+  readonly NS_SEEK_CUR: 1;
+  readonly NS_SEEK_END: 2;
+  seek(whence: 0 | 1 | 2, offset: number): void;
+  tell(): number;
+}
+
+interface nsILoadInfo extends nsISupports {
+  readonly loadingPrincipal: nsIPrincipal | null;
+  readonly triggeringPrincipal: nsIPrincipal | null;
+}
+
 interface nsIChannel extends nsISupports {
+  readonly URI: nsIURI;
+  readonly loadInfo: nsILoadInfo;
   open(): nsIInputStream;
+}
+
+interface nsIHttpChannel extends nsIChannel {
+  requestMethod: string;
+  redirectTo(targetURI: nsIURI): void;
+}
+
+interface nsIUploadChannel extends nsISupports {
+  uploadStream: nsIInputStream | null;
+}
+
+interface nsIBinaryInputStream extends nsIInputStream {
+  setInputStream(inputStream: nsIInputStream): void;
+  readByteArray(length: number): number[];
+}
+
+interface nsIRequest extends nsISupports {
+  cancel(status: number): void;
+  suspend(): void;
+  resume(): void;
+}
+
+interface nsIRequestObserver extends nsISupports {
+  onStartRequest(request: nsIRequest): void;
+  onStopRequest(request: nsIRequest, status: number): void;
+}
+
+interface nsIStreamListener extends nsIRequestObserver {
+  onDataAvailable(
+    request: nsIRequest,
+    inputStream: nsIInputStream,
+    offset: number,
+    count: number,
+  ): void;
+}
+
+interface nsIInputStreamPump extends nsIRequest {
+  init(
+    stream: nsIInputStream,
+    segmentSize: number,
+    segmentCount: number,
+    closeWhenDone: boolean,
+  ): void;
+  asyncRead(listener: nsIStreamListener): void;
+}
+
+interface nsITransport extends nsISupports {
+  openInputStream(flags: number, segmentSize: number, segmentCount: number): nsIInputStream;
+  openOutputStream(flags: number, segmentSize: number, segmentCount: number): nsIOutputStream;
+  close(reason: number): void;
+}
+
+interface nsISocketTransport extends nsITransport {}
+
+interface nsIServerSocketListener extends nsISupports {
+  onSocketAccepted(server: nsIServerSocket, transport: nsISocketTransport): void;
+  onStopListening(server: nsIServerSocket, status: number): void;
+}
+
+interface nsIServerSocket extends nsISupports {
+  readonly LoopbackOnly: 1;
+  readonly KeepWhenOffline: 2;
+  readonly port: number;
+  init(port: number, loopbackOnly: boolean, backlog: number): void;
+  initSpecialConnection(port: number, flags: number, backlog: number): void;
+  asyncListen(listener: nsIServerSocketListener): void;
+  close(): void;
 }
 
 interface nsIScriptableInputStream extends nsISupports {
@@ -409,7 +498,10 @@ interface nsIScriptSecurityManager extends nsISupports {
   getSystemPrincipal(): nsIPrincipal;
 }
 
-interface nsIPrincipal extends nsISupports {}
+interface nsIPrincipal extends nsISupports {
+  readonly URI: nsIURI | null;
+  readonly isAddonOrExpandedAddonPrincipal: boolean;
+}
 
 interface nsIVersionComparator extends nsISupports {
   compare(versionA: string, versionB: string): number;
@@ -494,6 +586,22 @@ interface nsIWebProgressListenerIID extends nsIID<nsIWebProgressListener> {
   readonly STATE_IS_WINDOW: number;
 }
 
+interface nsISeekableStreamIID extends nsIID<nsISeekableStream> {
+  readonly NS_SEEK_SET: 0;
+  readonly NS_SEEK_CUR: 1;
+  readonly NS_SEEK_END: 2;
+}
+
+interface nsITransportIID extends nsIID<nsITransport> {
+  readonly OPEN_BLOCKING: 1;
+  readonly OPEN_UNBUFFERED: 2;
+}
+
+interface nsIServerSocketIID extends nsIID<nsIServerSocket> {
+  readonly LoopbackOnly: 1;
+  readonly KeepWhenOffline: 2;
+}
+
 interface ComponentsInterfaces {
   [interfaceName: string]: nsIID<nsISupports> & object;
   nsIFile: nsIFileIID;
@@ -513,6 +621,17 @@ interface ComponentsInterfaces {
   nsISubstitutingProtocolHandler: nsIID<nsISubstitutingProtocolHandler>;
   nsISimpleEnumerator: nsIID<nsISimpleEnumerator>;
   nsIScriptableInputStream: nsIID<nsIScriptableInputStream>;
+  nsIBinaryInputStream: nsIID<nsIBinaryInputStream>;
+  nsISeekableStream: nsISeekableStreamIID;
+  nsIHttpChannel: nsIID<nsIHttpChannel>;
+  nsIUploadChannel: nsIID<nsIUploadChannel>;
+  nsIRequestObserver: nsIID<nsIRequestObserver>;
+  nsIStreamListener: nsIID<nsIStreamListener>;
+  nsIInputStreamPump: nsIID<nsIInputStreamPump>;
+  nsITransport: nsITransportIID;
+  nsISocketTransport: nsIID<nsISocketTransport>;
+  nsIServerSocketListener: nsIID<nsIServerSocketListener>;
+  nsIServerSocket: nsIServerSocketIID;
   nsIFileOutputStream: nsIID<nsIFileOutputStream>;
   nsIFilePicker: nsIFilePickerIID;
   nsIClipboardHelper: nsIID<nsIClipboardHelper>;

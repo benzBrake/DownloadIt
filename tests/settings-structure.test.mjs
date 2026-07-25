@@ -32,6 +32,8 @@ test("settings dialog contains the current capability controls", () => {
     "clear-auto-extensions",
     "section-privacy",
     "send-cookies",
+    "idm-bridge",
+    "idm-bridge-lock",
     "section-about",
     "apply",
     "cancel",
@@ -55,6 +57,7 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /refreshManagers\(\{ persistDefault: false \}\)/);
   assert.match(script, /await state\.service\.applySettings\(payload\)/);
   assert.match(script, /autoExtensions/);
+  assert.match(script, /idmBridgeEnabled/);
   assert.match(script, /data-remove-extension/);
   assert.match(script, /downloadit-remove-extension/);
   assert.match(script, /customDownloaders/);
@@ -170,4 +173,31 @@ test("remembered extensions are wired through service preferences and documentat
   assert.match(service, /autoExtensionsLocked/);
   assert.match(service, /normalizeAutoExtensions\(autoExtensions\)/);
   assert.match(service, /JSON\.stringify\(requestedAutoExtensions\)/);
+});
+
+test("IDM bridge is staged, policy-aware, packaged, and documented", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const bridge = read("addon/chrome/content/DownloadItIDMBridge.sys.mjs");
+  const packPowerShell = read("pack.ps1");
+  const packShell = read("pack.sh");
+  const englishReadme = read("README.md");
+  const chineseReadme = read("README-zh_CN.md");
+
+  for (const source of [service, englishReadme, chineseReadme]) {
+    assert.match(source, /downloadit\.idmBridgeEnabled/);
+  }
+  assert.match(service, /idmBridgeLocked/);
+  assert.match(service, /downloadIDMTask/);
+  assert.match(bridge, /http-on-modify-request/);
+  assert.match(bridge, /redirectTo/);
+  assert.match(bridge, /LoopbackOnly/);
+  assert.match(bridge, /\/downloadit-idm\//);
+  assert.match(bridge, /Ci\.nsITransport\.OPEN_BLOCKING/);
+  for (const source of [service, bridge, read("addon/chrome/content/options.js")]) {
+    assert.doesNotMatch(source, /linkswift/i);
+  }
+  for (const source of [packPowerShell, packShell]) {
+    assert.match(source, /DownloadItIDMBridge\.sys\.mjs/);
+    assert.match(source, /DownloadItIDMProtocol\.sys\.mjs/);
+  }
 });

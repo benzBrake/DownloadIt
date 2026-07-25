@@ -44,6 +44,31 @@ test("custom XUL menu labels use the Fluent label attribute", () => {
   }
 });
 
+test("IDM bridge help localizes the LinkSwift link through DOM Overlay", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const linkUrl = "https://github.com/hmjz100/LinkSwift";
+  const localizedLink = /<a data-l10n-name="linkswift">hmjz100\/LinkSwift<\/a>/;
+
+  assert.match(
+    markup,
+    /<p id="idm-bridge-help"[^>]+data-l10n-id="downloadit-idm-bridge-help">[\s\S]*?<a[\s\S]*?data-l10n-name="linkswift"[\s\S]*?href="https:\/\/github\.com\/hmjz100\/LinkSwift"/,
+  );
+  assert.match(markup, /id="idm-bridge"[^>]+aria-describedby="idm-bridge-help"/);
+  for (const locale of ["en-US", "zh-CN"]) {
+    assert.match(
+      read(`addon/chrome/content/locales/${locale}/downloadit.ftl`),
+      localizedLink,
+    );
+  }
+  for (const readme of ["README.md", "README-zh_CN.md"]) {
+    const source = read(readme);
+    assert.equal(
+      (source.match(new RegExp(`\\[hmjz100/LinkSwift\\]\\(${linkUrl}\\)`, "g")) || []).length,
+      2,
+    );
+  }
+});
+
 test("runtime text uses Fluent resources instead of inline localization maps", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   const optionsScript = read("addon/chrome/content/options.js");

@@ -12,6 +12,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 在有选区且选区包含链接时，在其下方提供“使用 DownloadIt 下载选中链接”。
 - 自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
+- 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
 - 可以记住支持的文件扩展名，并自动交给当前默认下载工具。
 - 支持 `http`、`https`、`ftp` 和 `magnet` 链接。
@@ -32,7 +33,8 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 ## 工作方式
 
 ```text
-Firefox 右键菜单、原生下载弹窗或已记住扩展名的 hook
+Firefox 右键菜单、原生下载弹窗、已记住扩展名的 hook，
+或已启用的 IDM 本地协议 hook
         │
         ▼
 DownloadIt 后台服务
@@ -91,7 +93,7 @@ Linux：
 node --test .\tests\*.test.mjs
 ```
 
-测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区链接提取、下载管理器解析、工具栏 PanelView 与右键菜单插入点、已记住扩展名的自动接管与回退、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
+测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区链接提取、下载管理器解析、工具栏 PanelView 与右键菜单插入点、已记住扩展名的自动接管与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
 
 ## 安装与升级
 
@@ -112,12 +114,19 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。选择可用工具可
 | --- | --- | --- |
 | `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
+| `downloadit.idmBridgeEnabled` | 布尔值 | 接管兼容的 IDM 本地 HTTP 请求并发送到当前默认下载器；默认值为 `false`。 |
 | `downloadit.detectedManagers` | 字符串 | 下载管理器检测缓存，由扩展自动维护。 |
 | `downloadit.autoExtensions` | 字符串 | 应自动发送到当前默认下载工具的文件扩展名 JSON 数组。 |
 
 当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。已记住的扩展名可以在设置页面逐项移除或全部清除。
 
 只有用户明确记住的扩展名会被自动接管。空扩展名、Firefox 安装包（`.xpi`/`xpinstall`）以及不支持的 URL 协议始终保留在 Firefox 原生流程中；`.exe` 等可执行文件扩展名可以由用户明确记住。
+
+### IDM 本地协议兼容
+
+在“请求与隐私”中启用后，DownloadIt 会识别 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等兼容扩展客户端使用的 IDM 本地 HTTP 请求格式：`POST http://127.0.0.1:1001/client/<id>?seq=<seq>`。它要求请求来自 Firefox 扩展 principal，并校验按字节声明长度的 `MSG#` 请求体，再把请求重定向到 DownloadIt 自己的临时回环监听器。任务会提交给当前默认下载器，下载器接受或拒绝任务后，请求客户端会收到预期的序号响应。
+
+DownloadIt 不会绑定 `1001` 端口、替换 IDM 的原生监听器，也不会拦截 IDM 的 WebSocket 端点。它不是通用的端口转发代理：无法识别、格式错误和并非来自扩展的请求都会保持原样。兼容请求提供的 Cookie 仍受 `downloadit.omitCookies` 控制；只会转发下载 URL、文件名、来源页、User-Agent、Referer 和 Cookie 字段。该桥接功能默认关闭。
 
 ### 自定义下载器
 
@@ -167,6 +176,8 @@ addon/
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItDownloadDialog.sys.mjs # Firefox 原生下载弹窗集成
     ├── DownloadItDownloaders.sys.mjs    # provider 引用、自定义 schema、模板与 aria2 协议
+    ├── DownloadItIDMBridge.sys.mjs      # Firefox 请求 hook 和回环响应桥
+    ├── DownloadItIDMProtocol.sys.mjs    # IDM 本地端点和字节级消息解析
     ├── DownloadItXUL.sys.mjs             # 共享的 Firefox XUL 元素构造工具
     ├── DownloadItSelectionActor.sys.mjs # 选区链接提取 Actor
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent 资源注册

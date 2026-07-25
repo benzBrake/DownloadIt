@@ -32,6 +32,8 @@ $requiredEntries = @(
     "FlashGot.exe"
     "chrome/content/DownloadItBinaryMetadata.sys.mjs"
     "chrome/content/DownloadItDownloaders.sys.mjs"
+    "chrome/content/DownloadItIDMBridge.sys.mjs"
+    "chrome/content/DownloadItIDMProtocol.sys.mjs"
     "chrome/content/DownloadItPanelView.sys.mjs"
     "chrome/content/locales/en-US/downloadit.ftl"
     "chrome/content/locales/zh-CN/downloadit.ftl"

@@ -12,6 +12,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Adds a Downloadit Selection item below it when selected page content contains links.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
+- Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
 - Lets you remember supported file extensions and automatically forward them to the current default manager.
 - Supports `http`, `https`, `ftp`, and `magnet` links.
@@ -32,7 +33,8 @@ The following features are not implemented yet:
 ## How it works
 
 ```text
-Firefox context menu, native download prompt, or remembered extension hook
+Firefox context menu, native download prompt, remembered extension hook,
+or an enabled IDM local protocol hook
         │
         ▼
 DownloadIt background service
@@ -91,7 +93,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection-link extraction, download-manager parsing, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 ## Installation and upgrade
 
@@ -112,12 +114,19 @@ Open the settings page from the toolbar panel, from “DownloadIt Settings” in
 | --- | --- | --- |
 | `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"flashgot","id":"Internet Download Manager"}` or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
+| `downloadit.idmBridgeEnabled` | Boolean | Intercepts compatible IDM local HTTP requests and sends them to the current default downloader. The default is `false`. |
 | `downloadit.detectedManagers` | String | Cached download-manager detection results, maintained automatically by the extension. |
 | `downloadit.autoExtensions` | String | JSON array of file extensions that should be sent to the current default manager automatically. |
 
 When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes. Remembered extensions can be removed individually or cleared from the settings page.
 
 Only explicitly remembered extensions are intercepted. Empty extensions, Firefox install packages (`.xpi`/`xpinstall`), and unsupported URL schemes always remain in Firefox's native flow. Executable extensions such as `.exe` can be remembered explicitly.
+
+### IDM local protocol compatibility
+
+When enabled under **Request & privacy**, DownloadIt recognizes the IDM local HTTP request form used by compatible extension clients such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift): `POST http://127.0.0.1:1001/client/<id>?seq=<seq>`. It requires a Firefox extension principal and validates the byte-length-prefixed `MSG#` payload, then redirects the request to a temporary loopback listener owned by DownloadIt. The task is submitted to the current default downloader, and the requesting client receives the expected sequence response after the downloader accepts or rejects the task.
+
+DownloadIt does not bind port `1001`, replace IDM's native listener, or intercept IDM's WebSocket endpoint. It is not a general port-forwarding proxy: unrecognized, malformed, and non-extension requests are left untouched. Cookies supplied by a compatible request remain subject to `downloadit.omitCookies`; only the download URL, filename, source page, User-Agent, Referer, and Cookie fields are forwarded. The bridge is disabled by default.
 
 ### Custom downloaders
 
@@ -167,6 +176,8 @@ addon/
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
     ├── DownloadItDownloaders.sys.mjs    # Provider references, custom schema, templates, and aria2 protocol
+    ├── DownloadItIDMBridge.sys.mjs      # Firefox request hook and loopback response bridge
+    ├── DownloadItIDMProtocol.sys.mjs    # IDM local endpoint and byte-level message parser
     ├── DownloadItXUL.sys.mjs             # Shared Firefox XUL element construction helper
     ├── DownloadItSelectionActor.sys.mjs # Selection link extraction Actor
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration

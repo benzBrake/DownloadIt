@@ -107,6 +107,7 @@ function createSettingsState(snapshot) {
   return {
     defaultManager: snapshot.defaultManager,
     omitCookies: snapshot.omitCookies,
+    idmBridgeEnabled: snapshot.idmBridgeEnabled,
     autoExtensions: [...snapshot.autoExtensions],
     customDownloaders: clone(snapshot.customDownloaders),
   };
@@ -136,6 +137,11 @@ function bindEvents() {
   });
   document.getElementById("send-cookies").addEventListener("change", event => {
     state.draft.omitCookies = !event.target.checked;
+    clearFeedback();
+    render();
+  });
+  document.getElementById("idm-bridge").addEventListener("change", event => {
+    state.draft.idmBridgeEnabled = event.target.checked;
     clearFeedback();
     render();
   });
@@ -582,9 +588,16 @@ function renderPrivacy() {
   const snapshot = state.snapshot;
   const sendCookies = document.getElementById("send-cookies");
   const cookieLock = document.getElementById("cookie-lock");
+  const idmBridge = document.getElementById("idm-bridge");
+  const idmBridgeLock = document.getElementById("idm-bridge-lock");
   sendCookies.checked = Boolean(state.draft && !state.draft.omitCookies);
   sendCookies.disabled = state.busy || !snapshot || Boolean(snapshot.omitCookiesLocked);
   cookieLock.hidden = !snapshot?.omitCookiesLocked;
+  idmBridge.checked = Boolean(state.draft?.idmBridgeEnabled);
+  idmBridge.disabled = state.busy ||
+    !snapshot ||
+    Boolean(snapshot.idmBridgeLocked);
+  idmBridgeLock.hidden = !snapshot?.idmBridgeLocked;
 }
 
 function renderAutoExtensions() {
@@ -651,6 +664,9 @@ function localizedError(error) {
   }
   if (/automatic extension preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-extensions");
+  }
+  if (/IDM bridge preference is locked/i.test(message)) {
+    return localizedMessage("downloadit-error-locked-idm-bridge");
   }
   if (/unsupported download manager/i.test(message)) {
     return localizedMessage("downloadit-error-unsupported-manager");

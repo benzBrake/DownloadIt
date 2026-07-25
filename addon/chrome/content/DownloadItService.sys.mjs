@@ -17,6 +17,7 @@ import {
   isDownloadDialogWindow,
 } from "./DownloadItDownloadDialog.sys.mjs";
 import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
+import { DownloadItIDMBridge } from "./DownloadItIDMBridge.sys.mjs";
 import {
   BINARY_SIZE,
   BINARY_SHA256,
@@ -93,6 +94,7 @@ const PREF_DEFAULT_MANAGER = "downloadit.defaultDM";
 const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
 const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 const PREF_AUTO_EXTENSIONS = "downloadit.autoExtensions";
+const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
@@ -205,6 +207,7 @@ export class DownloadItService {
     this.refreshPromise = null;
     this.aria2StartupPromises = new Map();
     this.providers = this.createProviderRegistry();
+    this.idmBridge = new DownloadItIDMBridge(this);
   }
 
   get defaultManager() {
@@ -585,9 +588,15 @@ export class DownloadItService {
           }
         : null,
       omitCookies: Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false),
+      idmBridgeEnabled: Services.prefs.getBoolPref(
+        PREF_IDM_BRIDGE,
+        false,
+      ),
+      idmBridgeActive: this.idmBridge.running,
       autoExtensions: this.autoExtensions,
       defaultManagerLocked: Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER),
       omitCookiesLocked: Services.prefs.prefIsLocked(PREF_OMIT_COOKIES),
+      idmBridgeLocked: Services.prefs.prefIsLocked(PREF_IDM_BRIDGE),
       autoExtensionsLocked: this.autoExtensionsLocked,
       binaryPath: this.binaryPath,
       serviceReady: Boolean(this.binaryPath),
@@ -598,6 +607,7 @@ export class DownloadItService {
   async applySettings({
     defaultManager = null,
     omitCookies = false,
+    idmBridgeEnabled = null,
     autoExtensions = null,
     customDownloaders = null,
   } = {}) {
@@ -613,6 +623,13 @@ export class DownloadItService {
       ? downloaderRefKey(configuredDefaultRef)
       : "";
     const currentOmitCookies = Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false);
+    const currentIDMBridgeEnabled = Services.prefs.getBoolPref(
+      PREF_IDM_BRIDGE,
+      false,
+    );
+    const requestedIDMBridgeEnabled = idmBridgeEnabled == null
+      ? currentIDMBridgeEnabled
+      : Boolean(idmBridgeEnabled);
 
     let requestedCustomDownloaders = customDownloaders == null
       ? null
@@ -664,6 +681,12 @@ export class DownloadItService {
       throw new Error("The cookie preference is locked");
     }
     if (
+      Services.prefs.prefIsLocked(PREF_IDM_BRIDGE) &&
+      requestedIDMBridgeEnabled !== currentIDMBridgeEnabled
+    ) {
+      throw new Error("The IDM bridge preference is locked");
+    }
+    if (
       this.autoExtensionsLocked &&
       JSON.stringify(requestedAutoExtensions) !== JSON.stringify(currentAutoExtensions)
     ) {
@@ -701,6 +724,22 @@ export class DownloadItService {
     }
     if (Boolean(omitCookies) !== currentOmitCookies) {
       Services.prefs.setBoolPref(PREF_OMIT_COOKIES, Boolean(omitCookies));
+    }
+    if (requestedIDMBridgeEnabled !== currentIDMBridgeEnabled) {
+      Services.prefs.setBoolPref(
+        PREF_IDM_BRIDGE,
+        requestedIDMBridgeEnabled,
+      );
+      try {
+        this.syncIDMBridge(requestedIDMBridgeEnabled);
+      } catch (error) {
+        Services.prefs.setBoolPref(
+          PREF_IDM_BRIDGE,
+          currentIDMBridgeEnabled,
+        );
+        this.syncIDMBridge(currentIDMBridgeEnabled);
+        throw error;
+      }
     }
     if (
       JSON.stringify(requestedAutoExtensions) !== JSON.stringify(currentAutoExtensions)
@@ -755,6 +794,7 @@ export class DownloadItService {
       console.error("DownloadIt: initial download manager scan failed", error);
     }
     this.migrateDefaultManagerPreference();
+    this.syncIDMBridge();
     for (const descriptor of this.listCustomDownloaders()) {
       const downloader = descriptor.configuration;
       if (descriptor.available && downloader.type === "aria2" && downloader.aria2.autoStart) {
@@ -766,6 +806,7 @@ export class DownloadItService {
   }
 
   async shutdown() {
+    this.idmBridge.stop();
     unregisterDownloadItHelperAppHook(this);
     try {
       Services.obs.removeObserver(this, "browser-delayed-startup-finished");
@@ -1170,6 +1211,43 @@ export class DownloadItService {
     for (let index = 0; index < job.links.length; index++) {
       job.links[index].cookieRecords = links[index].cookieRecords;
     }
+    await this.providers.download(downloader.ref, job);
+  }
+
+  syncIDMBridge(enabled = Services.prefs.getBoolPref(
+    PREF_IDM_BRIDGE,
+    false,
+  )) {
+    if (enabled) {
+      this.idmBridge.start();
+    } else {
+      this.idmBridge.stop();
+    }
+  }
+
+  async downloadIDMTask(task) {
+    const downloader = this.defaultDownloader;
+    if (!downloader?.available) {
+      throw new Error("No supported download manager is available");
+    }
+    const cookies = Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false)
+      ? ""
+      : String(task.cookie || "");
+    const job = buildDownloadBatchJob({
+      manager: downloader.ref.provider === FLASHGOT_PROVIDER
+        ? downloader.ref.id
+        : downloader.name,
+      links: [{
+        url: task.url,
+        description: task.filename || task.url,
+        filename: task.filename,
+        cookies,
+      }],
+      referer: isSupportedURL(task.referer) ? task.referer : "",
+      downloadPageReferer: isSupportedURL(task.sourcePage) ? task.sourcePage : "",
+      userAgent: String(task.userAgent || ""),
+    });
+    job.links[0].cookieRecords = [];
     await this.providers.download(downloader.ref, job);
   }
 
