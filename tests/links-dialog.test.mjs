@@ -62,7 +62,7 @@ test("multi-select filters preserve choices and expose dismiss and keyboard beha
 });
 
 test("page-link collection does not include media source selectors", () => {
-  const actor = read("addon/chrome/content/DownloadItSelectionActor.sys.mjs");
+  const actor = read("addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs");
 
   assert.match(actor, /a\[href\], area\[href\]/);
   assert.doesNotMatch(actor, /img\[src\]|video\[src\]|audio\[src\]|source\[src\]/);

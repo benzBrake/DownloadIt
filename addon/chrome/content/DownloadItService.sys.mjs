@@ -105,40 +105,41 @@ const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
 const DOWNLOAD_DIALOG_TOPIC = "domwindowopened";
 const APP_LOCALES_CHANGED_TOPIC = "intl:app-locales-changed";
-const SELECTION_ACTOR_NAME = "DownloadItSelection";
-const SELECTION_ACTOR_URI = "chrome://downloadit/content/DownloadItSelectionActor.sys.mjs";
+const LINK_COLLECTOR_ACTOR_NAME = "DownloadItLinkCollector";
+const LINK_COLLECTOR_ACTOR_URI =
+  "chrome://downloadit/content/DownloadItLinkCollectorActor.sys.mjs";
 const TOOLBAR_ICON = "chrome://browser/skin/downloads/downloads.svg";
 
 let activeService = null;
-let selectionActorRegistered = false;
+let linkCollectorActorRegistered = false;
 
-function registerSelectionActor() {
-  if (selectionActorRegistered) {
+function registerLinkCollectorActor() {
+  if (linkCollectorActorRegistered) {
     return;
   }
-  ChromeUtils.registerWindowActor(SELECTION_ACTOR_NAME, {
+  ChromeUtils.registerWindowActor(LINK_COLLECTOR_ACTOR_NAME, {
     parent: {
-      esModuleURI: SELECTION_ACTOR_URI,
+      esModuleURI: LINK_COLLECTOR_ACTOR_URI,
     },
     child: {
-      esModuleURI: SELECTION_ACTOR_URI,
+      esModuleURI: LINK_COLLECTOR_ACTOR_URI,
     },
     allFrames: true,
     matches: ["<all_urls>"],
   });
-  selectionActorRegistered = true;
+  linkCollectorActorRegistered = true;
 }
 
-function unregisterSelectionActor() {
-  if (!selectionActorRegistered) {
+function unregisterLinkCollectorActor() {
+  if (!linkCollectorActorRegistered) {
     return;
   }
   try {
-    ChromeUtils.unregisterWindowActor(SELECTION_ACTOR_NAME);
+    ChromeUtils.unregisterWindowActor(LINK_COLLECTOR_ACTOR_NAME);
   } catch (error) {
-    console.error("DownloadIt: selection Actor unregister failed", error);
+    console.error("DownloadIt: link collector Actor unregister failed", error);
   }
-  selectionActorRegistered = false;
+  linkCollectorActorRegistered = false;
 }
 
 export class DownloadItError extends Error {
@@ -795,7 +796,7 @@ export class DownloadItService {
 
     this.binaryPath = await this.deployBinary();
     await this.reloadCustomDownloaders();
-    registerSelectionActor();
+    registerLinkCollectorActor();
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
     Services.obs.addObserver(this, APP_LOCALES_CHANGED_TOPIC);
     Services.obs.addObserver(this, DOWNLOAD_DIALOG_TOPIC);
@@ -854,7 +855,7 @@ export class DownloadItService {
       Services.obs.removeObserver(this, DOWNLOAD_DIALOG_TOPIC);
     } catch {}
 
-    unregisterSelectionActor();
+    unregisterLinkCollectorActor();
 
     for (const controller of this.controllers.values()) {
       controller.destroy();

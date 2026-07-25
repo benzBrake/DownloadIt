@@ -184,7 +184,7 @@ addon/
     ├── DownloadItIDMBridge.sys.mjs      # Firefox 请求 hook 和回环响应桥
     ├── DownloadItIDMProtocol.sys.mjs    # IDM 本地端点和字节级消息解析
     ├── DownloadItXUL.sys.mjs             # 共享的 Firefox XUL 元素构造工具
-    ├── DownloadItSelectionActor.sys.mjs # 选区与页面链接提取 Actor
+    ├── DownloadItLinkCollectorActor.sys.mjs # 选区与页面链接提取 Actor
     ├── DownloadItLinks.sys.mjs           # 页面链接查询、分类、筛选与选择状态
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent 资源注册
     ├── DownloadItProtocol.sys.mjs       # 下载任务协议和校验

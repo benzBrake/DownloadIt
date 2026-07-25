@@ -406,7 +406,7 @@ function meaningfulDescription(description, url) {
 }
 
 export async function queryPageLinks(browser, {
-  actorName = "DownloadItSelection",
+  actorName = "DownloadItLinkCollector",
   query = PAGE_LINKS_QUERY,
 } = {}) {
   const responses = await Promise.all(listBrowsingContexts(browser).map(

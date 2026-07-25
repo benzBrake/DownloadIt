@@ -324,7 +324,7 @@ export class DownloadItContextMenuController {
     const responses = await Promise.all(browsingContexts.map(async browsingContext => {
       try {
         const windowGlobal = browsingContext.currentWindowGlobal;
-        const actor = windowGlobal?.getActor?.("DownloadItSelection");
+        const actor = windowGlobal?.getActor?.("DownloadItLinkCollector");
         return actor ? await actor.sendQuery(SELECTION_QUERY) : [];
       } catch {
         return [];

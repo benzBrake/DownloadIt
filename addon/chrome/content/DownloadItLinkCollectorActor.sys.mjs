@@ -87,9 +87,9 @@ export function collectSelectionLinks(document) {
   return links;
 }
 
-export class DownloadItSelectionParent extends ParentActor {}
+export class DownloadItLinkCollectorParent extends ParentActor {}
 
-export class DownloadItSelectionChild extends ChildActor {
+export class DownloadItLinkCollectorChild extends ChildActor {
   receiveMessage({ name }) {
     if (name === SELECTION_QUERY) {
       return collectSelectionLinks(this.document);

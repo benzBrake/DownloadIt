@@ -184,7 +184,7 @@ addon/
     ├── DownloadItIDMBridge.sys.mjs      # Firefox request hook and loopback response bridge
     ├── DownloadItIDMProtocol.sys.mjs    # IDM local endpoint and byte-level message parser
     ├── DownloadItXUL.sys.mjs             # Shared Firefox XUL element construction helper
-    ├── DownloadItSelectionActor.sys.mjs # Selection and page-link extraction Actor
+    ├── DownloadItLinkCollectorActor.sys.mjs # Selection and page-link extraction Actor
     ├── DownloadItLinks.sys.mjs           # Page-link query, classification, filtering, and selection state
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent resource registration
     ├── DownloadItProtocol.sys.mjs       # Download-task protocol and validation

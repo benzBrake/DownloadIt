@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   collectPageLinks,
   collectSelectionLinks,
-} from "../addon/chrome/content/DownloadItSelectionActor.sys.mjs";
+} from "../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs";
 
 function link({
   href,
@@ -24,7 +24,7 @@ function link({
   };
 }
 
-test("page-link Actor scans document links and open shadow roots", () => {
+test("link collector Actor scans document links and open shadow roots", () => {
   const pageLink = link({
     href: "https://example.com/page.zip",
     text: " Page ",
@@ -71,7 +71,7 @@ test("page-link Actor scans document links and open shadow roots", () => {
   ]);
 });
 
-test("selection Actor returns links intersecting the current selection", () => {
+test("link collector Actor returns links intersecting the current selection", () => {
   const first = {
     href: "https://example.com/one.zip",
     textContent: " One ",
@@ -129,7 +129,7 @@ test("selection Actor returns links intersecting the current selection", () => {
   ]);
 });
 
-test("selection Actor returns no links for a collapsed selection", () => {
+test("link collector Actor returns no links for a collapsed selection", () => {
   const document = {
     defaultView: {
       getSelection() {

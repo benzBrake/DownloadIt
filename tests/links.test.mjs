@@ -206,7 +206,7 @@ function browsingContext(response, children = []) {
     children,
     currentWindowGlobal: {
       getActor(name) {
-        assert.equal(name, "DownloadItSelection");
+        assert.equal(name, "DownloadItLinkCollector");
         return {
           async sendQuery(query) {
             assert.equal(query, PAGE_LINKS_QUERY);
