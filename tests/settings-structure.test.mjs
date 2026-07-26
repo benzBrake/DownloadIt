@@ -14,6 +14,9 @@ test("manifest exposes the Firefox settings dialog", () => {
   const manifest = read("addon/install.rdf");
   assert.match(manifest, /<em:optionsURL>chrome:\/\/downloadit\/content\/options\.xhtml<\/em:optionsURL>/);
   assert.match(manifest, /<em:optionsType>1<\/em:optionsType>/);
+  assert.match(manifest, /<em:optionsResizable>true<\/em:optionsResizable>/);
+  assert.match(manifest, /<em:optionsWidth>1080<\/em:optionsWidth>/);
+  assert.match(manifest, /<em:optionsHeight>720<\/em:optionsHeight>/);
 });
 
 test("settings dialog contains the current capability controls", () => {
