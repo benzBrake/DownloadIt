@@ -8,6 +8,18 @@ Implementation must use Firefox's internal functions only. Do not use utility fu
 
 Documentation must be maintained bilingually: keep the English version in `README.md` and the Simplified Chinese version in `README-zh_CN.md`. When updating either README, update the corresponding content in the other language as well.
 
+## Solved-error lessons
+
+`LESSONS.md` is the shared internal record of solved and verified project errors. Before diagnosing an error, search it by the error signature, affected module, and relevant API, then confirm that any matching guidance still agrees with the current code and tests.
+
+Only add or update a lesson when the user explicitly asks to record it (for example, "记录" or "记下来"). Do not edit `LESSONS.md` merely because an error occurred or was fixed.
+
+Keep each lesson concise and write it in Simplified Chinese while preserving code symbols, commands, and original error text. Record only the symptom, confirmed root cause, effective fix, prevention rule, and verification. Omit investigation transcripts and failed attempts unless a failed attempt is itself an important pitfall. Update an existing lesson when the root cause is already covered instead of adding a duplicate.
+
+Never record secrets, tokens, private paths, or machine-specific details; generalize such details when they are necessary to explain the lesson. Mark workarounds as temporary instead of presenting them as final fixes. If a lesson conflicts with the current implementation or tests, treat the current code and test results as authoritative and update the lesson only when the user asks.
+
+`LESSONS.md` is an internal engineering record maintained as a single Chinese file. It does not require a matching English copy and must not be mirrored into either README.
+
 ## Localization and text handling
 
 Use Firefox's built-in Fluent localization system for all user-visible extension text, including UI text, context-menu labels, dialogs, notifications, errors, tooltips, access keys, and `aria-*` attributes.
