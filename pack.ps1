@@ -36,6 +36,7 @@ $requiredEntries = @(
     "chrome/content/DownloadItIDMProtocol.sys.mjs"
     "chrome/content/DownloadItLinks.sys.mjs"
     "chrome/content/DownloadItPanelView.sys.mjs"
+    "chrome/content/icons/downloadit.svg"
     "chrome/content/panel.css"
     "chrome/content/links.xhtml"
     "chrome/content/links.js"

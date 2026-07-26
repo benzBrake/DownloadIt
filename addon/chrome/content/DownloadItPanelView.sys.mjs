@@ -90,7 +90,7 @@ export class DownloadItPanelViewController {
     this.linksButton = createXULElement(this.document, "toolbarbutton", {
       id: LINKS_ID,
       class: "subviewbutton subviewbutton-iconic",
-      image: "chrome://browser/skin/downloads/downloads.svg",
+      image: "chrome://downloadit/content/icons/downloadit.svg",
     });
     this.setLocalized(this.linksButton, "downloadit-download-links");
     this.refreshButton = createXULElement(this.document, "toolbarbutton", {

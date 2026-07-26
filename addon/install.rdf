@@ -15,7 +15,7 @@
     <em:optionsResizable>true</em:optionsResizable>
     <em:optionsWidth>1080</em:optionsWidth>
     <em:optionsHeight>720</em:optionsHeight>
-    <em:iconURL>chrome://browser/skin/downloads/downloads.svg</em:iconURL>
+    <em:iconURL>chrome://downloadit/content/icons/downloadit.svg</em:iconURL>
 
     <em:targetApplication>
       <Description>

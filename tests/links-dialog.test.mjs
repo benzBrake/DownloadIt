@@ -26,6 +26,11 @@ test("links dialog exposes filtering, selection, and downloader controls", () =>
     assert.match(markup, new RegExp(`id="${id}"`));
   }
   assert.match(markup, /<link rel="localization" href="downloadit\.ftl"/);
+  assert.match(
+    markup,
+    /<img class="brand-mark" src="chrome:\/\/downloadit\/content\/icons\/downloadit\.svg" alt="" aria-hidden="true" \/>/,
+  );
+  assert.doesNotMatch(markup, /class="brand-mark"[^>]*>DI<\/div>/);
   assert.match(markup, /data-l10n-id="downloadit-links-search"[^>]+data-l10n-attrs="placeholder,aria-label"/);
   assert.match(markup, /<button[^>]+id="type-filter"[^>]+aria-expanded="false"[^>]+aria-controls="type-filter-menu"/s);
   assert.match(markup, /<button[^>]+id="extension-filter"[^>]+aria-expanded="false"[^>]+aria-controls="extension-filter-menu"/s);

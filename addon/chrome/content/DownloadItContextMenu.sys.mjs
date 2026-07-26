@@ -115,7 +115,7 @@ export class DownloadItContextMenuController {
       id: DOWNLOADIT_DOWNLOAD_ID,
       class: "menuitem-iconic",
       hidden: "true",
-      style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
+      style: "--menuitem-icon: url(chrome://downloadit/content/icons/downloadit.svg); list-style-image: url(chrome://downloadit/content/icons/downloadit.svg);",
     });
     this.downloadItem.addEventListener("command", () => {
       this.download(this.service.defaultManager);
@@ -125,7 +125,7 @@ export class DownloadItContextMenuController {
       class: "menuitem-iconic",
       hidden: "true",
       disabled: "true",
-      style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
+      style: "--menuitem-icon: url(chrome://downloadit/content/icons/downloadit.svg); list-style-image: url(chrome://downloadit/content/icons/downloadit.svg);",
     });
     this.selectionDownloadItem.addEventListener("command", () => {
       this.downloadSelection(this.service.defaultManager);
@@ -134,7 +134,7 @@ export class DownloadItContextMenuController {
       id: DOWNLOADIT_LINKS_ID,
       class: "menuitem-iconic",
       disabled: "true",
-      style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
+      style: "--menuitem-icon: url(chrome://downloadit/content/icons/downloadit.svg); list-style-image: url(chrome://downloadit/content/icons/downloadit.svg);",
     });
     this.linksDownloadItem.addEventListener("command", () => {
       this.openLinksDialog();
@@ -142,7 +142,7 @@ export class DownloadItContextMenuController {
     this.menu = createXULElement(this.document, "menu", {
       id: DOWNLOADIT_MENU_ID,
       class: "menu-iconic",
-      style: "--menuitem-icon: url(chrome://browser/skin/downloads/downloads.svg); list-style-image: url(chrome://browser/skin/downloads/downloads.svg);",
+      style: "--menuitem-icon: url(chrome://downloadit/content/icons/downloadit.svg); list-style-image: url(chrome://downloadit/content/icons/downloadit.svg);",
     });
     this.popup = createXULElement(this.document, "menupopup", {
       id: DOWNLOADIT_POPUP_ID,

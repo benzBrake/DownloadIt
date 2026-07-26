@@ -117,7 +117,7 @@ const APP_LOCALES_CHANGED_TOPIC = "intl:app-locales-changed";
 const LINK_COLLECTOR_ACTOR_NAME = "DownloadItLinkCollector";
 const LINK_COLLECTOR_ACTOR_URI =
   "chrome://downloadit/content/DownloadItLinkCollectorActor.sys.mjs";
-const TOOLBAR_ICON = "chrome://browser/skin/downloads/downloads.svg";
+const TOOLBAR_ICON = "chrome://downloadit/content/icons/downloadit.svg";
 
 let activeService = null;
 let linkCollectorActorRegistered = false;

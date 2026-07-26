@@ -267,7 +267,7 @@ test("panel view builds native links, manager, refresh, and settings controls", 
   );
   assert.match(
     controller.linksButton.getAttribute("image"),
-    /downloads\.svg$/,
+    /chrome:\/\/downloadit\/content\/icons\/downloadit\.svg$/,
   );
   assert.equal(controller.linksButton.disabled, false);
   assert.equal(

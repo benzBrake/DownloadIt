@@ -142,7 +142,14 @@ textarea:focus-visible {
   padding: 0 10px 28px;
 }
 
-.brand-mark,
+.brand-mark {
+  display: block;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
 .callout-mark {
   display: grid;
   place-items: center;

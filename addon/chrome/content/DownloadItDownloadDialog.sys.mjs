@@ -430,7 +430,7 @@ export class DownloadItDownloadDialogController {
     this.action = createXULElement(document, "toolbarbutton", {
       id: DOWNLOADIT_ACTION_ID,
       class: "toolbarbutton-1",
-      image: "chrome://browser/skin/downloads/downloads.svg",
+      image: "chrome://downloadit/content/icons/downloadit.svg",
     });
     this.setLocalized(this.action, "downloadit-download-dialog-action");
     this.action.addEventListener("command", () => {

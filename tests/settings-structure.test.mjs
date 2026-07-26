@@ -12,6 +12,7 @@ const read = relativePath => fs.readFileSync(
 
 test("manifest exposes the Firefox settings dialog", () => {
   const manifest = read("addon/install.rdf");
+  assert.match(manifest, /<em:iconURL>chrome:\/\/downloadit\/content\/icons\/downloadit\.svg<\/em:iconURL>/);
   assert.match(manifest, /<em:optionsURL>chrome:\/\/downloadit\/content\/options\.xhtml<\/em:optionsURL>/);
   assert.match(manifest, /<em:optionsType>1<\/em:optionsType>/);
   assert.match(manifest, /<em:optionsResizable>true<\/em:optionsResizable>/);
@@ -19,9 +20,33 @@ test("manifest exposes the Firefox settings dialog", () => {
   assert.match(manifest, /<em:optionsHeight>720<\/em:optionsHeight>/);
 });
 
+test("DownloadIt icon is packaged and used by branded Firefox UI", () => {
+  const icon = read("addon/chrome/content/icons/downloadit.svg");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const panel = read("addon/chrome/content/DownloadItPanelView.sys.mjs");
+  const contextMenu = read("addon/chrome/content/DownloadItContextMenu.sys.mjs");
+  const downloadDialog = read("addon/chrome/content/DownloadItDownloadDialog.sys.mjs");
+  const packPowerShell = read("pack.ps1");
+  const packShell = read("pack.sh");
+  const iconUrl = "chrome://downloadit/content/icons/downloadit.svg";
+
+  assert.match(icon, /<svg[^>]+viewBox="0 0 16 16"/);
+  for (const source of [service, panel, contextMenu, downloadDialog]) {
+    assert.match(source, new RegExp(iconUrl.replaceAll(".", "\\.")));
+  }
+  for (const source of [packPowerShell, packShell]) {
+    assert.match(source, /chrome\/content\/icons\/downloadit\.svg/);
+  }
+});
+
 test("settings dialog contains the current capability controls", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   assert.doesNotMatch(markup, /chrome:\/\/global\/skin\/menulist\.css/);
+  assert.match(
+    markup,
+    /<img class="brand-mark" src="chrome:\/\/downloadit\/content\/icons\/downloadit\.svg" alt="" aria-hidden="true" \/>/,
+  );
+  assert.doesNotMatch(markup, /class="brand-mark"[^>]*>DI<\/div>/);
   assert.match(markup, /xmlns:xul="http:\/\/www\.mozilla\.org\/keymaster\/gatekeeper\/there\.is\.only\.xul"/);
   assert.match(markup, /<xul:menulist id="default-manager"/);
   assert.match(markup, /<xul:menupopup id="default-manager-popup"/);

@@ -1,5 +1,7 @@
 # DownloadIt
 
+<img src="addon/chrome/content/icons/downloadit.svg" alt="DownloadIt 图标" width="128">
+
 [![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://nightly.link/benzBrake/DownloadIt/workflows/nightly.yml/master/DownloadIt-nightly.zip)
 
 DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。它通过定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) 加载 bootstrapped XPI，并把网页链接交给外部下载管理器处理。
@@ -195,6 +197,7 @@ addon/
     ├── DownloadItLocalization.sys.mjs   # Firefox Fluent 资源注册
     ├── DownloadItProtocol.sys.mjs       # 下载任务协议和校验
     ├── DownloadItUtils.sys.mjs           # 请求编码、域名和 Cookie 工具函数
+    ├── icons/downloadit.svg              # 工具栏按钮和扩展图标
     ├── locales/
     │   ├── en-US/downloadit.ftl          # 英文 Fluent 消息
     │   └── zh-CN/downloadit.ftl          # 简体中文 Fluent 消息
