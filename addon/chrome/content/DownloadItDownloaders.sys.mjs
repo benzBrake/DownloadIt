@@ -2,6 +2,7 @@ export const CUSTOM_DOWNLOADER_VERSION = 1;
 export const FLASHGOT_PROVIDER = "flashgot";
 export const CUSTOM_PROVIDER = "custom";
 export const NATIVE_PROVIDER = "native";
+export const NATIVE_DOWNLOADER_ID = "firefox";
 
 export const DOWNLOADER_CAPABILITY_KEYS = Object.freeze([
   "post",
@@ -94,6 +95,43 @@ export function getCustomDownloaderCapabilities(downloader) {
     batch: true,
     directory: placeholders.has("FOLDER"),
   });
+}
+
+export function getNativeDownloaderCapabilities() {
+  return normalizeDownloaderCapabilities({
+    post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+  });
+}
+
+export function isNativeDownloadURL(value) {
+  try {
+    const protocol = new URL(String(value || "")).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function getNativeDownloadFilenameCandidate(link = {}) {
+  const explicit = String(link.filename || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  try {
+    const pathname = new URL(String(link.url || "")).pathname;
+    const segment = pathname.split("/").filter(Boolean).at(-1) || "";
+    if (segment) {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    }
+  } catch {}
+  return "download";
 }
 
 export const COMMAND_PLACEHOLDERS = Object.freeze([
@@ -654,12 +692,12 @@ export class DownloaderProviderRegistry {
     return this.providers.get(ref?.provider)?.getDownloader(ref.id) || null;
   }
 
-  async download(ref, contexts) {
+  async download(ref, task, runtimeContext = null) {
     const provider = this.providers.get(ref?.provider);
     if (!provider) {
       throw new Error(`Unknown downloader provider: ${ref?.provider || ""}`);
     }
-    return provider.download(ref.id, contexts);
+    return provider.download(ref.id, task, runtimeContext);
   }
 
   async refresh(name, options) {

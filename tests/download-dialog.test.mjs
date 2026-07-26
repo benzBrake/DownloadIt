@@ -732,6 +732,38 @@ test("helper-app hooks do not intercept a prompt from an already-open native dia
   }
 });
 
+test("helper-app hooks leave remembered downloads native for the Firefox provider", async () => {
+  class MockHelperDialog {
+    show() {
+      this.showCalls = (this.showCalls || 0) + 1;
+    }
+  }
+  let downloadCalls = 0;
+  const service = {
+    defaultManager: '{"provider":"native","id":"firefox"}',
+    defaultDownloader: { ref: { provider: "native", id: "firefox" } },
+    hasAutoExtension: extension => extension === "zip",
+    async downloadLauncher() {
+      downloadCalls++;
+    },
+  };
+  const dialog = new MockHelperDialog();
+  const launcher = {
+    source: { spec: "https://example.com/file.zip" },
+    suggestedFileName: "file.zip",
+    MIMEInfo: { MIMEType: "application/zip" },
+  };
+  registerDownloadItHelperAppHook(service, { helperDialogConstructor: MockHelperDialog });
+  try {
+    dialog.show(launcher, null, 0);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(dialog.showCalls, 1);
+    assert.equal(downloadCalls, 0);
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+  }
+});
+
 test("helper-app hook shutdown preserves methods replaced by another owner", () => {
   class MockHelperDialog {
     show() {}

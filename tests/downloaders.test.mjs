@@ -14,8 +14,12 @@ import {
   expandCommandTemplate,
   getCustomDownloaderCapabilities,
   getFlashGotDownloaderCapabilities,
+  getNativeDownloadFilenameCandidate,
+  getNativeDownloaderCapabilities,
   inspectAria2Response,
   isLoopbackAria2URL,
+  isNativeDownloadURL,
+  NATIVE_DOWNLOADER_ID,
   normalizeCustomDownloaderDocument,
   normalizeDownloaderCapabilities,
   parseDownloaderRef,
@@ -76,6 +80,37 @@ test("custom downloader capabilities follow command placeholders and provider fe
     batch: true,
     directory: true,
   });
+});
+
+test("native downloader policy supports Firefox HTTP downloads", () => {
+  assert.equal(NATIVE_DOWNLOADER_ID, "firefox");
+  assert.deepEqual(getNativeDownloaderCapabilities(), {
+    post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+  });
+  assert.equal(isNativeDownloadURL("https://example.com/file.zip"), true);
+  assert.equal(isNativeDownloadURL("http://example.com/file.zip"), true);
+  assert.equal(isNativeDownloadURL("ftp://example.com/file.zip"), false);
+  assert.equal(isNativeDownloadURL("magnet:?xt=urn:btih:test"), false);
+  assert.equal(
+    getNativeDownloadFilenameCandidate({
+      url: "https://example.com/path/fallback.zip",
+      filename: "explicit.zip",
+    }),
+    "explicit.zip",
+  );
+  assert.equal(
+    getNativeDownloadFilenameCandidate({
+      url: "https://example.com/path/My%20Archive.zip?token=1",
+    }),
+    "My Archive.zip",
+  );
+  assert.equal(
+    getNativeDownloadFilenameCandidate({ url: "https://example.com/" }),
+    "download",
+  );
 });
 
 const COMMAND_ID = "123e4567-e89b-42d3-a456-426614174000";
@@ -341,10 +376,16 @@ test("provider registry keeps provider-local IDs separate", async () => {
       provider: "custom",
       listDownloaders: () => [{ ref: { provider: "custom", id: "Same" } }],
       getDownloader: id => ({ provider: "custom", id }),
-      download: async (id, task) => calls.push(["custom", id, task]),
+      download: async (id, task, runtimeContext) =>
+        calls.push(["custom", id, task, runtimeContext]),
     },
   ]);
   assert.equal(registry.listDownloaders().length, 2);
-  await registry.download({ provider: "custom", id: "Same" }, "task");
-  assert.deepEqual(calls, [["custom", "Same", "task"]]);
+  const runtimeContext = { links: [{ browsingContextId: 7 }] };
+  await registry.download(
+    { provider: "custom", id: "Same" },
+    "task",
+    runtimeContext,
+  );
+  assert.deepEqual(calls, [["custom", "Same", "task", runtimeContext]]);
 });

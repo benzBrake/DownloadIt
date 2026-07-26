@@ -201,8 +201,9 @@ test("selection starts empty and visible operations preserve hidden choices", ()
   assert.equal(model.selectedCount, 0);
 });
 
-function browsingContext(response, children = []) {
+function browsingContext(response, children = [], id = 0) {
   return {
+    id,
     children,
     currentWindowGlobal: {
       getActor(name) {
@@ -226,7 +227,7 @@ test("page-link queries merge frames, filter protocols, and enrich duplicates", 
       filename: "shared.zip",
     },
     { url: "ftp://example.com/file.iso", description: "FTP" },
-  ]);
+  ], [], 22);
   const root = browsingContext([
     {
       url: "https://example.com/shared.zip",
@@ -234,18 +235,20 @@ test("page-link queries merge frames, filter protocols, and enrich duplicates", 
       filename: "",
     },
     { url: "javascript:void(0)", description: "Unsupported" },
-  ], [child]);
+  ], [child], 11);
 
   assert.deepEqual(await queryPageLinks({ browsingContext: root }), [
     {
       url: "https://example.com/shared.zip",
       description: "Shared archive",
       filename: "shared.zip",
+      browsingContextId: 11,
     },
     {
       url: "ftp://example.com/file.iso",
       description: "FTP",
       filename: "",
+      browsingContextId: 22,
     },
   ]);
 });

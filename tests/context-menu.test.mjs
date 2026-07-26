@@ -224,3 +224,48 @@ test("context menu explicitly synchronizes the selected downloader", () => {
   assert.equal(flashGot.checked, true);
   assert.equal(custom.checked, false);
 });
+
+test("selection link queries retain each source frame browsing context", async () => {
+  const createBrowsingContext = (id, links, children = []) => ({
+    id,
+    children,
+    currentWindowGlobal: {
+      getActor() {
+        return { sendQuery: async () => links };
+      },
+    },
+  });
+  const child = createBrowsingContext(20, [{
+    url: "https://example.com/child.zip",
+    description: "Child",
+    filename: "",
+  }]);
+  const root = createBrowsingContext(10, [{
+    url: "https://example.com/root.zip",
+    description: "Root",
+    filename: "root.zip",
+  }], [child]);
+  const controller = new DownloadItContextMenuController(
+    {},
+    { document: {} },
+    null,
+  );
+
+  assert.deepEqual(
+    await controller.querySelectionLinks({ browsingContext: root }),
+    [
+      {
+        url: "https://example.com/root.zip",
+        description: "Root",
+        filename: "root.zip",
+        browsingContextId: 10,
+      },
+      {
+        url: "https://example.com/child.zip",
+        description: "Child",
+        filename: "",
+        browsingContextId: 20,
+      },
+    ],
+  );
+});

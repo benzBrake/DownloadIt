@@ -27,6 +27,8 @@ function normalizeDownloader(value) {
 }
 
 const DOWNLOAD_ERROR_MESSAGES = {
+  "native-download-failed": "downloadit-error-native-start",
+  "native-partial-failure": "downloadit-error-native-partial",
   "command-launch-failed": "downloadit-error-command-launch",
   "command-partial-failure": "downloadit-error-command-partial",
   "aria2-unavailable": "downloadit-error-aria2-unavailable",
@@ -103,6 +105,7 @@ function shouldAutomaticallyHandle (service, launcher) {
     const extension = getLauncherExtension(launcher);
     return Boolean(
       service?.defaultManager &&
+      service.defaultDownloader?.ref?.provider !== "native" &&
       canRememberLauncherExtension(launcher) &&
       service.hasAutoExtension?.(extension),
     );
@@ -518,8 +521,10 @@ export class DownloadItDownloadDialogController {
   }
 
   populateManagerPopup () {
-    const managers = (this.service.managers?.length
-      ? [...this.service.managers]
+    const currentManagers = this.service.downloadDialogManagers ??
+      this.service.managers;
+    const managers = (currentManagers?.length
+      ? [...currentManagers]
       : [...this.availableManagers]).map(normalizeDownloader);
     this.managerPopup.replaceChildren();
     for (const downloader of managers) {

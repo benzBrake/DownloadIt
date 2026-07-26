@@ -257,7 +257,7 @@ function createLinkRecordWithTypes(link, index, extensionTypes) {
   const description = String(link?.description || "").trim() || url;
   const filename = String(link?.filename || "").trim();
   const extension = getLinkExtension({ url, filename });
-  return {
+  const record = {
     index,
     url,
     description,
@@ -266,6 +266,10 @@ function createLinkRecordWithTypes(link, index, extensionTypes) {
     type: extensionTypes.get(extension) || "other",
     searchText: `${description}\n${filename}\n${url}`.toLowerCase(),
   };
+  if (Number.isInteger(link?.browsingContextId) && link.browsingContextId > 0) {
+    record.browsingContextId = link.browsingContextId;
+  }
+  return record;
 }
 
 export function createLinkRecord(link, index = 0, settings = null) {
@@ -375,11 +379,17 @@ export class LinkSelectionModel {
   selectedLinks() {
     return this.records
       .filter(record => this.selectedURLs.has(record.url))
-      .map(record => ({
-        url: record.url,
-        description: record.description,
-        filename: record.filename,
-      }));
+      .map(record => {
+        const link = {
+          url: record.url,
+          description: record.description,
+          filename: record.filename,
+        };
+        if (Number.isInteger(record.browsingContextId) && record.browsingContextId > 0) {
+          link.browsingContextId = record.browsingContextId;
+        }
+        return link;
+      });
   }
 }
 
@@ -413,9 +423,12 @@ export async function queryPageLinks(browser, {
     async browsingContext => {
       try {
         const actor = browsingContext.currentWindowGlobal?.getActor?.(actorName);
-        return actor ? await actor.sendQuery(query) : [];
+        return {
+          browsingContextId: browsingContext.id || 0,
+          links: actor ? await actor.sendQuery(query) : [],
+        };
       } catch {
-        return [];
+        return { browsingContextId: browsingContext.id || 0, links: [] };
       }
     },
   ));
@@ -423,7 +436,7 @@ export async function queryPageLinks(browser, {
   const links = [];
   const byURL = new Map();
   for (const response of responses) {
-    for (const value of Array.isArray(response) ? response : []) {
+    for (const value of Array.isArray(response.links) ? response.links : []) {
       const url = String(value?.url || "");
       if (!isSupportedURL(url)) {
         continue;
@@ -443,6 +456,12 @@ export async function queryPageLinks(browser, {
         description: meaningfulDescription(value.description, url) || url,
         filename: String(value?.filename || ""),
       };
+      if (
+        Number.isInteger(response.browsingContextId) &&
+        response.browsingContextId > 0
+      ) {
+        link.browsingContextId = response.browsingContextId;
+      }
       byURL.set(url, link);
       links.push(link);
     }

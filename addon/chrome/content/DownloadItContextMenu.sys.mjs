@@ -9,6 +9,8 @@ function normalizeDownloader(value) {
 }
 
 const DOWNLOAD_ERROR_MESSAGES = {
+  "native-download-failed": "downloadit-error-native-start",
+  "native-partial-failure": "downloadit-error-native-partial",
   "command-launch-failed": "downloadit-error-command-launch",
   "command-partial-failure": "downloadit-error-command-partial",
   "aria2-unavailable": "downloadit-error-aria2-unavailable",
@@ -242,8 +244,15 @@ export class DownloadItContextMenuController {
     const selectionGeneration = ++this.selectionGeneration;
     const url = contextMenu?.onLink ? contextMenu.linkURL : "";
     const browser = contextMenu?.browser || this.window.gBrowser?.selectedBrowser;
+    const contentData = contextMenu?.contentData;
+    const browsingContext = contentData?.frameBrowsingContext ||
+      contentData?.browsingContext || browser?.browsingContext || null;
+    const principal = contentData?.principal ||
+      browsingContext?.currentWindowGlobal?.documentPrincipal || null;
     const referer = browser?.currentURI?.spec || "";
-    const downloadPageReferer = contextMenu?.contentData?.referrerInfo
+    const referrerInfo = contentData?.linkReferrerInfo ||
+      contentData?.referrerInfo || null;
+    const downloadPageReferer = contentData?.referrerInfo
       ?.originalReferrer?.spec || "";
 
     this.context = isSupportedURL(url) ? {
@@ -253,6 +262,17 @@ export class DownloadItContextMenuController {
       browser,
       referer,
       downloadPageReferer,
+      browsingContextId: browsingContext?.id || 0,
+      loadingPrincipal: principal,
+      referrerInfo,
+      cookieJarSettings: contentData?.cookieJarSettings ||
+        browsingContext?.currentWindowGlobal?.cookieJarSettings || null,
+      userContextId: contentData?.userContextId ??
+        principal?.originAttributes?.userContextId ?? 0,
+      isPrivate: Boolean(
+        browsingContext?.usePrivateBrowsing ||
+        principal?.originAttributes?.privateBrowsingId,
+      ),
     } : null;
     this.selectionContext = null;
     this.downloadItem.hidden = !this.context;
@@ -325,21 +345,31 @@ export class DownloadItContextMenuController {
       try {
         const windowGlobal = browsingContext.currentWindowGlobal;
         const actor = windowGlobal?.getActor?.("DownloadItLinkCollector");
-        return actor ? await actor.sendQuery(SELECTION_QUERY) : [];
+        return {
+          browsingContextId: browsingContext.id || 0,
+          links: actor ? await actor.sendQuery(SELECTION_QUERY) : [],
+        };
       } catch {
-        return [];
+        return { browsingContextId: browsingContext.id || 0, links: [] };
       }
     }));
 
     const links = [];
     const seen = new Set();
     for (const response of responses) {
-      for (const link of Array.isArray(response) ? response : []) {
+      for (const link of Array.isArray(response.links) ? response.links : []) {
         if (!isSupportedURL(link?.url) || seen.has(link.url)) {
           continue;
         }
         seen.add(link.url);
-        links.push(link);
+        const value = { ...link };
+        if (
+          Number.isInteger(response.browsingContextId) &&
+          response.browsingContextId > 0
+        ) {
+          value.browsingContextId = response.browsingContextId;
+        }
+        links.push(value);
       }
     }
     return links;

@@ -45,8 +45,12 @@ import {
   FLASHGOT_PROVIDER,
   getCustomDownloaderCapabilities,
   getFlashGotDownloaderCapabilities,
+  getNativeDownloadFilenameCandidate,
+  getNativeDownloaderCapabilities,
   inspectAria2Response,
   isLoopbackAria2URL,
+  isNativeDownloadURL,
+  NATIVE_DOWNLOADER_ID,
   NATIVE_PROVIDER,
   normalizeCustomDownloaderDocument,
   parseDownloaderRef,
@@ -68,6 +72,9 @@ const { NetUtil } = ChromeUtils.importESModule(
 );
 const { Downloads } = ChromeUtils.importESModule(
   "resource://gre/modules/Downloads.sys.mjs"
+);
+const { DownloadPaths } = ChromeUtils.importESModule(
+  "resource://gre/modules/DownloadPaths.sys.mjs"
 );
 let customizableUIModule;
 try {
@@ -241,6 +248,12 @@ export class DownloadItService {
     return this.downloaders.filter(downloader => downloader.available);
   }
 
+  get downloadDialogManagers() {
+    return this.managers.filter(
+      downloader => downloader.ref.provider !== NATIVE_PROVIDER,
+    );
+  }
+
   get configuredDefaultRef() {
     return parseDownloaderRef(
       Services.prefs.getStringPref(PREF_DEFAULT_MANAGER, ""),
@@ -274,13 +287,31 @@ export class DownloadItService {
       },
       {
         provider: NATIVE_PROVIDER,
-        listDownloaders: () => [],
-        getDownloader: () => null,
-        download: () => {
-          throw new Error("Native downloader provider is not implemented");
-        },
+        listDownloaders: () => this.listNativeDownloaders(),
+        getDownloader: id => id === NATIVE_DOWNLOADER_ID
+          ? this.createNativeDownloaderDescriptor()
+          : null,
+        download: (id, task, runtimeContext) =>
+          this.downloadViaNative(id, task, runtimeContext),
       },
     ]);
+  }
+
+  createNativeDownloaderDescriptor() {
+    return this.createDownloaderDescriptor({
+      ref: createDownloaderRef(NATIVE_PROVIDER, NATIVE_DOWNLOADER_ID),
+      name: Services.appinfo.name || "Firefox",
+      type: "native",
+      custom: false,
+      enabled: true,
+      available: true,
+      unavailableReason: "",
+      capabilities: getNativeDownloaderCapabilities(),
+    });
+  }
+
+  listNativeDownloaders() {
+    return [this.createNativeDownloaderDescriptor()];
   }
 
   listFlashGotDownloaders() {
@@ -1115,14 +1146,14 @@ export class DownloadItService {
   }
 
   async getManagersForDownloadDialog() {
-    if (this.managers.length > 0) {
-      return this.managers.map(downloader => ({ ...downloader }));
+    if (this.downloadDialogManagers.length > 0) {
+      return this.downloadDialogManagers.map(downloader => ({ ...downloader }));
     }
     try {
       await this.refreshManagers({ persistDefault: false });
-      return this.managers.map(downloader => ({ ...downloader }));
+      return this.downloadDialogManagers.map(downloader => ({ ...downloader }));
     } catch {
-      return this.managers.map(downloader => ({ ...downloader }));
+      return this.downloadDialogManagers.map(downloader => ({ ...downloader }));
     }
   }
 
@@ -1160,6 +1191,9 @@ export class DownloadItService {
     const browser = sourceWindow?.docShell?.chromeEventHandler ||
       this.getBrowserWindow(dialogWindow)?.gBrowser?.selectedBrowser ||
       null;
+    const browsingContext = sourceWindow?.browsingContext ||
+      sourceWindow?.docShell?.browsingContext || browser?.browsingContext || null;
+    const loadInfo = launcher?.channel?.loadInfo || null;
     const downloadPageReferer = browser?.currentURI?.spec ||
       sourceWindow?.location?.href || "";
     const referer = source.referrerInfo?.originalReferrer?.spec || "";
@@ -1170,6 +1204,18 @@ export class DownloadItService {
       browser,
       referer,
       downloadPageReferer,
+      browsingContextId: browsingContext?.id || 0,
+      loadingPrincipal: loadInfo?.loadingPrincipal ||
+        browsingContext?.currentWindowGlobal?.documentPrincipal || null,
+      referrerInfo: source.referrerInfo || null,
+      cookieJarSettings: loadInfo?.cookieJarSettings ||
+        browsingContext?.currentWindowGlobal?.cookieJarSettings || null,
+      userContextId: loadInfo?.originAttributes?.userContextId ??
+        browsingContext?.originAttributes?.userContextId ?? 0,
+      isPrivate: Boolean(
+        browsingContext?.usePrivateBrowsing ||
+        loadInfo?.originAttributes?.privateBrowsingId,
+      ),
     }, manager);
   }
 
@@ -1215,6 +1261,7 @@ export class DownloadItService {
         .getService(Ci.nsIHttpProtocolHandler).userAgent;
 
     const links = [];
+    const runtimeContexts = [];
     for (const context of contexts) {
       if (!isSupportedURL(context?.url)) {
         continue;
@@ -1233,6 +1280,7 @@ export class DownloadItService {
         ).join("; "),
         cookieRecords,
       });
+      runtimeContexts.push(context);
     }
 
     if (links.length === 0) {
@@ -1252,7 +1300,183 @@ export class DownloadItService {
     for (let index = 0; index < job.links.length; index++) {
       job.links[index].cookieRecords = links[index].cookieRecords;
     }
-    await this.providers.download(downloader.ref, job);
+    await this.providers.download(downloader.ref, job, runtimeContexts);
+  }
+
+  async downloadViaNative(managerId, job, runtimeContexts = []) {
+    if (managerId !== NATIVE_DOWNLOADER_ID) {
+      throw new DownloadItError("native-download-failed", {
+        error: `Unknown native downloader: ${String(managerId || "")}`,
+      });
+    }
+
+    let directory;
+    try {
+      directory = await Downloads.getPreferredDownloadsDirectory();
+    } catch (error) {
+      throw new DownloadItError("native-download-failed", {
+        error: error?.message || String(error),
+      });
+    }
+
+    const results = await Promise.allSettled(job.links.map((link, index) =>
+      this.startNativeDownload(link, runtimeContexts[index] || {}, directory)
+    ));
+    const succeeded = results.filter(result => result.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (!failed) {
+      return { succeeded, failed };
+    }
+    if (succeeded) {
+      throw new DownloadItError("native-partial-failure", { succeeded, failed });
+    }
+    const firstError = results.find(result => result.status === "rejected")?.reason;
+    throw new DownloadItError("native-download-failed", {
+      error: firstError?.message || String(firstError || ""),
+    });
+  }
+
+  async startNativeDownload(link, runtimeContext, directory) {
+    if (!isNativeDownloadURL(link.url)) {
+      throw new Error(`Unsupported native download URL: ${link.url}`);
+    }
+
+    const filename = DownloadPaths.sanitize(
+      getNativeDownloadFilenameCandidate(link),
+    ) || "download";
+    const targetTemplate = await IOUtils.getFile(directory);
+    targetTemplate.append(filename);
+    const targetFile = await DownloadPaths.createNiceUniqueFile(targetTemplate);
+    const targetPath = targetFile.path;
+    const partFilePath = `${targetPath}.part`;
+
+    try {
+      const download = await Downloads.createDownload({
+        source: this.createNativeDownloadSource(link, runtimeContext),
+        target: { path: targetPath, partFilePath },
+      });
+      download.tryToKeepPartialData = true;
+      const startPromise = download.start();
+      Promise.resolve(startPromise).catch(error => {
+        console.error("DownloadIt: Firefox download failed", error);
+      });
+      try {
+        const list = await Downloads.getList(Downloads.ALL);
+        await list.add(download);
+      } catch (error) {
+        try {
+          await download.cancel();
+        } catch {}
+        throw error;
+      }
+      return download;
+    } catch (error) {
+      await IOUtils.remove(partFilePath, { ignoreAbsent: true });
+      await IOUtils.remove(targetPath, { ignoreAbsent: true });
+      throw error;
+    }
+  }
+
+  createNativeDownloadSource(link, runtimeContext = {}) {
+    const browsingContext = this.resolveNativeBrowsingContext(runtimeContext);
+    const windowGlobal = browsingContext?.currentWindowGlobal;
+    const loadingPrincipal = runtimeContext.loadingPrincipal ||
+      runtimeContext.principal || windowGlobal?.documentPrincipal ||
+      runtimeContext.browser?.contentPrincipal || null;
+    const cookieJarSettings = runtimeContext.cookieJarSettings ||
+      windowGlobal?.cookieJarSettings || browsingContext?.cookieJarSettings || null;
+    const referrerSpec = browsingContext?.currentURI?.spec ||
+      runtimeContext.referer || "";
+    const referrerInfo = runtimeContext.referrerInfo ||
+      this.createNativeReferrerInfo(referrerSpec) || null;
+    const originAttributes = loadingPrincipal?.originAttributes ||
+      browsingContext?.originAttributes || {};
+    const browsingContextId = Number(runtimeContext.browsingContextId ||
+      browsingContext?.id || 0);
+    const userContextId = Number(runtimeContext.userContextId ??
+      originAttributes.userContextId ?? 0);
+    const isPrivate = typeof runtimeContext.isPrivate === "boolean"
+      ? runtimeContext.isPrivate
+      : Boolean(
+          browsingContext?.usePrivateBrowsing ||
+          originAttributes.privateBrowsingId,
+        );
+    const source = { url: link.url, isPrivate };
+
+    if (loadingPrincipal) {
+      source.loadingPrincipal = loadingPrincipal;
+    }
+    if (referrerInfo) {
+      source.referrerInfo = referrerInfo;
+    }
+    if (cookieJarSettings) {
+      source.cookieJarSettings = cookieJarSettings;
+    }
+    if (Number.isInteger(userContextId) && userContextId >= 0) {
+      source.userContextId = userContextId;
+    }
+    if (Number.isInteger(browsingContextId) && browsingContextId > 0) {
+      source.browsingContextId = browsingContextId;
+    }
+
+    if (link.postdata) {
+      const postData = link.postdata;
+      const contentType = String(
+        runtimeContext.postContentType || "application/x-www-form-urlencoded",
+      );
+      source.adjustChannel = channel => {
+        const stream = Cc["@mozilla.org/io/string-input-stream;1"]
+          .createInstance(Ci.nsIStringInputStream);
+        stream.setUTF8Data(postData);
+        channel.QueryInterface(Ci.nsIUploadChannel2).explicitSetUploadStream(
+          stream,
+          contentType,
+          -1,
+          "POST",
+        );
+      };
+    }
+    return source;
+  }
+
+  resolveNativeBrowsingContext(runtimeContext = {}) {
+    const root = runtimeContext.browser?.browsingContext || null;
+    const requestedId = Number(runtimeContext.browsingContextId || 0);
+    if (!root || !requestedId) {
+      return root;
+    }
+    const pending = [root];
+    const seen = new Set();
+    while (pending.length) {
+      const browsingContext = pending.shift();
+      if (!browsingContext || seen.has(browsingContext)) {
+        continue;
+      }
+      seen.add(browsingContext);
+      if (browsingContext.id === requestedId) {
+        return browsingContext;
+      }
+      pending.push(...(browsingContext.children || []));
+    }
+    return root;
+  }
+
+  createNativeReferrerInfo(spec) {
+    if (!isNativeDownloadURL(spec)) {
+      return null;
+    }
+    try {
+      const referrerInfo = Cc["@mozilla.org/referrer-info;1"]
+        .createInstance(Ci.nsIReferrerInfo);
+      referrerInfo.init(
+        Ci.nsIReferrerInfo.EMPTY,
+        true,
+        Services.io.newURI(spec),
+      );
+      return referrerInfo;
+    } catch {
+      return null;
+    }
   }
 
   syncIDMBridge(enabled = Services.prefs.getBoolPref(
@@ -1289,7 +1513,12 @@ export class DownloadItService {
       userAgent: String(task.userAgent || ""),
     });
     job.links[0].cookieRecords = [];
-    await this.providers.download(downloader.ref, job);
+    await this.providers.download(downloader.ref, job, [{
+      referer: isNativeDownloadURL(task.referer)
+        ? task.referer
+        : isNativeDownloadURL(task.sourcePage) ? task.sourcePage : "",
+      isPrivate: false,
+    }]);
   }
 
   async downloadViaFlashGot(managerName, job) {

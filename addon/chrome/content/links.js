@@ -17,6 +17,8 @@ const {
 );
 
 const DOWNLOAD_ERROR_MESSAGES = {
+  "native-download-failed": "downloadit-error-native-start",
+  "native-partial-failure": "downloadit-error-native-partial",
   "command-launch-failed": "downloadit-error-command-launch",
   "command-partial-failure": "downloadit-error-command-partial",
   "aria2-unavailable": "downloadit-error-aria2-unavailable",

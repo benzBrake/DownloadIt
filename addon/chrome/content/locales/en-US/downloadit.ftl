@@ -223,8 +223,8 @@ downloadit-unsupported-platform = Windows only
 downloadit-ready = Ready
 downloadit-starting = Starting
 downloadit-unavailable = Unavailable
-downloadit-about-callout-title = DownloadIt connects Firefox to external download tools.
-downloadit-about-callout-help = If the list is empty, install a supported manager and detect again.
+downloadit-about-callout-title = DownloadIt provides Firefox downloads and connects external download tools.
+downloadit-about-callout-help = Firefox is always available. Install a supported external manager and detect again to add more choices.
 downloadit-no-changes = No changes to apply
 downloadit-unsaved-changes = Changes are ready to apply
 downloadit-applied = Settings applied
@@ -387,6 +387,15 @@ downloadit-error-aria2-local = Automatic startup requires an HTTP loopback aria2
 downloadit-error-aria2-managed-argument = Additional arguments cannot override DownloadIt-managed aria2 RPC options.
 downloadit-error-executable-relative-path = The selected file's relative path must remain inside Firefox's chrome configuration directory.
 downloadit-error-custom-config-blocked = Reload or reset the damaged custom configuration before editing it.
+downloadit-error-native-start = Firefox could not start the download: { $error }
+downloadit-error-native-partial =
+    Firefox started { NUMBER($succeeded) } { $succeeded ->
+        [one] download
+       *[other] downloads
+    }; { NUMBER($failed) } { $failed ->
+        [one] download could not be started.
+       *[other] downloads could not be started.
+    }
 downloadit-error-command-launch = The command-line downloader could not be started.
 downloadit-error-command-partial =
     { $succeeded ->
