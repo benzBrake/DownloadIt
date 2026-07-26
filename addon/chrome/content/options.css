@@ -1243,7 +1243,7 @@ button {
   }
 
   .section-nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .nav-item {
@@ -1254,6 +1254,13 @@ button {
     border-left: 0;
     border-bottom: 2px solid transparent;
     font-size: 11px;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .nav-item > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .nav-item.is-active {

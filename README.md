@@ -21,7 +21,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Supports `http`, `https`, `ftp`, and `magnet` links.
 - Passes the URL, filename, referrer, cookies, and User-Agent to external download tools; the Firefox downloader uses the native browsing and cookie context.
 - Provides Firefox settings for the default download manager and cookie-forwarding policy.
-- Provides a settings list for remembered automatic file extensions.
+- Provides a dedicated **Auto-capture** settings tab for remembered automatic file extensions.
 - Supports Simplified Chinese and English in the UI and context menu.
 - Stores UI messages in Firefox's built-in Fluent resources.
 - Verifies the bundled `FlashGot.exe` during the build and at runtime.
@@ -128,7 +128,7 @@ Open the settings page from the toolbar panel, from “DownloadIt Settings” in
 | `downloadit.autoExtensions` | String | JSON array of file extensions that should be sent to the current default manager automatically. |
 | `downloadit.linkGroups` | String | Versioned JSON configuration for built-in and custom batch-link suffix groups. |
 
-When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes. Remembered extensions can be removed individually or cleared from the settings page.
+When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes. Remembered extensions can be removed individually or cleared from the **Auto-capture** tab.
 
 Only explicitly remembered extensions are intercepted. Empty extensions, Firefox install packages (`.xpi`/`xpinstall`), and unsupported URL schemes always remain in Firefox's native flow. Executable extensions such as `.exe` can be remembered explicitly. When the Firefox downloader is the default, the remembered-extension hook also leaves the existing native launcher untouched instead of issuing a duplicate request.
 

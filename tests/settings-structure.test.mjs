@@ -28,6 +28,7 @@ test("settings dialog contains the current capability controls", () => {
     "section-managers",
     "default-manager",
     "refresh-managers",
+    "section-auto-capture",
     "auto-extension-list",
     "clear-auto-extensions",
     "section-link-groups",
@@ -48,6 +49,32 @@ test("settings dialog contains the current capability controls", () => {
   ]) {
     assert.match(markup, new RegExp(`id="${id}"`));
   }
+});
+
+test("automatic capture controls live in a dedicated settings tab", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const script = read("addon/chrome/content/options.js");
+  const styles = read("addon/chrome/content/options.css");
+  const managerPanel = markup.match(
+    /<section id="section-managers"[\s\S]*?<\/section>/,
+  )?.[0];
+  const autoCapturePanel = markup.match(
+    /<section id="section-auto-capture"[\s\S]*?<\/section>/,
+  )?.[0];
+
+  assert.match(
+    markup,
+    /aria-controls="section-auto-capture" data-section="auto-capture"/,
+  );
+  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 5);
+  assert.ok(managerPanel);
+  assert.ok(autoCapturePanel);
+  assert.doesNotMatch(managerPanel, /id="auto-extension-list"/);
+  assert.match(autoCapturePanel, /data-section-panel="auto-capture"/);
+  assert.match(autoCapturePanel, /id="auto-extension-list"/);
+  assert.match(autoCapturePanel, /id="clear-auto-extensions"/);
+  assert.match(script, /"auto-capture": \[/);
+  assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
 });
 
 test("settings refresh keeps default-manager persistence staged", () => {

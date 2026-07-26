@@ -21,7 +21,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 支持 `http`、`https`、`ftp` 和 `magnet` 链接。
 - 向外部下载工具传递 URL、文件名、Referer、Cookie 和 User-Agent；Firefox 内建下载器使用原生浏览与 Cookie 上下文。
 - 在 Firefox 设置对话框中管理默认下载工具和 Cookie 转发策略。
-- 在设置页面管理已记住的自动处理扩展名。
+- 提供独立的“自动接管”设置标签页，用于管理已记住的自动处理扩展名。
 - 界面和右键菜单支持简体中文与英文。
 - 使用 Firefox 内置的 Fluent 资源存储界面消息。
 - 构建时校验并在运行时校验随扩展发布的 `FlashGot.exe`。
@@ -128,7 +128,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.autoExtensions` | 字符串 | 应自动发送到当前默认下载工具的文件扩展名 JSON 数组。 |
 | `downloadit.linkGroups` | 字符串 | 内置及自定义批量链接后缀分组的版本化 JSON 配置。 |
 
-当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。已记住的扩展名可以在设置页面逐项移除或全部清除。
+当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。已记住的扩展名可以在“自动接管”标签页逐项移除或全部清除。
 
 只有用户明确记住的扩展名会被自动接管。空扩展名、Firefox 安装包（`.xpi`/`xpinstall`）以及不支持的 URL 协议始终保留在 Firefox 原生流程中；`.exe` 等可执行文件扩展名可以由用户明确记住。当 Firefox 内建下载器是默认项时，已记住扩展名的 hook 也会保留现有原生 launcher，不会再次请求同一地址。
 

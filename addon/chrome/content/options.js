@@ -31,6 +31,11 @@ const SECTION_META = {
     "downloadit-manager-title",
     "downloadit-manager-description",
   ],
+  "auto-capture": [
+    "downloadit-auto-capture-kicker",
+    "downloadit-auto-capture-title",
+    "downloadit-auto-capture-description",
+  ],
   privacy: [
     "downloadit-privacy-kicker",
     "downloadit-privacy-title",
