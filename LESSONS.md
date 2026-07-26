@@ -25,4 +25,10 @@
 
 ## 已记录问题
 
-当前没有记录。
+### 2026-07-26｜PanelView 动态样式未生效
+
+- 现象：PanelView 的节点结构已经更新，XPI 也包含新 CSS，但 Firefox 中的外观没有变化。
+- 原因：向 Firefox browser chrome/XUL 文档动态插入 HTML `<link>` 并不能可靠地将样式表应用到 PanelView。
+- 处理：使用 `window.windowUtils.loadSheetUsingURIString(uri, window.windowUtils.AUTHOR_SHEET)` 按窗口加载样式，并在控制器销毁时使用 `removeSheetUsingURIString()` 对称卸载。
+- 避免：browser chrome/XUL（尤其是 PanelView）的动态样式不要通过插入 HTML `<link>` 或 `<style>` 加载。
+- 验证：测试断言样式 URI 通过窗口级作者样式 API 加载和卸载；完整测试 `121/121` 通过，并确认重新生成的 XPI 包含修正版模块和 CSS。
