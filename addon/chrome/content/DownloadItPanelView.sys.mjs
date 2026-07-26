@@ -9,6 +9,16 @@ const STATUS_ID = "downloadit-panel-status";
 const LINKS_ID = "downloadit-panel-links";
 const REFRESH_ID = "downloadit-panel-refresh";
 const SETTINGS_ID = "downloadit-panel-settings";
+const STATUS_ICON_ID = "downloadit-panel-status-icon";
+const STATUS_TEXT_ID = "downloadit-panel-status-text";
+const STYLESHEET_URL = "chrome://downloadit/content/panel.css";
+
+const STATUS_ICONS = Object.freeze({
+  error: "chrome://global/skin/icons/error.svg",
+  loading: "chrome://global/skin/icons/loading.svg",
+  locked: "chrome://global/skin/icons/security.svg",
+  success: "chrome://global/skin/icons/check-filled.svg",
+});
 
 function findCachedView(document, id) {
   return document.getElementById(id) ||
@@ -26,6 +36,9 @@ export class DownloadItPanelViewController {
     this.view = null;
     this.managerList = null;
     this.status = null;
+    this.statusIcon = null;
+    this.statusText = null;
+    this.stylesheetLoaded = false;
     this.linksButton = null;
     this.refreshButton = null;
     this.settingsButton = null;
@@ -42,6 +55,7 @@ export class DownloadItPanelViewController {
     }
 
     findCachedView(this.document, DOWNLOADIT_PANEL_VIEW_ID)?.remove();
+    this.installStylesheet();
     this.localizationReady = Promise.resolve(
       this.initializeLocalization?.(this.window),
     );
@@ -59,12 +73,20 @@ export class DownloadItPanelViewController {
       role: "radiogroup",
       "aria-labelledby": heading.id,
     });
-    this.status = createXULElement(this.document, "description", {
+    this.statusIcon = createXULElement(this.document, "image", {
+      id: STATUS_ICON_ID,
+      "aria-hidden": "true",
+    });
+    this.statusText = createXULElement(this.document, "description", {
+      id: STATUS_TEXT_ID,
+    });
+    this.status = createXULElement(this.document, "hbox", {
       id: STATUS_ID,
       hidden: true,
       role: "status",
       "aria-live": "polite",
-    });
+      "aria-atomic": "true",
+    }, [this.statusIcon, this.statusText]);
     this.linksButton = createXULElement(this.document, "toolbarbutton", {
       id: LINKS_ID,
       class: "subviewbutton subviewbutton-iconic",
@@ -127,10 +149,13 @@ export class DownloadItPanelViewController {
     this.destroyed = true;
     this.view?.removeEventListener("command", this);
     this.view?.remove();
+    this.removeStylesheet();
     this.managerButtons = [];
     this.view = null;
     this.managerList = null;
     this.status = null;
+    this.statusIcon = null;
+    this.statusText = null;
     this.linksButton = null;
     this.refreshButton = null;
     this.settingsButton = null;
@@ -155,9 +180,9 @@ export class DownloadItPanelViewController {
   onViewShowing(event) {
     this.renderManagers();
     if (this.refreshPromise) {
-      this.setStatus("downloadit-detection-loading");
+      this.setStatus("downloadit-detection-loading", null, "loading");
     } else if (this.defaultManagerLocked) {
-      this.setStatus("downloadit-locked");
+      this.setStatus("downloadit-locked", null, "locked");
     } else {
       this.clearStatus();
     }
@@ -243,9 +268,11 @@ export class DownloadItPanelViewController {
       this.clearStatus();
       return true;
     } catch (error) {
-      this.setStatus("downloadit-panel-selection-error", {
-        error: error?.message || String(error),
-      });
+      this.setStatus(
+        "downloadit-panel-selection-error",
+        { error: error?.message || String(error) },
+        "error",
+      );
       return false;
     }
   }
@@ -254,7 +281,7 @@ export class DownloadItPanelViewController {
     if (this.refreshPromise) {
       return this.refreshPromise;
     }
-    this.setStatus("downloadit-detection-loading");
+    this.setStatus("downloadit-detection-loading", null, "loading");
     this.updateDisabledState(true);
 
     this.refreshPromise = (async () => {
@@ -264,15 +291,19 @@ export class DownloadItPanelViewController {
           return managers;
         }
         this.renderManagers();
-        this.setStatus("downloadit-detection-success", {
-          count: managers.length,
-        });
+        this.setStatus(
+          "downloadit-detection-success",
+          { count: managers.length },
+          "success",
+        );
         return managers;
       } catch (error) {
         if (!this.destroyed) {
-          this.setStatus("downloadit-detection-error", {
-            error: error?.message || String(error),
-          });
+          this.setStatus(
+            "downloadit-detection-error",
+            { error: error?.message || String(error) },
+            "error",
+          );
         }
         return null;
       } finally {
@@ -326,20 +357,47 @@ export class DownloadItPanelViewController {
     }
     this.status.hidden = true;
     this.status.setAttribute("hidden", "true");
-    this.status.removeAttribute("data-l10n-id");
-    this.status.removeAttribute("data-l10n-args");
+    this.status.removeAttribute("data-status-kind");
+    this.statusIcon?.removeAttribute("src");
+    this.statusText?.removeAttribute("data-l10n-id");
+    this.statusText?.removeAttribute("data-l10n-args");
   }
 
-  setStatus(id, args = null) {
-    if (!this.status) {
+  setStatus(id, args = null, kind = "loading") {
+    if (!this.status || !this.statusIcon || !this.statusText) {
       return;
     }
+    const icon = STATUS_ICONS[kind] || STATUS_ICONS.loading;
     this.status.hidden = false;
     this.status.removeAttribute("hidden");
-    this.setLocalized(this.status, id, args);
+    this.status.setAttribute("data-status-kind", kind);
+    this.statusIcon.setAttribute("src", icon);
+    this.setLocalized(this.statusText, id, args);
     Promise.resolve(this.document.l10n?.translateFragment?.(this.status)).catch(error => {
       console.error("DownloadIt: panel status translation failed", error);
     });
+  }
+
+  installStylesheet() {
+    if (this.stylesheetLoaded) {
+      return;
+    }
+    const { windowUtils } = this.window;
+    windowUtils.loadSheetUsingURIString(STYLESHEET_URL, windowUtils.AUTHOR_SHEET);
+    this.stylesheetLoaded = true;
+  }
+
+  removeStylesheet() {
+    if (!this.stylesheetLoaded) {
+      return;
+    }
+    const { windowUtils } = this.window;
+    try {
+      windowUtils.removeSheetUsingURIString(STYLESHEET_URL, windowUtils.AUTHOR_SHEET);
+    } catch (error) {
+      console.error("DownloadIt: panel stylesheet cleanup failed", error);
+    }
+    this.stylesheetLoaded = false;
   }
 
   setLocalized(element, id, args = null) {

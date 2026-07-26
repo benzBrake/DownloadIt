@@ -183,6 +183,7 @@ addon/
 ├── FlashGot.exe                          # Download-manager bridge
 └── chrome/content/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
+    ├── DownloadItPanelView.sys.mjs      # Native toolbar panel behavior
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
     ├── DownloadItDownloaders.sys.mjs    # Provider references, custom schema, templates, and aria2 protocol
@@ -197,6 +198,7 @@ addon/
     ├── locales/
     │   ├── en-US/downloadit.ftl          # English Fluent messages
     │   └── zh-CN/downloadit.ftl          # Simplified Chinese Fluent messages
+    ├── panel.css                         # Native toolbar panel styles
     ├── options.xhtml                     # Settings page structure
     ├── options.js                        # Settings page logic
     ├── options.css                       # Settings page styles

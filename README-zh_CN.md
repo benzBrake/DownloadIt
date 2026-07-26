@@ -183,6 +183,7 @@ addon/
 ├── FlashGot.exe                          # 下载管理器桥接程序
 └── chrome/content/
     ├── DownloadItService.sys.mjs        # 服务、进程和偏好管理
+    ├── DownloadItPanelView.sys.mjs      # 原生工具栏面板行为
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItDownloadDialog.sys.mjs # Firefox 原生下载弹窗集成
     ├── DownloadItDownloaders.sys.mjs    # provider 引用、自定义 schema、模板与 aria2 协议
@@ -197,6 +198,7 @@ addon/
     ├── locales/
     │   ├── en-US/downloadit.ftl          # 英文 Fluent 消息
     │   └── zh-CN/downloadit.ftl          # 简体中文 Fluent 消息
+    ├── panel.css                         # 原生工具栏面板样式
     ├── options.xhtml                     # 设置页面结构
     ├── options.js                        # 设置页面逻辑
     ├── options.css                       # 设置页面样式

@@ -214,6 +214,17 @@ function createController(service = new MockService(), {
   const window = {
     document,
     gBrowser: { selectedBrowser: browser },
+    windowUtils: {
+      AUTHOR_SHEET: 1,
+      loadedSheets: [],
+      removedSheets: [],
+      loadSheetUsingURIString(url, type) {
+        this.loadedSheets.push({ url, type });
+      },
+      removeSheetUsingURIString(url, type) {
+        this.removedSheets.push({ url, type });
+      },
+    },
     openDialog(...args) {
       dialogCalls.push(args);
       return { opened: true };
@@ -229,7 +240,7 @@ function createController(service = new MockService(), {
 }
 
 test("panel view builds native links, manager, refresh, and settings controls", () => {
-  const { controller, document } = createController();
+  const { controller, document, window } = createController();
 
   assert.equal(controller.view.localName, "panelview");
   assert.equal(controller.view.id, DOWNLOADIT_PANEL_VIEW_ID);
@@ -239,6 +250,14 @@ test("panel view builds native links, manager, refresh, and settings controls", 
   );
   assert.match(controller.view.getAttribute("class"), /PanelUI-subView/);
   assert.equal(controller.view.children[0].children[0], controller.linksButton);
+  assert.equal(controller.status.localName, "hbox");
+  assert.equal(controller.status.children[0], controller.statusIcon);
+  assert.equal(controller.status.children[1], controller.statusText);
+  assert.equal(controller.status.getAttribute("aria-atomic"), "true");
+  assert.deepEqual(window.windowUtils.loadedSheets, [{
+    url: "chrome://downloadit/content/panel.css",
+    type: window.windowUtils.AUTHOR_SHEET,
+  }]);
   assert.equal(controller.managerButtons.length, 2);
   assert.equal(controller.managerButtons[0].getAttribute("checked"), "true");
   assert.equal(controller.managerButtons[1].getAttribute("checked"), null);
@@ -300,9 +319,11 @@ test("locked and empty manager states cannot change the preference", () => {
   assert.equal(locked.service.defaultManager, "flashgot:idm");
   locked.controller.onViewShowing();
   assert.equal(
-    locked.controller.status.getAttribute("data-l10n-id"),
+    locked.controller.statusText.getAttribute("data-l10n-id"),
     "downloadit-locked",
   );
+  assert.equal(locked.controller.status.getAttribute("data-status-kind"), "locked");
+  assert.match(locked.controller.statusIcon.getAttribute("src"), /security\.svg$/);
 
   const empty = createController(new MockService({ managers: [], defaultManager: "" }));
   assert.equal(empty.controller.managerButtons.length, 0);
@@ -350,9 +371,11 @@ test("refresh prevents re-entry and rebuilds the manager list in place", async (
   assert.equal(controller.refreshButton.disabled, true);
   assert.equal(controller.view.getAttribute("aria-busy"), "true");
   assert.equal(
-    controller.status.getAttribute("data-l10n-id"),
+    controller.statusText.getAttribute("data-l10n-id"),
     "downloadit-detection-loading",
   );
+  assert.equal(controller.status.getAttribute("data-status-kind"), "loading");
+  assert.match(controller.statusIcon.getAttribute("src"), /loading\.svg$/);
 
   finishRefresh();
   assert.deepEqual(await first, ["Internet Download Manager", "Free Download Manager"]);
@@ -360,13 +383,15 @@ test("refresh prevents re-entry and rebuilds the manager list in place", async (
   assert.equal(controller.refreshButton.disabled, false);
   assert.equal(controller.view.getAttribute("aria-busy"), "false");
   assert.equal(
-    controller.status.getAttribute("data-l10n-id"),
+    controller.statusText.getAttribute("data-l10n-id"),
     "downloadit-detection-success",
   );
   assert.deepEqual(
-    JSON.parse(controller.status.getAttribute("data-l10n-args")),
+    JSON.parse(controller.statusText.getAttribute("data-l10n-args")),
     { count: 2 },
   );
+  assert.equal(controller.status.getAttribute("data-status-kind"), "success");
+  assert.match(controller.statusIcon.getAttribute("src"), /check-filled\.svg$/);
 });
 
 test("refresh failure preserves managers and exposes the raw error as a Fluent argument", async () => {
@@ -381,13 +406,15 @@ test("refresh failure preserves managers and exposes the raw error as a Fluent a
   assert.equal(await controller.refreshManagers(), null);
   assert.deepEqual(controller.managerList.children, existingItems);
   assert.equal(
-    controller.status.getAttribute("data-l10n-id"),
+    controller.statusText.getAttribute("data-l10n-id"),
     "downloadit-detection-error",
   );
   assert.deepEqual(
-    JSON.parse(controller.status.getAttribute("data-l10n-args")),
+    JSON.parse(controller.statusText.getAttribute("data-l10n-args")),
     { error: "scan exploded" },
   );
+  assert.equal(controller.status.getAttribute("data-status-kind"), "error");
+  assert.match(controller.statusIcon.getAttribute("src"), /error\.svg$/);
 });
 
 test("selection errors, settings commands, localization blockers, and cleanup are wired", async () => {
@@ -395,7 +422,7 @@ test("selection errors, settings commands, localization blockers, and cleanup ar
   service.selectionError = new Error("preference locked");
   assert.equal(controller.selectManager("custom:aria2"), false);
   assert.equal(
-    controller.status.getAttribute("data-l10n-id"),
+    controller.statusText.getAttribute("data-l10n-id"),
     "downloadit-panel-selection-error",
   );
 
@@ -415,11 +442,16 @@ test("selection errors, settings commands, localization blockers, and cleanup ar
 
   controller.destroy();
   assert.equal(document.getElementById(DOWNLOADIT_PANEL_VIEW_ID), null);
+  assert.deepEqual(window.windowUtils.removedSheets, [{
+    url: "chrome://downloadit/content/panel.css",
+    type: window.windowUtils.AUTHOR_SHEET,
+  }]);
 });
 
 test("service registers a removable native view widget in the navigation bar", () => {
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const panel = read("addon/chrome/content/DownloadItPanelView.sys.mjs");
+  const panelStyles = read("addon/chrome/content/panel.css");
   const powerShellPack = read("pack.ps1");
   const bashPack = read("pack.sh");
 
@@ -440,6 +472,13 @@ test("service registers a removable native view widget in the navigation bar", (
   assert.match(panel, /getElementById\("appMenu-viewCache"\)/);
   assert.match(panel, /viewCache\.content\.appendChild\(this\.view\)/);
   assert.match(panel, /this\.view\?\.remove\(\)/);
+  assert.match(panel, /loadSheetUsingURIString\(STYLESHEET_URL/);
+  assert.match(panel, /removeSheetUsingURIString\(STYLESHEET_URL/);
+  assert.match(panelStyles, /background-color-success/);
+  assert.match(panelStyles, /background-color-critical/);
+  assert.match(panelStyles, /@media \(prefers-contrast\)/);
   assert.match(powerShellPack, /chrome\/content\/DownloadItPanelView\.sys\.mjs/);
+  assert.match(powerShellPack, /chrome\/content\/panel\.css/);
   assert.match(bashPack, /chrome\/content\/DownloadItPanelView\.sys\.mjs/);
+  assert.match(bashPack, /chrome\/content\/panel\.css/);
 });

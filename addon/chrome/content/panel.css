@@ -1,0 +1,61 @@
+#downloadit-panel-status {
+  --downloadit-status-accent: var(--icon-color-information, AccentColor);
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-small, 8px);
+  min-height: var(--size-item-medium, 32px);
+  box-sizing: border-box;
+  margin: var(--space-xsmall, 4px) var(--panel-menuitem-margin-inline, 4px) 0;
+  padding: var(--space-small, 8px) var(--space-medium, 12px);
+  border: var(--border-width, 1px) solid color-mix(in srgb, var(--downloadit-status-accent) 24%, transparent);
+  border-radius: var(--border-radius-medium, var(--panel-menuitem-border-radius, 4px));
+  background-color: var(--background-color-information, color-mix(in srgb, AccentColor 12%, transparent));
+  color: var(--text-color, inherit);
+}
+
+#downloadit-panel-status[hidden] {
+  display: none;
+}
+
+#downloadit-panel-status[data-status-kind="success"] {
+  --downloadit-status-accent: var(--icon-color-success, #2e8b57);
+
+  background-color: var(--background-color-success, color-mix(in srgb, #2e8b57 12%, transparent));
+}
+
+#downloadit-panel-status[data-status-kind="error"] {
+  --downloadit-status-accent: var(--icon-color-critical, #c50042);
+
+  background-color: var(--background-color-critical, color-mix(in srgb, #c50042 12%, transparent));
+}
+
+#downloadit-panel-status[data-status-kind="locked"] {
+  --downloadit-status-accent: currentColor;
+
+  background-color: var(--background-color-box, color-mix(in srgb, currentColor 7%, transparent));
+}
+
+#downloadit-panel-status-icon {
+  width: var(--icon-size, 16px);
+  height: var(--icon-size, 16px);
+  flex: none;
+  -moz-context-properties: fill;
+  fill: var(--downloadit-status-accent);
+}
+
+#downloadit-panel-status-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (prefers-contrast) {
+  #downloadit-panel-status {
+    border-color: currentColor;
+    background-color: transparent;
+  }
+}
