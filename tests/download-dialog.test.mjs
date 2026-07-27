@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   canRememberLauncherExtension,
@@ -10,6 +11,11 @@ import {
   unregisterDownloadItHelperAppHook,
   isDownloadDialogWindow,
 } from "../addon/chrome/content/DownloadItDownloadDialog.sys.mjs";
+
+const DOWNLOADIT_ICON = readFileSync(
+  new URL("../addon/chrome/content/icons/downloadit.svg", import.meta.url),
+  "utf8",
+);
 
 class MockElement {
   constructor(document, tagName) {
@@ -323,6 +329,11 @@ test("download dialog URL matching only accepts the native prompt", () => {
   assert.equal(isDownloadDialogWindow({
     location: { href: "chrome://browser/content/browser.xhtml" },
   }), false);
+});
+
+test("download dialog icon has an explicit native control size", () => {
+  assert.match(DOWNLOADIT_ICON, /<svg\b[^>]*\bwidth="16"/);
+  assert.match(DOWNLOADIT_ICON, /<svg\b[^>]*\bheight="16"/);
 });
 
 test("automatic extension values are normalized and launcher filenames are parsed", () => {
