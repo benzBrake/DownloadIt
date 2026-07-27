@@ -135,6 +135,7 @@ const state = {
 };
 
 let renderedManagerKeys = null;
+let observedBuiltInRefresh = null;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -230,6 +231,7 @@ function bindEvents() {
   );
   document.getElementById("manager-list").addEventListener("click", event => {
     const configureBuiltIn = event.target.closest("[data-configure-built-in]");
+    const removeBuiltIn = event.target.closest("[data-remove-built-in]");
     const edit = event.target.closest("[data-edit-custom]");
     const remove = event.target.closest("[data-remove-custom]");
     const toggle = event.target.closest("[data-toggle-custom]");
@@ -238,6 +240,8 @@ function bindEvents() {
         "builtin",
         configureBuiltIn.dataset.configureBuiltIn,
       );
+    } else if (removeBuiltIn) {
+      removeBuiltInDownloader(removeBuiltIn.dataset.removeBuiltIn);
     } else if (edit) {
       openDownloadToolEditor("custom", edit.dataset.editCustom);
     } else if (remove) {
@@ -506,25 +510,19 @@ function renderServiceState() {
 
 function draftDownloaders() {
   const detected = (state.snapshot?.downloaders || [])
-    .filter(downloader => !downloader.custom)
-    .map(downloader => {
-      if (
-        downloader.ref?.provider !== JDOWNLOADER_PROVIDER ||
-        !state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER]
-      ) {
-        return downloader;
-      }
-      const draft = state.draft.builtInProtocols[JDOWNLOADER_PROVIDER];
-      try {
-        return state.service.createJDownloaderDescriptor(draft);
-      } catch {
-        return {
-          ...downloader,
-          available: false,
-          unavailableReason: "invalid-configuration",
-        };
-      }
-    });
+    .filter(downloader =>
+      !downloader.custom &&
+      downloader.ref?.provider !== JDOWNLOADER_PROVIDER
+    );
+  const jDownloaderDraft =
+    state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER];
+  if (jDownloaderDraft?.enabled) {
+    const jDownloader = state.service.createJDownloaderDescriptor(jDownloaderDraft);
+    const nativeIndex = detected.findIndex(
+      downloader => downloader.ref?.provider === "native",
+    );
+    detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, jDownloader);
+  }
   const snapshotCustom = new Map(
     (state.snapshot?.downloaders || [])
       .filter(downloader => downloader.custom)
@@ -747,7 +745,19 @@ function renderManagers() {
         downloader.name,
       );
       configure.disabled = state.busy || !state.service;
-      actions.append(configure);
+      const remove = customActionButton(
+        "downloadit-remove-built-in",
+        "data-remove-built-in",
+        downloader.ref.id,
+        "\u00d7",
+        downloader.name,
+      );
+      const protocol = getBuiltInProtocolSnapshot(downloader.ref.id);
+      remove.disabled = state.busy || Boolean(protocol?.locks.enabled) || Boolean(
+        state.snapshot?.defaultManagerLocked &&
+        downloader.key === state.draft?.defaultManager
+      );
+      actions.append(configure, remove);
       row.append(actions);
     } else if (downloader.custom) {
       const actions = document.createElement("span");
@@ -1066,7 +1076,9 @@ async function refreshManagers() {
   clearFeedback();
   render();
   try {
-    await state.service.refreshManagers({ persistDefault: false });
+    const refresh = state.service.refreshManagers({ persistDefault: false });
+    watchBuiltInRefresh();
+    await refresh;
     state.snapshot = state.service.readSettings();
     syncUntouchedDefaultManager();
     state.scanState = "success";
@@ -1284,9 +1296,12 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   const builtInProtocol = kind === "builtin" && BUILT_IN_PROTOCOLS.some(
     protocol => protocol.id === id,
   ) ? id : BUILT_IN_PROTOCOLS[0]?.id || "";
+  const builtInEnabled = Boolean(
+    state.draft?.builtInProtocols?.[builtInProtocol]?.enabled,
+  );
   state.editor = {
     kind,
-    editingKind: id ? kind : "",
+    editingKind: id || (kind === "builtin" && builtInEnabled) ? kind : "",
     existingId: existing?.id || "",
     builtInProtocol,
     downloader,
@@ -1403,13 +1418,20 @@ function renderDownloadToolEditor() {
   setLocalized(
     document.getElementById("tool-editor-save"),
     state.editor.kind === "builtin"
-      ? "downloadit-tool-editor-save-built-in"
+      ? state.editor.editingKind === "builtin"
+        ? "downloadit-tool-editor-save-built-in"
+        : "downloadit-tool-editor-add"
       : editingCustom
         ? "downloadit-tool-editor-save"
         : "downloadit-tool-editor-add",
   );
   document.getElementById("tool-editor-save").disabled =
-    state.editor.kind === "custom" && customBlocked;
+    (state.editor.kind === "custom" && customBlocked) ||
+    (
+      state.editor.kind === "builtin" &&
+      !state.draft.builtInProtocols[state.editor.builtInProtocol]?.enabled &&
+      Boolean(getBuiltInProtocolSnapshot(state.editor.builtInProtocol)?.locks.enabled)
+    );
   renderEditorType();
   renderJDownloaderEditorState();
 }
@@ -1443,6 +1465,7 @@ function renderJDownloaderEditorState() {
   try {
     available = state.service.createJDownloaderDescriptor({
       ...state.draft.builtInProtocols[JDOWNLOADER_PROVIDER],
+      enabled: true,
       endpoint: endpoint.value,
       launchPath: launchPath.value,
       autoLaunch: autoLaunch.checked,
@@ -1564,6 +1587,7 @@ function saveDownloadToolEditor() {
       state.draft.builtInProtocols[protocol] = {
         ...state.draft.builtInProtocols[protocol],
         ...settings,
+        enabled: true,
       };
       closeDownloadToolEditor();
       clearFeedback();
@@ -1614,6 +1638,61 @@ async function removeCustomDownloader(id) {
   renderedManagerKeys = null;
   clearFeedback();
   render();
+}
+
+async function removeBuiltInDownloader(id) {
+  const protocol = BUILT_IN_PROTOCOLS.find(entry => entry.id === id);
+  const settings = state.draft?.builtInProtocols?.[id];
+  if (!protocol || !settings?.enabled) {
+    return;
+  }
+  const message = await document.l10n.formatValue(
+    "downloadit-confirm-remove-built-in",
+    { name: protocol.name },
+  );
+  if (!window.confirm(message)) {
+    return;
+  }
+  const removedKey = state.service.createJDownloaderDescriptor(settings).key;
+  settings.enabled = false;
+  if (state.draft.defaultManager === removedKey) {
+    const fallback = draftDownloaders().find(downloader => downloader.available);
+    state.draft.defaultManager = fallback?.key || "";
+    state.defaultManagerTouched = true;
+  }
+  renderedManagerKeys = null;
+  clearFeedback();
+  render();
+}
+
+function watchBuiltInRefresh() {
+  const refresh = state.service?.builtInRefreshPromise;
+  if (!refresh || refresh === observedBuiltInRefresh) {
+    return;
+  }
+  observedBuiltInRefresh = refresh;
+  const finish = () => {
+    if (observedBuiltInRefresh === refresh) {
+      observedBuiltInRefresh = null;
+    }
+    watchBuiltInRefresh();
+  };
+  refresh.then(
+    () => {
+      try {
+        if (state.service && !window.closed) {
+          state.snapshot = state.service.readSettings();
+          renderedManagerKeys = null;
+          render();
+        }
+      } catch (error) {
+        console.error("DownloadIt: built-in protocol state refresh failed", error);
+      }
+    },
+    error => {
+      console.error("DownloadIt: built-in protocol refresh failed", error);
+    },
+  ).then(finish, finish);
 }
 
 function toggleCustomDownloader(id) {
@@ -1845,6 +1924,7 @@ async function init() {
       state.draft = createSettingsState(state.snapshot);
     }
     render();
+    watchBuiltInRefresh();
   } catch (error) {
     console.error("DownloadIt: settings initialization failed", error);
   }

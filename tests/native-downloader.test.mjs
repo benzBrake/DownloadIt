@@ -489,10 +489,13 @@ test("built-in protocol settings use a UI view while persisting through provider
     ref: { provider: "jdownloader", id: "jdownloader" },
     singleton: true,
   }]);
+  assert.equal(initial.builtInProtocols[0].settings.enabled, false);
+  assert.equal(service.listJDownloaderDownloaders().length, 0);
 
   const snapshot = await service.applySettings({
     builtInProtocols: {
       jdownloader: {
+        enabled: true,
         endpoint: "http://localhost:9666/flashgot",
         launchPath: "C:\\JD\\JDownloader.exe",
         autoLaunch: false,
@@ -501,14 +504,99 @@ test("built-in protocol settings use a UI view while persisting through provider
   });
 
   assert.equal(
+    preferenceValues.get("downloadit.jdownloader.enabled"),
+    true,
+  );
+  assert.equal(
     preferenceValues.get("downloadit.jdownloader.endpoint"),
     "http://localhost:9666/flashgot",
   );
   assert.equal(snapshot.builtInProtocols[0].settings.autoLaunch, false);
+  assert.equal(snapshot.builtInProtocols[0].settings.enabled, true);
+  assert.equal(service.listJDownloaderDownloaders().length, 1);
   assert.equal(snapshot.customDownloaders.downloaders.length, 0);
+  service.flashGotManagers = ["External"];
+  assert.equal(service.readSettings().detectedManagerCount, 1);
 });
 
-test("manager refresh counts available JDownloader and FlashGot providers", async () => {
+test("JDownloader legacy settings migrate to enabled until explicitly disabled", () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+
+  assert.equal(service.getJDownloaderSettings().enabled, false);
+  preferenceValues.set(
+    "downloadit.jdownloader.endpoint",
+    "http://localhost:9777/flashgot",
+  );
+  assert.equal(service.getJDownloaderSettings().enabled, true);
+  preferenceValues.set("downloadit.jdownloader.enabled", false);
+  assert.equal(service.getJDownloaderSettings().enabled, false);
+
+  preferenceValues.clear();
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "jdownloader", id: "jdownloader" }),
+  );
+  assert.equal(service.getJDownloaderSettings().enabled, true);
+});
+
+test("removing JDownloader clears its configuration and replaces its default", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  preferenceValues.set("downloadit.jdownloader.enabled", true);
+  preferenceValues.set(
+    "downloadit.jdownloader.endpoint",
+    "https://example.com/not-loopback",
+  );
+  preferenceValues.set(
+    "downloadit.jdownloader.launchPath",
+    "C:\\Missing\\JDownloader.exe",
+  );
+  preferenceValues.set("downloadit.jdownloader.autoLaunch", false);
+  preferenceValues.set(
+    "downloadit.jdownloader.detectedPath",
+    "C:\\JD\\JDownloader.jar",
+  );
+  preferenceValues.set(
+    "downloadit.jdownloader.detectedJavaArgs",
+    '["-Xmx512m"]',
+  );
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "jdownloader", id: "jdownloader" }),
+  );
+  const service = createSettingsService();
+  service.jDownloaderOnline = true;
+
+  const snapshot = await service.applySettings({
+    builtInProtocols: {
+      jdownloader: {
+        enabled: false,
+      },
+    },
+  });
+
+  assert.equal(preferenceValues.get("downloadit.jdownloader.enabled"), false);
+  for (const preference of [
+    "downloadit.jdownloader.endpoint",
+    "downloadit.jdownloader.launchPath",
+    "downloadit.jdownloader.autoLaunch",
+    "downloadit.jdownloader.detectedPath",
+    "downloadit.jdownloader.detectedJavaArgs",
+  ]) {
+    assert.equal(preferenceValues.has(preference), false);
+  }
+  assert.deepEqual(snapshot.defaultDownloader.ref, {
+    provider: "native",
+    id: "firefox",
+  });
+  assert.equal(snapshot.builtInProtocols[0].settings.enabled, false);
+  assert.equal(service.listJDownloaderDownloaders().length, 0);
+  assert.equal(service.jDownloaderOnline, false);
+});
+
+test("manager refresh skips disabled built-in protocols", async () => {
   preferenceValues.clear();
   const service = createService();
   const refreshes = [];
@@ -548,9 +636,47 @@ test("manager refresh counts available JDownloader and FlashGot providers", asyn
 
   assert.deepEqual(
     await service.refreshManagers({ persistDefault: false }),
-    ["JDownloader", "External"],
+    ["External"],
   );
+  assert.deepEqual(refreshes, ["flashgot"]);
+});
+
+test("manager refresh probes enabled built-ins without waiting or failing FlashGot", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.jdownloader.enabled", true);
+  const service = createService();
+  const refreshes = [];
+  let rejectJDownloader;
+  const jDownloaderRefresh = new Promise((_resolve, reject) => {
+    rejectJDownloader = reject;
+  });
+  service.providers = {
+    refresh(provider) {
+      refreshes.push(provider);
+      return provider === "jdownloader" ? jDownloaderRefresh : Promise.resolve();
+    },
+    listDownloaders() {
+      return [{
+        ref: { provider: "flashgot", id: "External" },
+        name: "External",
+        custom: false,
+        available: true,
+      }];
+    },
+  };
+
+  const managerRefresh = service.refreshManagers({ persistDefault: false });
+  const builtInRefresh = service.builtInRefreshPromise;
+  assert.ok(builtInRefresh);
+  assert.deepEqual(await managerRefresh, ["External"]);
   assert.deepEqual(refreshes, ["jdownloader", "flashgot"]);
+  assert.equal(service.builtInRefreshPromise, builtInRefresh);
+
+  rejectJDownloader(new Error("offline"));
+  const results = await builtInRefresh;
+  assert.equal(results[0].status, "rejected");
+  assert.equal(results[0].reason.message, "offline");
+  assert.equal(service.builtInRefreshPromise, null);
 });
 
 test("JDownloader launch resolution prioritizes manual paths and safe Java candidates", () => {
@@ -821,7 +947,7 @@ test("JDownloader requests set Referer through nsIReferrerInfo", async () => {
   }
 });
 
-test("JDownloader draft tests and stale endpoint probes have no persistent side effects", async () => {
+test("JDownloader draft tests and stale or disabled probes have no persistent side effects", async () => {
   const service = createService();
   let probeOptions;
   service.probeJDownloader = async options => {
@@ -838,8 +964,9 @@ test("JDownloader draft tests and stale endpoint probes have no persistent side 
   });
 
   service.probeJDownloader = DownloadItService.prototype.probeJDownloader;
+  let enabled = true;
   let configuredEndpoint = "http://127.0.0.1:9666/flashgot";
-  service.getJDownloaderSettings = () => ({ endpoint: configuredEndpoint });
+  service.getJDownloaderSettings = () => ({ enabled, endpoint: configuredEndpoint });
   service.jDownloaderOnline = false;
   service.jDownloaderProbePromise = null;
   service.jDownloaderProbeEndpoint = "";
@@ -853,12 +980,25 @@ test("JDownloader draft tests and stale endpoint probes have no persistent side 
     storedDiscovery = value;
   };
   const pending = service.probeJDownloader();
-  configuredEndpoint = "http://localhost:9777/flashgot";
+  enabled = false;
   finishRequest({
     status: 200,
     text: "C:\\JD\\JDownloader.jar\njava -Xmx512m -jar C:\\JD\\JDownloader.jar",
   });
   await pending;
+  assert.equal(storedDiscovery, null);
+  assert.equal(service.jDownloaderOnline, false);
+  assert.equal(service.jDownloaderProbePromise, null);
+
+  enabled = true;
+  configuredEndpoint = "http://127.0.0.1:9666/flashgot";
+  const staleEndpoint = service.probeJDownloader();
+  configuredEndpoint = "http://localhost:9777/flashgot";
+  finishRequest({
+    status: 200,
+    text: "C:\\JD\\JDownloader.jar\njava -Xmx512m -jar C:\\JD\\JDownloader.jar",
+  });
+  await staleEndpoint;
   assert.equal(storedDiscovery, null);
   assert.equal(service.jDownloaderOnline, false);
   assert.equal(service.jDownloaderProbePromise, null);

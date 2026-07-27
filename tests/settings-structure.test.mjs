@@ -164,6 +164,7 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
 
   for (const preference of [
     "downloadit.autoStartTasks",
+    "downloadit.jdownloader.enabled",
     "downloadit.jdownloader.endpoint",
     "downloadit.jdownloader.launchPath",
     "downloadit.jdownloader.autoLaunch",
@@ -199,7 +200,12 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
   assert.match(downloaders, /url\.search/);
   assert.match(downloaders, /params\.set\("autostart"/);
   assert.match(downloaders, /jdownloader-mixed-post-data/);
-  assert.match(script, /createJDownloaderDescriptor\(draft\)/);
+  assert.match(script, /createJDownloaderDescriptor\(jDownloaderDraft\)/);
+  assert.match(script, /data-remove-built-in/);
+  assert.match(script, /removeBuiltInDownloader/);
+  assert.match(service, /refreshConfiguredBuiltInProtocols/);
+  assert.match(service, /Promise\.allSettled\(probes\)/);
+  assert.match(script, /watchBuiltInRefresh/);
   assert.match(script, /filter: "\*\.exe;\*\.jar"/);
   assert.match(script, /includeAllFiles: false/);
   assert.match(markup, /id="jdownloader-launch-path"[^>]+readonly="readonly"/);
@@ -232,6 +238,7 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
     for (const text of [
       "jdownloader:jdownloader",
       "downloadit.autoStartTasks",
+      "downloadit.jdownloader.enabled",
       "downloadit.jdownloader.endpoint",
       "downloadit.jdownloader.launchPath",
       "downloadit.jdownloader.autoLaunch",
@@ -303,6 +310,8 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(script, /startHidden: document\.getElementById\("custom-start-hidden"\)\.checked/);
   assert.match(script, /function openDownloadToolEditor\(kind = "builtin"/);
   assert.match(script, /state\.draft\.builtInProtocols\[protocol\] =/);
+  assert.match(script, /enabled: true/);
+  assert.match(script, /settings\.enabled = false/);
   assert.match(script, /kind === "custom" && customBlocked/);
   assert.match(
     script,

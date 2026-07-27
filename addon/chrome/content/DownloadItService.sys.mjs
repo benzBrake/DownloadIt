@@ -121,6 +121,7 @@ const PREF_AUTO_EXTENSIONS = "downloadit.autoExtensions";
 const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 const PREF_LINK_GROUPS = "downloadit.linkGroups";
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
+const PREF_JDOWNLOADER_ENABLED = "downloadit.jdownloader.enabled";
 const PREF_JDOWNLOADER_ENDPOINT = "downloadit.jdownloader.endpoint";
 const PREF_JDOWNLOADER_LAUNCH_PATH = "downloadit.jdownloader.launchPath";
 const PREF_JDOWNLOADER_AUTO_LAUNCH = "downloadit.jdownloader.autoLaunch";
@@ -242,6 +243,7 @@ export class DownloadItService {
     this.downloadDialogWatchers = new Map();
     this.temporaryFiles = new Set();
     this.refreshPromise = null;
+    this.builtInRefreshPromise = null;
     this.aria2StartupPromises = new Map();
     this.jDownloaderOnline = false;
     this.jDownloaderProbePromise = null;
@@ -315,7 +317,7 @@ export class DownloadItService {
         provider: JDOWNLOADER_PROVIDER,
         listDownloaders: () => this.listJDownloaderDownloaders(),
         getDownloader: id => id === JDOWNLOADER_DOWNLOADER_ID
-          ? this.createJDownloaderDescriptor()
+          ? this.listJDownloaderDownloaders()[0] || null
           : null,
         download: (id, task, runtimeContext, options) =>
           this.downloadViaJDownloader(id, task, options),
@@ -371,18 +373,15 @@ export class DownloadItService {
             : [],
         }
       : currentSettings;
-    let available = this.jDownloaderOnline &&
-      (!settingsOverride || sameEndpoint);
-    let unavailableReason = "";
-    if (!available) {
-      try {
-        normalizeJDownloaderEndpoint(settings.endpoint);
-        available = settings.autoLaunch && Boolean(
-          this.resolveJDownloaderLaunch(settings, { clearInvalidCache: false }),
-        );
-      } catch (error) {
-        unavailableReason = error?.code || "unavailable";
-      }
+    let available = false;
+    let unavailableReason = settings.enabled ? "" : "disabled";
+    try {
+      const normalized = this.normalizeJDownloaderSettings(settings, {
+        requireExistingPath: false,
+      });
+      available = normalized.enabled;
+    } catch (error) {
+      unavailableReason = error?.code || "unavailable";
     }
     return this.createDownloaderDescriptor({
       ref: createDownloaderRef(
@@ -392,7 +391,7 @@ export class DownloadItService {
       name: "JDownloader",
       type: "jdownloader",
       custom: false,
-      enabled: true,
+      enabled: Boolean(settings.enabled),
       available,
       unavailableReason: available ? "" : unavailableReason || "unavailable",
       capabilities: getJDownloaderCapabilities(),
@@ -400,7 +399,8 @@ export class DownloadItService {
   }
 
   listJDownloaderDownloaders() {
-    return [this.createJDownloaderDescriptor()];
+    const downloader = this.createJDownloaderDescriptor();
+    return downloader.enabled ? [downloader] : [];
   }
 
   listFlashGotDownloaders() {
@@ -636,6 +636,7 @@ export class DownloadItService {
       ));
     } catch {}
     return {
+      enabled: this.isJDownloaderEnabled(),
       endpoint: Services.prefs.getStringPref(
         PREF_JDOWNLOADER_ENDPOINT,
         JDOWNLOADER_DEFAULT_ENDPOINT,
@@ -659,10 +660,30 @@ export class DownloadItService {
 
   getJDownloaderLocks() {
     return {
+      enabled: Services.prefs.prefIsLocked(PREF_JDOWNLOADER_ENABLED),
       endpoint: Services.prefs.prefIsLocked(PREF_JDOWNLOADER_ENDPOINT),
       launchPath: Services.prefs.prefIsLocked(PREF_JDOWNLOADER_LAUNCH_PATH),
       autoLaunch: Services.prefs.prefIsLocked(PREF_JDOWNLOADER_AUTO_LAUNCH),
     };
+  }
+
+  isJDownloaderEnabled() {
+    if (
+      Services.prefs.prefHasUserValue(PREF_JDOWNLOADER_ENABLED) ||
+      Services.prefs.prefIsLocked(PREF_JDOWNLOADER_ENABLED)
+    ) {
+      return Services.prefs.getBoolPref(PREF_JDOWNLOADER_ENABLED, false);
+    }
+    if (this.configuredDefaultRef?.provider === JDOWNLOADER_PROVIDER) {
+      return true;
+    }
+    return [
+      PREF_JDOWNLOADER_ENDPOINT,
+      PREF_JDOWNLOADER_LAUNCH_PATH,
+      PREF_JDOWNLOADER_AUTO_LAUNCH,
+      PREF_JDOWNLOADER_DETECTED_PATH,
+      PREF_JDOWNLOADER_DETECTED_JAVA_ARGS,
+    ].some(preference => Services.prefs.prefHasUserValue(preference));
   }
 
   getBuiltInProtocols() {
@@ -692,6 +713,7 @@ export class DownloadItService {
       throw new DownloadItError("jdownloader-launch-path-invalid");
     }
     return {
+      enabled: value.enabled !== false,
       endpoint,
       launchPath,
       autoLaunch: value.autoLaunch !== false,
@@ -711,6 +733,23 @@ export class DownloadItService {
     ) {
       Services.prefs.clearUserPref(PREF_JDOWNLOADER_DETECTED_JAVA_ARGS);
     }
+  }
+
+  clearJDownloaderConfiguration() {
+    for (const preference of [
+      PREF_JDOWNLOADER_ENDPOINT,
+      PREF_JDOWNLOADER_LAUNCH_PATH,
+      PREF_JDOWNLOADER_AUTO_LAUNCH,
+    ]) {
+      if (
+        !Services.prefs.prefIsLocked(preference) &&
+        Services.prefs.prefHasUserValue(preference)
+      ) {
+        Services.prefs.clearUserPref(preference);
+      }
+    }
+    this.clearJDownloaderDiscovery();
+    this.jDownloaderOnline = false;
   }
 
   storeJDownloaderDiscovery(discovery) {
@@ -983,8 +1022,7 @@ export class DownloadItService {
         ? { ...this.defaultDownloader }
         : null,
       detectedManagerCount: this.downloaders.filter(downloader =>
-        !downloader.custom &&
-        downloader.ref.provider !== NATIVE_PROVIDER &&
+        downloader.ref.provider === FLASHGOT_PROVIDER &&
         downloader.available
       ).length,
       customDownloaders: cloneCustomDownloaderDocument(
@@ -1066,11 +1104,19 @@ export class DownloadItService {
     const requestedJDownloaderInput = builtInJDownloader ?? jdownloader;
     const requestedJDownloader = requestedJDownloaderInput == null
       ? {
+          enabled: currentJDownloader.enabled,
           endpoint: currentJDownloader.endpoint,
           launchPath: currentJDownloader.launchPath,
           autoLaunch: currentJDownloader.autoLaunch,
         }
-      : this.normalizeJDownloaderSettings(requestedJDownloaderInput);
+      : requestedJDownloaderInput.enabled === false
+        ? {
+            enabled: false,
+            endpoint: currentJDownloader.endpoint,
+            launchPath: currentJDownloader.launchPath,
+            autoLaunch: currentJDownloader.autoLaunch,
+          }
+        : this.normalizeJDownloaderSettings(requestedJDownloaderInput);
     const currentIDMBridgeEnabled = Services.prefs.getBoolPref(
       PREF_IDM_BRIDGE,
       false,
@@ -1115,12 +1161,16 @@ export class DownloadItService {
     const configuredCustomInvalidated = customDownloadersChanged &&
       configuredDefaultRef?.provider === CUSTOM_PROVIDER &&
       (!configuredCustomEntry || !configuredCustomEntry.enabled);
+    const configuredJDownloaderInvalidated =
+      configuredDefaultRef?.provider === JDOWNLOADER_PROVIDER &&
+      !requestedJDownloader.enabled;
     const defaultManagerLocked = Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER);
     if (
       defaultManagerLocked &&
       (
         (defaultManagerRequested && manager !== configuredDefaultKey) ||
-        configuredCustomInvalidated
+        configuredCustomInvalidated ||
+        configuredJDownloaderInvalidated
       )
     ) {
       throw new Error("The default download manager preference is locked");
@@ -1138,7 +1188,7 @@ export class DownloadItService {
       throw new Error("The task start preference is locked");
     }
     const jDownloaderLocks = this.getJDownloaderLocks();
-    for (const key of ["endpoint", "launchPath", "autoLaunch"]) {
+    for (const key of ["enabled", "endpoint", "launchPath", "autoLaunch"]) {
       if (jDownloaderLocks[key] && requestedJDownloader[key] !== currentJDownloader[key]) {
         throw new Error(`The JDownloader ${key} preference is locked`);
       }
@@ -1173,10 +1223,14 @@ export class DownloadItService {
       if (defaultManagerRequested) {
         nextDefault = requestedDownloader;
         updateDefault = manager !== configuredDefaultKey;
-      } else if (configuredCustomInvalidated) {
+      } else if (configuredCustomInvalidated || configuredJDownloaderInvalidated) {
         nextDefault = [
           ...this.listFlashGotDownloaders(),
           ...this.listCustomDownloaders(effectiveCustomDownloaders),
+          ...(requestedJDownloader.enabled
+            ? [this.createJDownloaderDescriptor(requestedJDownloader)]
+            : []),
+          ...this.listNativeDownloaders(),
         ].find(downloader => downloader.available) || null;
         updateDefault = true;
       }
@@ -1197,25 +1251,37 @@ export class DownloadItService {
     if (requestedAutoStartTasks !== currentAutoStartTasks) {
       Services.prefs.setBoolPref(PREF_AUTO_START_TASKS, requestedAutoStartTasks);
     }
-    if (requestedJDownloader.endpoint !== currentJDownloader.endpoint) {
-      Services.prefs.setStringPref(
-        PREF_JDOWNLOADER_ENDPOINT,
-        requestedJDownloader.endpoint,
-      );
-      this.clearJDownloaderDiscovery();
-      this.jDownloaderOnline = false;
-    }
-    if (requestedJDownloader.launchPath !== currentJDownloader.launchPath) {
-      Services.prefs.setStringPref(
-        PREF_JDOWNLOADER_LAUNCH_PATH,
-        requestedJDownloader.launchPath,
-      );
-    }
-    if (requestedJDownloader.autoLaunch !== currentJDownloader.autoLaunch) {
+    if (requestedJDownloader.enabled !== currentJDownloader.enabled) {
       Services.prefs.setBoolPref(
-        PREF_JDOWNLOADER_AUTO_LAUNCH,
-        requestedJDownloader.autoLaunch,
+        PREF_JDOWNLOADER_ENABLED,
+        requestedJDownloader.enabled,
       );
+    }
+    if (!requestedJDownloader.enabled) {
+      if (currentJDownloader.enabled) {
+        this.clearJDownloaderConfiguration();
+      }
+    } else {
+      if (requestedJDownloader.endpoint !== currentJDownloader.endpoint) {
+        Services.prefs.setStringPref(
+          PREF_JDOWNLOADER_ENDPOINT,
+          requestedJDownloader.endpoint,
+        );
+        this.clearJDownloaderDiscovery();
+        this.jDownloaderOnline = false;
+      }
+      if (requestedJDownloader.launchPath !== currentJDownloader.launchPath) {
+        Services.prefs.setStringPref(
+          PREF_JDOWNLOADER_LAUNCH_PATH,
+          requestedJDownloader.launchPath,
+        );
+      }
+      if (requestedJDownloader.autoLaunch !== currentJDownloader.autoLaunch) {
+        Services.prefs.setBoolPref(
+          PREF_JDOWNLOADER_AUTO_LAUNCH,
+          requestedJDownloader.autoLaunch,
+        );
+      }
     }
     if (requestedIDMBridgeEnabled !== currentIDMBridgeEnabled) {
       Services.prefs.setBoolPref(
@@ -1529,7 +1595,7 @@ export class DownloadItService {
   }
 
   async refreshManagers({ persistDefault = true } = {}) {
-    await this.providers.refresh(JDOWNLOADER_PROVIDER);
+    this.refreshConfiguredBuiltInProtocols();
     await this.providers.refresh(FLASHGOT_PROVIDER, {
       persistDefault: false,
     });
@@ -1548,11 +1614,41 @@ export class DownloadItService {
     }
     return this.downloaders
       .filter(downloader =>
-        !downloader.custom &&
-        downloader.ref.provider !== NATIVE_PROVIDER &&
+        downloader.ref.provider === FLASHGOT_PROVIDER &&
         downloader.available
       )
       .map(downloader => downloader.name);
+  }
+
+  refreshConfiguredBuiltInProtocols() {
+    if (this.builtInRefreshPromise) {
+      return this.builtInRefreshPromise;
+    }
+    const configured = BUILT_IN_PROTOCOLS.filter(protocol => {
+      try {
+        if (protocol.id === JDOWNLOADER_PROVIDER) {
+          return this.getJDownloaderSettings().enabled;
+        }
+      } catch {}
+      return false;
+    });
+    if (!configured.length) {
+      return null;
+    }
+    const probes = configured.map(protocol => {
+      try {
+        return Promise.resolve(this.providers.refresh(protocol.provider));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    });
+    const promise = Promise.allSettled(probes).finally(() => {
+      if (this.builtInRefreshPromise === promise) {
+        this.builtInRefreshPromise = null;
+      }
+    });
+    this.builtInRefreshPromise = promise;
+    return promise;
   }
 
   async refreshFlashGotManagers({ persistDefault = true } = {}) {
@@ -1579,17 +1675,11 @@ export class DownloadItService {
   }
 
   async refreshJDownloader() {
-    try {
-      await this.probeJDownloader({
-        endpoint: this.getJDownloaderSettings().endpoint,
-        persist: true,
-        updateState: true,
-      });
-      return true;
-    } catch {
-      this.jDownloaderOnline = false;
-      return false;
+    const settings = this.getJDownloaderSettings();
+    if (!settings.enabled) {
+      return null;
     }
+    return this.probeJDownloader({ endpoint: settings.endpoint });
   }
 
   async probeJDownloader({
@@ -1608,9 +1698,9 @@ export class DownloadItService {
     }
     const isConfiguredEndpoint = () => {
       try {
-        return normalizedEndpoint === normalizeJDownloaderEndpoint(
-          this.getJDownloaderSettings().endpoint,
-        );
+        const settings = this.getJDownloaderSettings();
+        return settings.enabled &&
+          normalizedEndpoint === normalizeJDownloaderEndpoint(settings.endpoint);
       } catch {
         return false;
       }
@@ -2356,6 +2446,9 @@ export class DownloadItService {
     let settings;
     try {
       const currentSettings = this.getJDownloaderSettings();
+      if (currentSettings.enabled === false) {
+        throw new DownloadItError("jdownloader-unavailable");
+      }
       settings = {
         ...currentSettings,
         ...this.normalizeJDownloaderSettings(

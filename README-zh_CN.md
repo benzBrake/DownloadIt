@@ -117,26 +117,27 @@ DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中�
 
 ## 配置
 
-DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 DownloadIt 批量下载”可为当前标签页打开批量链接选择器；选择可用工具可立即切换默认下载工具；“重新检测下载工具”会刷新已检测工具列表；面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
+DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 DownloadIt 批量下载”可为当前标签页打开批量链接选择器；选择可用工具可立即切换默认下载工具；“刷新下载工具”会刷新 FlashGot 检测结果，同时在后台并发探测已启用的内建协议，内建 HTTP 超时不会延迟或导致 FlashGot 检测失败；面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
 
 设置页的已发现工具列表会显示当前 DownloadIt 集成路径的能力元数据：`+` 表示支持，`-` 表示不支持，`?` 表示目前尚不明确。标签分别表示 POST 请求正文、Cookie 处理、DownloadIt 批量提交、由调用方指定下载目录，以及控制提交任务是否自动开始。native provider 使用 Firefox 自己的请求上下文，FlashGot 能力取决于随附桥接程序实现的集成，JDownloader 能力取决于其回环协议，自定义命令的能力根据参数占位符推导，aria2 的能力则取决于 JSON-RPC provider。这些标签描述的是 DownloadIt 能否通过当前路径传递相应数据，并不代表下载器本身提供的全部功能。
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
-下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader 是单例，列表中的配置操作会重新打开同一份配置，不会创建重复条目。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
+下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader 是单例：添加操作会启用唯一的配置条目，配置操作会重新打开该条目，移除后会在应用草稿时重置已保存设置和检测缓存。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
 | `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"jdownloader","id":"jdownloader"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
 | `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前仅 JDownloader 使用。 |
+| `downloadit.jdownloader.enabled` | 布尔值 | 控制是否已配置并显示 JDownloader 内建协议集成。新安装默认为 `false`；已有 JDownloader 偏好或将 JDownloader 设为默认工具的旧配置会迁移为启用状态，直到用户明确移除。 |
 | `downloadit.jdownloader.endpoint` | 字符串 | JDownloader FlashGot 端点；默认值为 `http://127.0.0.1:9666/flashgot`。 |
 | `downloadit.jdownloader.launchPath` | 字符串 | 可选的 JDownloader `.exe` 或 `.jar` 绝对路径；手动值优先于检测结果。 |
 | `downloadit.jdownloader.autoLaunch` | 布尔值 | 端点不可用时启动 JDownloader；默认值为 `true`。 |
 | `downloadit.jdownloader.detectedPath` | 字符串 | 成功 GET 探测返回的安装路径，由扩展自动维护。 |
 | `downloadit.jdownloader.detectedJavaArgs` | 字符串 | 成功 GET 探测返回并经过验证的 JVM 参数 JSON 数组，由扩展自动维护。 |
 | `downloadit.idmBridgeEnabled` | 布尔值 | 接管兼容的 IDM 本地 HTTP 请求并发送到当前默认下载器；默认值为 `false`。 |
-| `downloadit.detectedManagers` | 字符串 | 下载管理器检测缓存，由扩展自动维护。 |
+| `downloadit.detectedManagers` | 字符串 | FlashGot 下载管理器检测缓存，由扩展自动维护。 |
 | `downloadit.autoExtensions` | 字符串 | 应自动发送到当前默认下载工具的文件扩展名 JSON 数组。 |
 | `downloadit.linkGroups` | 字符串 | 内置及自定义批量链接后缀分组的版本化 JSON 配置。 |
 
@@ -146,7 +147,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 ### JDownloader provider
 
-`jdownloader:jdownloader` provider 直接连接 JDownloader 的 FlashGot 兼容端点。下载工具列表始终显示它的单例条目，可以从该条目或“添加下载工具”进入配置；当前 GET 探测成功，或启用自动启动且手动/缓存安装路径能解析为有效启动目标时，它才会进入可选下载器列表。端点位于编辑器的高级设置中，必须是 `localhost`、`127.0.0.0/8` 或 `::1` 上无认证信息的 HTTP 地址，不允许查询参数或 fragment，路径统一规范化为 `/flashgot`。请求禁止重定向，探测 GET 也会绕过 HTTP 缓存。
+`jdownloader:jdownloader` provider 直接连接 JDownloader 的 FlashGot 兼容端点。只有用户明确添加该集成，或从已有配置迁移时，下载工具列表才会显示它的单例条目；可以从该条目进入配置或将其移除。有效且已启用的配置会立即进入可选下载器列表。扩展启动和手动刷新下载工具时，DownloadIt 会在后台并发探测已启用的内建协议，从而更新 JDownloader 在线状态和安装缓存，同时不延迟 FlashGot 检测。不同 provider 的失败彼此隔离，同一已配置端点的并发探测会共享请求；请求结束时只有 JDownloader 仍处于启用状态且端点没有变化，结果才会保存。草稿连接测试和实际提交任务也可以探测端点。端点位于编辑器的高级设置中，必须是 `localhost`、`127.0.0.0/8` 或 `::1` 上无认证信息的 HTTP 地址，不允许查询参数或 fragment，路径统一规范化为 `/flashgot`。请求禁止重定向，探测 GET 也会绕过 HTTP 缓存。
 
 成功的 GET 响应必须恰好包含两个非空行：第一行是存在的绝对 `.jar` 或 `.exe` 路径，第二行是以同一路径结尾的 `java ... -jar` 命令。DownloadIt 不执行也不保存返回的命令，只保留经过验证的 `-Xms` 和 `-Xmx` 参数。手动启动路径优先于检测缓存；手动路径失效时会明确报错，不会退回缓存。修改端点会清除旧检测缓存。设置页的连接测试只探测当前草稿端点，不保存草稿、不改变在线状态，也不启动进程。
 

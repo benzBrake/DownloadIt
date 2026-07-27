@@ -83,7 +83,7 @@ downloadit-options =
 downloadit-no-manager =
     .label = No supported download manager was detected
 downloadit-refresh =
-    .label = Detect download managers again
+    .label = Refresh download managers
 downloadit-settings =
     .label = DownloadIt settings
 downloadit-download-failed = Could not send the link to { $manager }: { $error }
@@ -108,10 +108,11 @@ downloadit-remove-extension =
     .aria-label = Remove { $extension } from automatic downloads
 downloadit-refresh-done =
     { $count ->
-        [one] One supported download manager detected.
-       *[other] { $count } supported download managers detected.
+        [one] One FlashGot download manager detected.
+       *[other] { $count } FlashGot download managers detected.
     }
-downloadit-scan-failed = Could not detect download managers: { $error }
+    Configured built-in protocols refresh in the background.
+downloadit-scan-failed = Could not detect FlashGot download managers: { $error }
 downloadit-unsupported = This link type cannot be sent to DownloadIt.
 downloadit-panel-selection-error = Could not change the default download manager: { $error }
 
@@ -125,7 +126,7 @@ downloadit-nav-privacy = Request & privacy
 downloadit-nav-about = About / diagnostics
 downloadit-manager-kicker = 01 / runtime
 downloadit-manager-title = Download manager
-downloadit-manager-description = Choose the default download manager and inspect the managers available on this system.
+downloadit-manager-description = Choose the default download manager, manage configured integrations, and inspect FlashGot detection results.
 downloadit-auto-capture-kicker = 02 / interception rules
 downloadit-auto-capture-title = Auto-capture
 downloadit-auto-capture-description = Manage the remembered file types that DownloadIt sends directly to the current default manager.
@@ -144,18 +145,18 @@ downloadit-service-unavailable = Service unavailable
 downloadit-manager-count = { NUMBER($count) }
 downloadit-manager-count-label =
     { $count ->
-        [one] external manager available
-       *[other] external managers available
+        [one] FlashGot tool detected
+       *[other] FlashGot tools detected
     }
-downloadit-detection-idle = Current detection cache
-downloadit-detection-loading = Scanning for download managers...
+downloadit-detection-idle = Current FlashGot detection cache
+downloadit-detection-loading = Detecting FlashGot managers; configured built-in protocols refresh in the background...
 downloadit-detection-success =
     { $count ->
-        [one] Scan complete: one manager detected
-       *[other] Scan complete: { $count } managers detected
+        [one] FlashGot detection complete: one tool
+       *[other] FlashGot detection complete: { $count } tools
     }
-downloadit-detection-error = Scan failed: { $error }
-downloadit-no-managers = No supported download manager was detected
+downloadit-detection-error = FlashGot detection failed: { $error }
+downloadit-no-managers = No FlashGot download manager was detected
 downloadit-default-manager-eyebrow = default route
 downloadit-default-manager-title = Default download manager
 downloadit-default-manager-label = Default download manager
@@ -177,10 +178,10 @@ downloadit-jdownloader-test = Test connection
 downloadit-jdownloader-testing = Testing connection...
 downloadit-jdownloader-test-success = Connected to JDownloader at { $path }
 downloadit-jdownloader-test-failed = Connection failed: { $error }
-downloadit-jdownloader-status-ready = Ready for DownloadIt submissions
-downloadit-jdownloader-status-unavailable = Connection or launch path unavailable
+downloadit-jdownloader-status-ready = Configuration ready; the connection is checked when tested or used
+downloadit-jdownloader-status-unavailable = Configuration is incomplete or invalid
 downloadit-advanced-settings = Advanced settings
-downloadit-refresh-managers = Detect again
+downloadit-refresh-managers = Refresh download tools
 downloadit-available-eyebrow = integrations
 downloadit-available-title = Download tools
 downloadit-manager-default = default
@@ -405,12 +406,16 @@ downloadit-edit-custom =
 downloadit-configure-built-in =
     .title = Configure { $name }
     .aria-label = Configure { $name }
+downloadit-remove-built-in =
+    .title = Remove { $name }
+    .aria-label = Remove built-in downloader { $name }
 downloadit-remove-custom =
     .title = Remove { $name }
     .aria-label = Remove custom downloader { $name }
 downloadit-confirm-reload-custom = Discard unsaved custom-downloader changes and reload the file?
 downloadit-confirm-reset-custom = Replace the custom-downloader file with an empty configuration? The current file will be overwritten.
 downloadit-confirm-remove-custom = Remove the custom downloader “{ $name }” from the draft?
+downloadit-confirm-remove-built-in = Remove the built-in downloader “{ $name }” from the draft? Applying will reset its saved settings and detection cache.
 downloadit-custom-reloaded = Custom downloaders reloaded
 downloadit-custom-reset = Custom downloader configuration reset
 downloadit-browse-executable-title = Select downloader executable
