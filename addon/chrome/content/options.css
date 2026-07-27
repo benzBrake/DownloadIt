@@ -733,6 +733,11 @@ button {
   color: var(--warning);
 }
 
+.manager-badge.is-built-in {
+  border-color: var(--success);
+  color: var(--success);
+}
+
 .manager-badge.is-command {
   border-color: var(--line-strong);
   color: var(--muted);
@@ -799,7 +804,7 @@ button {
 }
 
 .icon-button[data-remove-custom]:hover:not(:disabled),
-#custom-editor-close:hover:not(:disabled) {
+#tool-editor-close:hover:not(:disabled) {
   border-color: var(--danger);
   color: var(--danger);
 }
@@ -1081,6 +1086,11 @@ button {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
 }
 
+.tool-editor-dialog {
+  width: min(760px, 100%);
+  height: min(760px, calc(100vh - 48px));
+}
+
 .editor-header,
 .editor-footer {
   display: flex;
@@ -1106,6 +1116,95 @@ button {
   min-height: 0;
   overflow-y: auto;
   padding: 20px 22px 24px;
+}
+
+.editor-kind-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.editor-kind-tab {
+  min-height: 48px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 680;
+}
+
+.editor-kind-tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+.editor-kind-tab:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.tool-editor-panel {
+  min-height: 420px;
+}
+
+.protocol-picker {
+  width: min(360px, 100%);
+}
+
+.protocol-status-line {
+  display: flex;
+  align-items: center;
+  min-height: 58px;
+  gap: 11px;
+  margin-bottom: 14px;
+  padding: 9px 2px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.protocol-status-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.protocol-status-copy strong {
+  font-size: 14px;
+}
+
+.protocol-status-copy span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.advanced-settings {
+  margin: 5px 0 18px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.advanced-settings summary {
+  min-height: 42px;
+  padding: 11px 2px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.advanced-settings summary:hover {
+  color: var(--accent);
+}
+
+.advanced-settings-body {
+  padding: 5px 2px 2px;
+}
+
+.advanced-settings-body .editor-field {
+  margin-bottom: 14px;
 }
 
 .editor-footer {
@@ -1184,19 +1283,23 @@ button {
 }
 
 .connection-row {
+  flex-wrap: wrap;
   min-height: 42px;
 }
 
-#aria2-test-state {
+#aria2-test-state,
+#jdownloader-test-state {
   color: var(--muted);
   font-size: 12px;
 }
 
-#aria2-test-state.is-success {
+#aria2-test-state.is-success,
+#jdownloader-test-state.is-success {
   color: var(--success);
 }
 
-#aria2-test-state.is-error {
+#aria2-test-state.is-error,
+#jdownloader-test-state.is-error {
   color: var(--danger);
 }
 
@@ -1305,5 +1408,35 @@ button {
 
   .change-state {
     align-self: stretch;
+  }
+
+  .editor-backdrop {
+    padding: 10px;
+  }
+
+  .tool-editor-dialog {
+    height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .editor-header,
+  .editor-footer,
+  .editor-scroll {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .editor-kind-tabs {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .input-action-row {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .input-action-row input {
+    flex-basis: 100%;
   }
 }

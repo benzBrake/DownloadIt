@@ -12,10 +12,12 @@ const { createXULElement } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItXUL.sys.mjs",
 );
 const {
+  BUILT_IN_PROTOCOLS,
   COMMAND_PLACEHOLDERS,
   COMMAND_TEMPLATE_PRESETS,
   DOWNLOADER_CAPABILITY_KEYS,
   getCustomDownloaderCapabilities,
+  JDOWNLOADER_PROVIDER,
   validateCustomDownloaderDocument,
 } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItDownloaders.sys.mjs",
@@ -104,6 +106,15 @@ const CUSTOM_ERROR_MESSAGES = {
   "aria2-http-error": "downloadit-error-aria2-http",
   "aria2-response-invalid": "downloadit-error-aria2-response",
   "aria2-rpc-error": "downloadit-error-aria2-rpc",
+  "jdownloader-endpoint-invalid": "downloadit-error-jdownloader-endpoint",
+  "jdownloader-unavailable": "downloadit-error-jdownloader-unavailable",
+  "jdownloader-discovery-invalid": "downloadit-error-jdownloader-discovery",
+  "jdownloader-http-error": "downloadit-error-jdownloader-http",
+  "jdownloader-launch-path-invalid": "downloadit-error-jdownloader-path",
+  "jdownloader-launch-failed": "downloadit-error-jdownloader-launch",
+  "jdownloader-start-timeout": "downloadit-error-jdownloader-start-timeout",
+  "jdownloader-submit-failed": "downloadit-error-jdownloader-submit",
+  "jdownloader-mixed-post-data": "downloadit-error-jdownloader-mixed-post",
 };
 
 const state = {
@@ -149,6 +160,13 @@ function createSettingsState(snapshot) {
   return {
     defaultManager: snapshot.defaultManager,
     omitCookies: snapshot.omitCookies,
+    autoStartTasks: snapshot.autoStartTasks,
+    builtInProtocols: Object.fromEntries(
+      snapshot.builtInProtocols.map(protocol => [
+        protocol.id,
+        clone(protocol.settings),
+      ]),
+    ),
     idmBridgeEnabled: snapshot.idmBridgeEnabled,
     autoExtensions: [...snapshot.autoExtensions],
     linkGroups: clone(snapshot.linkGroups),
@@ -183,6 +201,11 @@ function bindEvents() {
     clearFeedback();
     render();
   });
+  document.getElementById("auto-start-tasks").addEventListener("change", event => {
+    state.draft.autoStartTasks = event.target.checked;
+    clearFeedback();
+    render();
+  });
   document.getElementById("idm-bridge").addEventListener("change", event => {
     state.draft.idmBridgeEnabled = event.target.checked;
     clearFeedback();
@@ -201,16 +224,22 @@ function bindEvents() {
     "click",
     resetCustomDownloaders,
   );
-  document.getElementById("add-custom-downloader").addEventListener(
+  document.getElementById("add-download-tool").addEventListener(
     "click",
-    () => openCustomEditor(),
+    () => openDownloadToolEditor(),
   );
   document.getElementById("manager-list").addEventListener("click", event => {
+    const configureBuiltIn = event.target.closest("[data-configure-built-in]");
     const edit = event.target.closest("[data-edit-custom]");
     const remove = event.target.closest("[data-remove-custom]");
     const toggle = event.target.closest("[data-toggle-custom]");
-    if (edit) {
-      openCustomEditor(edit.dataset.editCustom);
+    if (configureBuiltIn) {
+      openDownloadToolEditor(
+        "builtin",
+        configureBuiltIn.dataset.configureBuiltIn,
+      );
+    } else if (edit) {
+      openDownloadToolEditor("custom", edit.dataset.editCustom);
     } else if (remove) {
       removeCustomDownloader(remove.dataset.removeCustom);
     } else if (toggle) {
@@ -274,6 +303,39 @@ function bindEvents() {
   for (const button of document.querySelectorAll("[data-custom-type]")) {
     button.addEventListener("click", () => setEditorType(button.dataset.customType));
   }
+  for (const button of document.querySelectorAll("[data-tool-kind]")) {
+    button.addEventListener("click", () => setEditorKind(button.dataset.toolKind));
+  }
+  document.getElementById("built-in-protocol").addEventListener(
+    "change",
+    event => {
+      if (!state.editor) {
+        return;
+      }
+      state.editor.builtInProtocol = event.target.value;
+      renderDownloadToolEditor();
+    },
+  );
+  document.getElementById("jdownloader-endpoint").addEventListener(
+    "input",
+    renderJDownloaderEditorState,
+  );
+  document.getElementById("jdownloader-auto-launch").addEventListener(
+    "change",
+    renderJDownloaderEditorState,
+  );
+  document.getElementById("browse-jdownloader-path").addEventListener(
+    "click",
+    browseJDownloaderPath,
+  );
+  document.getElementById("clear-jdownloader-path").addEventListener(
+    "click",
+    clearJDownloaderPath,
+  );
+  document.getElementById("test-jdownloader").addEventListener(
+    "click",
+    testJDownloader,
+  );
   document.getElementById("custom-aria2-autostart").addEventListener(
     "change",
     renderEditorType,
@@ -307,18 +369,18 @@ function bindEvents() {
     applyCommandTemplatePreset,
   );
   document.getElementById("test-aria2").addEventListener("click", testAria2);
-  document.getElementById("custom-editor-save").addEventListener(
+  document.getElementById("tool-editor-save").addEventListener(
     "click",
-    saveCustomEditor,
+    saveDownloadToolEditor,
   );
-  for (const id of ["custom-editor-close", "custom-editor-cancel"]) {
-    document.getElementById(id).addEventListener("click", closeCustomEditor);
+  for (const id of ["tool-editor-close", "tool-editor-cancel"]) {
+    document.getElementById(id).addEventListener("click", closeDownloadToolEditor);
   }
-  document.getElementById("custom-downloader-editor").addEventListener(
+  document.getElementById("download-tool-editor").addEventListener(
     "click",
     event => {
-      if (event.target.id === "custom-downloader-editor") {
-        closeCustomEditor();
+      if (event.target.id === "download-tool-editor") {
+        closeDownloadToolEditor();
       }
     },
   );
@@ -330,12 +392,12 @@ function bindEvents() {
       if (state.linkGroupEditor) {
         closeLinkGroupEditor();
       } else {
-        closeCustomEditor();
+        closeDownloadToolEditor();
       }
     } else if (event.key === "Tab") {
       trapEditorFocus(
         event,
-        state.linkGroupEditor ? "link-group-editor" : "custom-downloader-editor",
+        state.linkGroupEditor ? "link-group-editor" : "download-tool-editor",
       );
     }
   });
@@ -386,6 +448,7 @@ function render() {
 
   renderServiceState();
   renderManagers();
+  renderTaskStartSettings();
   renderAutoExtensions();
   renderLinkGroups();
   renderPrivacy();
@@ -442,9 +505,26 @@ function renderServiceState() {
 }
 
 function draftDownloaders() {
-  const detected = (state.snapshot?.downloaders || []).filter(
-    downloader => !downloader.custom,
-  );
+  const detected = (state.snapshot?.downloaders || [])
+    .filter(downloader => !downloader.custom)
+    .map(downloader => {
+      if (
+        downloader.ref?.provider !== JDOWNLOADER_PROVIDER ||
+        !state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER]
+      ) {
+        return downloader;
+      }
+      const draft = state.draft.builtInProtocols[JDOWNLOADER_PROVIDER];
+      try {
+        return state.service.createJDownloaderDescriptor(draft);
+      } catch {
+        return {
+          ...downloader,
+          available: false,
+          unavailableReason: "invalid-configuration",
+        };
+      }
+    });
   const snapshotCustom = new Map(
     (state.snapshot?.downloaders || [])
       .filter(downloader => downloader.custom)
@@ -476,6 +556,17 @@ function draftDownloaders() {
     };
   });
   return [...detected, ...custom];
+}
+
+function renderTaskStartSettings() {
+  const snapshot = state.snapshot;
+  const autoStartTasks = document.getElementById("auto-start-tasks");
+  const autoStartTasksLock = document.getElementById("auto-start-tasks-lock");
+
+  autoStartTasks.checked = Boolean(state.draft?.autoStartTasks);
+  autoStartTasks.disabled = state.busy || !snapshot ||
+    Boolean(snapshot?.autoStartTasksLocked);
+  autoStartTasksLock.hidden = !snapshot?.autoStartTasksLocked;
 }
 
 function renderManagers() {
@@ -583,8 +674,8 @@ function renderManagers() {
       });
     }
   }
-  document.getElementById("add-custom-downloader").disabled =
-    state.busy || customBlocked || !state.service;
+  document.getElementById("add-download-tool").disabled =
+    state.busy || !state.service;
   document.getElementById("reload-custom-downloaders").disabled =
     state.busy || !state.service;
   document.getElementById("retry-custom-downloaders").disabled =
@@ -620,7 +711,12 @@ function renderManagers() {
     identity.append(name, createManagerCapabilities(downloader.capabilities));
     row.append(dot, identity);
 
-    if (downloader.custom) {
+    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER) {
+      const builtInBadge = document.createElement("span");
+      builtInBadge.className = "manager-badge is-built-in";
+      setLocalized(builtInBadge, "downloadit-manager-built-in");
+      row.append(builtInBadge);
+    } else if (downloader.custom) {
       const customBadge = document.createElement("span");
       customBadge.className = "manager-badge is-custom";
       setLocalized(customBadge, "downloadit-manager-custom");
@@ -640,7 +736,20 @@ function renderManagers() {
         : "downloadit-manager-disabled");
       row.append(status);
     }
-    if (downloader.custom) {
+    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER) {
+      const actions = document.createElement("span");
+      actions.className = "manager-actions";
+      const configure = customActionButton(
+        "downloadit-configure-built-in",
+        "data-configure-built-in",
+        downloader.ref.id,
+        "\u2699",
+        downloader.name,
+      );
+      configure.disabled = state.busy || !state.service;
+      actions.append(configure);
+      row.append(actions);
+    } else if (downloader.custom) {
       const actions = document.createElement("span");
       actions.className = "manager-actions";
       actions.append(
@@ -683,7 +792,10 @@ function createManagerCapabilities(capabilities = {}) {
     label.setAttribute("data-l10n-attrs", "title,aria-label");
     setLocalized(
       label,
-      `downloadit-manager-capability-${capability}-${stateName}`,
+      `downloadit-manager-capability-${capability.replace(
+        /[A-Z]/g,
+        letter => `-${letter.toLowerCase()}`,
+      )}-${stateName}`,
     );
     chip.append(marker, label);
     container.append(chip);
@@ -915,6 +1027,12 @@ function localizedError(error) {
   if (/cookie preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-cookies");
   }
+  if (/task start preference is locked/i.test(message)) {
+    return localizedMessage("downloadit-error-locked-task-start");
+  }
+  if (/JDownloader .* preference is locked/i.test(message)) {
+    return localizedMessage("downloadit-error-locked-jdownloader");
+  }
   if (/automatic extension preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-extensions");
   }
@@ -1141,11 +1259,8 @@ async function removeCustomLinkGroup(key) {
   render();
 }
 
-function openCustomEditor(id = "") {
-  const existing = state.draft.customDownloaders.downloaders.find(
-    downloader => downloader.id === id,
-  );
-  const downloader = existing ? clone(existing) : {
+function createDefaultCustomDownloader() {
+  return {
     id: state.service.createCustomDownloaderId(),
     name: "",
     enabled: true,
@@ -1153,8 +1268,38 @@ function openCustomEditor(id = "") {
     startHidden: true,
     command: { executablePath: "", argumentsTemplate: "[URL]" },
   };
-  state.editor = { existingId: existing?.id || "", downloader };
+}
+
+function getBuiltInProtocolSnapshot(id) {
+  return state.snapshot?.builtInProtocols?.find(protocol => protocol.id === id) || null;
+}
+
+function openDownloadToolEditor(kind = "builtin", id = "") {
+  const existing = kind === "custom"
+    ? state.draft.customDownloaders.downloaders.find(
+        downloader => downloader.id === id,
+      )
+    : null;
+  const downloader = existing ? clone(existing) : createDefaultCustomDownloader();
+  const builtInProtocol = kind === "builtin" && BUILT_IN_PROTOCOLS.some(
+    protocol => protocol.id === id,
+  ) ? id : BUILT_IN_PROTOCOLS[0]?.id || "";
+  state.editor = {
+    kind,
+    editingKind: id ? kind : "",
+    existingId: existing?.id || "",
+    builtInProtocol,
+    downloader,
+  };
   state.editorReturnFocus = document.activeElement;
+
+  const jDownloader = state.draft.builtInProtocols[JDOWNLOADER_PROVIDER];
+  document.getElementById("jdownloader-endpoint").value = jDownloader.endpoint;
+  document.getElementById("jdownloader-auto-launch").checked =
+    jDownloader.autoLaunch;
+  document.getElementById("jdownloader-launch-path").value =
+    jDownloader.launchPath;
+  document.getElementById("jdownloader-test-state").textContent = "";
   document.getElementById("custom-name").value = downloader.name;
   document.getElementById("custom-enabled").checked = downloader.enabled;
   document.getElementById("custom-start-hidden").checked =
@@ -1177,25 +1322,155 @@ function openCustomEditor(id = "") {
   document.getElementById("custom-aria2-arguments").value =
     downloader.aria2?.startupArguments || "";
   document.getElementById("aria2-test-state").textContent = "";
-  document.getElementById("custom-editor-error").hidden = true;
-  setLocalized(
-    document.getElementById("custom-editor-title"),
-    existing ? "downloadit-custom-editor-edit-title" : "downloadit-custom-editor-add-title",
-  );
+  document.getElementById("tool-editor-error").hidden = true;
   setEditorType(downloader.type);
-  document.getElementById("custom-downloader-editor").hidden = false;
+  document.getElementById("download-tool-editor").hidden = false;
   document.getElementById("app").inert = true;
-  document.getElementById("custom-name").focus();
+  renderDownloadToolEditor();
+  const initialFocus = kind === "builtin"
+    ? document.getElementById("test-jdownloader")
+    : document.getElementById("custom-name");
+  initialFocus.focus();
 }
 
-function closeCustomEditor() {
+function closeDownloadToolEditor() {
   state.editor = null;
-  document.getElementById("custom-downloader-editor").hidden = true;
+  document.getElementById("download-tool-editor").hidden = true;
   document.getElementById("app").inert = false;
   if (state.editorReturnFocus?.isConnected) {
     state.editorReturnFocus.focus();
   }
   state.editorReturnFocus = null;
+}
+
+function setEditorKind(kind) {
+  if (!state.editor || !["builtin", "custom"].includes(kind)) {
+    return;
+  }
+  if (
+    (state.editor.editingKind && state.editor.editingKind !== kind) ||
+    (kind === "custom" && state.snapshot?.customDownloadersError)
+  ) {
+    return;
+  }
+  state.editor.kind = kind;
+  document.getElementById("tool-editor-error").hidden = true;
+  renderDownloadToolEditor();
+  const focusTarget = kind === "builtin"
+    ? document.getElementById("built-in-protocol")
+    : document.getElementById("custom-name");
+  focusTarget.focus();
+}
+
+function renderDownloadToolEditor() {
+  if (!state.editor) {
+    return;
+  }
+  const customBlocked = Boolean(state.snapshot?.customDownloadersError);
+  for (const button of document.querySelectorAll("[data-tool-kind]")) {
+    const kind = button.dataset.toolKind;
+    const active = kind === state.editor.kind;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.disabled = Boolean(
+      (state.editor.editingKind && state.editor.editingKind !== kind) ||
+      (kind === "custom" && customBlocked),
+    );
+  }
+  document.getElementById("tool-editor-builtin").hidden =
+    state.editor.kind !== "builtin";
+  document.getElementById("tool-editor-custom").hidden =
+    state.editor.kind !== "custom";
+
+  const protocolSelect = document.getElementById("built-in-protocol");
+  protocolSelect.value = state.editor.builtInProtocol;
+  protocolSelect.disabled = BUILT_IN_PROTOCOLS.length < 2 ||
+    state.editor.editingKind === "builtin";
+  for (const fields of document.querySelectorAll("[data-built-in-protocol-fields]")) {
+    fields.hidden = fields.dataset.builtInProtocolFields !==
+      state.editor.builtInProtocol;
+  }
+
+  const editingCustom = state.editor.editingKind === "custom";
+  setLocalized(
+    document.getElementById("tool-editor-title"),
+    state.editor.editingKind === "builtin"
+      ? "downloadit-tool-editor-configure-title"
+      : editingCustom
+        ? "downloadit-tool-editor-edit-title"
+        : "downloadit-tool-editor-add-title",
+  );
+  setLocalized(
+    document.getElementById("tool-editor-save"),
+    state.editor.kind === "builtin"
+      ? "downloadit-tool-editor-save-built-in"
+      : editingCustom
+        ? "downloadit-tool-editor-save"
+        : "downloadit-tool-editor-add",
+  );
+  document.getElementById("tool-editor-save").disabled =
+    state.editor.kind === "custom" && customBlocked;
+  renderEditorType();
+  renderJDownloaderEditorState();
+}
+
+function renderJDownloaderEditorState() {
+  if (!state.editor) {
+    return;
+  }
+  const protocol = getBuiltInProtocolSnapshot(JDOWNLOADER_PROVIDER);
+  const locks = protocol?.locks || {};
+  const endpoint = document.getElementById("jdownloader-endpoint");
+  const autoLaunch = document.getElementById("jdownloader-auto-launch");
+  const launchPath = document.getElementById("jdownloader-launch-path");
+  const browse = document.getElementById("browse-jdownloader-path");
+  const clear = document.getElementById("clear-jdownloader-path");
+  const test = document.getElementById("test-jdownloader");
+  const lock = document.getElementById("jdownloader-lock");
+  const status = document.getElementById("jdownloader-status");
+  const statusDot = document.getElementById("jdownloader-status-dot");
+  const detectedPath = document.getElementById("jdownloader-detected-path");
+
+  endpoint.disabled = Boolean(locks.endpoint);
+  autoLaunch.disabled = Boolean(locks.autoLaunch);
+  launchPath.disabled = Boolean(locks.launchPath);
+  browse.disabled = launchPath.disabled;
+  clear.disabled = launchPath.disabled || !launchPath.value;
+  test.disabled = !state.service || !endpoint.value;
+  lock.hidden = !Object.values(locks).some(Boolean);
+
+  let available = false;
+  try {
+    available = state.service.createJDownloaderDescriptor({
+      ...state.draft.builtInProtocols[JDOWNLOADER_PROVIDER],
+      endpoint: endpoint.value,
+      launchPath: launchPath.value,
+      autoLaunch: autoLaunch.checked,
+    }).available;
+  } catch {}
+  statusDot.className = `manager-dot ${available ? "is-ready" : "is-error"}`;
+  setLocalized(
+    status,
+    available
+      ? "downloadit-jdownloader-status-ready"
+      : "downloadit-jdownloader-status-unavailable",
+  );
+
+  let sameEndpoint = false;
+  try {
+    sameEndpoint = state.service.normalizeJDownloaderSettings({
+      endpoint: endpoint.value,
+      launchPath: "",
+      autoLaunch: false,
+    }, { requireExistingPath: false }).endpoint === protocol?.settings.endpoint;
+  } catch {}
+  if (sameEndpoint && protocol?.settings.detectedPath) {
+    setLocalized(detectedPath, "downloadit-jdownloader-detected-path", {
+      path: protocol.settings.detectedPath,
+    });
+  } else {
+    setLocalized(detectedPath, "downloadit-jdownloader-not-detected");
+  }
 }
 
 function trapEditorFocus(event, editorId) {
@@ -1274,8 +1549,28 @@ function collectEditorDownloader() {
   };
 }
 
-function saveCustomEditor() {
+function saveDownloadToolEditor() {
   try {
+    if (state.editor.kind === "builtin") {
+      const protocol = state.editor.builtInProtocol;
+      if (protocol !== JDOWNLOADER_PROVIDER) {
+        throw new Error(`Unsupported built-in protocol: ${protocol}`);
+      }
+      const settings = state.service.normalizeJDownloaderSettings({
+        endpoint: document.getElementById("jdownloader-endpoint").value,
+        launchPath: document.getElementById("jdownloader-launch-path").value,
+        autoLaunch: document.getElementById("jdownloader-auto-launch").checked,
+      });
+      state.draft.builtInProtocols[protocol] = {
+        ...state.draft.builtInProtocols[protocol],
+        ...settings,
+      };
+      closeDownloadToolEditor();
+      clearFeedback();
+      renderedManagerKeys = null;
+      render();
+      return;
+    }
     const downloader = collectEditorDownloader();
     const documentValue = clone(state.draft.customDownloaders);
     const index = documentValue.downloaders.findIndex(
@@ -1289,12 +1584,12 @@ function saveCustomEditor() {
     state.draft.customDownloaders = validateCustomDownloaderDocument(documentValue);
   } catch (error) {
     const message = localizedError(error);
-    const container = document.getElementById("custom-editor-error");
+    const container = document.getElementById("tool-editor-error");
     container.hidden = false;
-    setLocalizedMessage(document.getElementById("custom-editor-error-message"), message);
+    setLocalizedMessage(document.getElementById("tool-editor-error-message"), message);
     return;
   }
-  closeCustomEditor();
+  closeDownloadToolEditor();
   clearFeedback();
   renderedManagerKeys = null;
   render();
@@ -1341,6 +1636,29 @@ async function browseExecutable(inputId) {
   });
 }
 
+async function browseJDownloaderPath() {
+  const path = await browseLocalFile("jdownloader-launch-path", {
+    titleId: "downloadit-browse-jdownloader-title",
+    filterId: "downloadit-jdownloader-file-filter",
+    filter: "*.exe;*.jar",
+    absolute: true,
+    includeAllFiles: false,
+  });
+  if (path == null || !state.editor) {
+    return;
+  }
+  renderJDownloaderEditorState();
+}
+
+function clearJDownloaderPath() {
+  const protocol = getBuiltInProtocolSnapshot(JDOWNLOADER_PROVIDER);
+  if (!state.editor || protocol?.locks?.launchPath) {
+    return;
+  }
+  document.getElementById("jdownloader-launch-path").value = "";
+  renderJDownloaderEditorState();
+}
+
 async function browseAria2Configuration() {
   return browseLocalFile("custom-aria2-configuration", {
     titleId: "downloadit-browse-aria2-configuration-title",
@@ -1358,6 +1676,8 @@ async function browseLocalFile(inputId, {
   application = false,
   filterId = "",
   filter = "",
+  absolute = false,
+  includeAllFiles = true,
 }) {
   const title = await document.l10n.formatValue(titleId);
   const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
@@ -1370,7 +1690,9 @@ async function browseLocalFile(inputId, {
   } else if (filterId && filter) {
     picker.appendFilter(await document.l10n.formatValue(filterId), filter);
   }
-  picker.appendFilters(Ci.nsIFilePicker.filterAll);
+  if (includeAllFiles) {
+    picker.appendFilters(Ci.nsIFilePicker.filterAll);
+  }
   const currentPath = document.getElementById(inputId).value;
   try {
     picker.displayDirectory = state.service.getConfigurationDirectoryFile();
@@ -1382,9 +1704,13 @@ async function browseLocalFile(inputId, {
   } catch {}
   const result = await new Promise(resolve => picker.open(resolve));
   if (result === Ci.nsIFilePicker.returnOK && picker.file) {
-    document.getElementById(inputId).value =
-      state.service.normalizeCustomFilePathForStorage(picker.file);
+    const path = absolute
+      ? picker.file.path
+      : state.service.normalizeCustomFilePathForStorage(picker.file);
+    document.getElementById(inputId).value = path;
+    return path;
   }
+  return null;
 }
 
 function insertCommandPlaceholder() {
@@ -1425,6 +1751,30 @@ async function testAria2() {
   } catch (error) {
     output.className = "is-error";
     setLocalized(output, "downloadit-aria2-test-failed", {
+      error: await formatLocalizedError(error),
+    });
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function testJDownloader() {
+  const button = document.getElementById("test-jdownloader");
+  const output = document.getElementById("jdownloader-test-state");
+  button.disabled = true;
+  output.className = "";
+  setLocalized(output, "downloadit-jdownloader-testing");
+  try {
+    const result = await state.service.testJDownloaderConfiguration({
+      endpoint: document.getElementById("jdownloader-endpoint").value,
+    });
+    output.className = "is-success";
+    setLocalized(output, "downloadit-jdownloader-test-success", {
+      path: result.path,
+    });
+  } catch (error) {
+    output.className = "is-error";
+    setLocalized(output, "downloadit-jdownloader-test-failed", {
       error: await formatLocalizedError(error),
     });
   } finally {
@@ -1479,6 +1829,13 @@ async function init() {
       option.value = name;
       option.textContent = name;
       placeholderSelect.append(option);
+    }
+    const builtInSelect = document.getElementById("built-in-protocol");
+    for (const protocol of BUILT_IN_PROTOCOLS) {
+      const option = document.createElement("option");
+      option.value = protocol.id;
+      option.textContent = protocol.name;
+      builtInSelect.append(option);
     }
     bindEvents();
     state.service = getActiveService();

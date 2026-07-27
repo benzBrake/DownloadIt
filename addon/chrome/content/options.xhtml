@@ -89,6 +89,24 @@
               <p id="default-manager-help" class="field-help" data-l10n-id="downloadit-default-manager-help"></p>
             </div>
 
+            <div class="setting-group">
+              <div class="group-heading compact-heading">
+                <div>
+                  <div class="eyebrow" data-l10n-id="downloadit-task-start-eyebrow"></div>
+                  <h2 data-l10n-id="downloadit-task-start-title"></h2>
+                </div>
+                <span id="auto-start-tasks-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
+              </div>
+              <label class="toggle-row" for="auto-start-tasks">
+                <input id="auto-start-tasks" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-l10n-id="downloadit-auto-start-tasks-title"></strong>
+                  <small data-l10n-id="downloadit-auto-start-tasks-help"></small>
+                </span>
+              </label>
+            </div>
+
             <div class="setting-group manager-group">
               <div class="group-heading compact-heading">
                 <div>
@@ -97,9 +115,9 @@
                 </div>
                 <div class="group-actions">
                   <button id="reload-custom-downloaders" class="icon-button" type="button" data-l10n-id="downloadit-reload-custom-downloaders" data-l10n-attrs="title,aria-label">&#x21bb;</button>
-                  <button id="add-custom-downloader" class="secondary-button" type="button">
+                  <button id="add-download-tool" class="secondary-button" type="button">
                     <span class="button-glyph" aria-hidden="true">+</span>
-                    <span data-l10n-id="downloadit-add-custom-downloader"></span>
+                    <span data-l10n-id="downloadit-add-download-tool"></span>
                   </button>
                 </div>
               </div>
@@ -295,137 +313,197 @@
       </main>
     </div>
 
-    <div id="custom-downloader-editor" class="editor-backdrop" hidden="hidden">
-      <section class="editor-dialog" role="dialog" aria-modal="true" aria-labelledby="custom-editor-title">
+    <div id="download-tool-editor" class="editor-backdrop" hidden="hidden">
+      <section class="editor-dialog tool-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="tool-editor-title">
         <header class="editor-header">
           <div>
-            <div class="eyebrow" data-l10n-id="downloadit-custom-editor-eyebrow"></div>
-            <h2 id="custom-editor-title" data-l10n-id="downloadit-custom-editor-add-title"></h2>
+            <div class="eyebrow" data-l10n-id="downloadit-tool-editor-eyebrow"></div>
+            <h2 id="tool-editor-title" data-l10n-id="downloadit-tool-editor-add-title"></h2>
           </div>
-          <button id="custom-editor-close" class="icon-button" type="button" data-l10n-id="downloadit-custom-editor-close" data-l10n-attrs="title,aria-label">&#xd7;</button>
+          <button id="tool-editor-close" class="icon-button" type="button" data-l10n-id="downloadit-tool-editor-close" data-l10n-attrs="title,aria-label">&#xd7;</button>
         </header>
 
+        <div class="editor-kind-tabs" role="tablist" data-l10n-id="downloadit-tool-kind-tabs" data-l10n-attrs="aria-label">
+          <button id="tool-kind-builtin" class="editor-kind-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="tool-editor-builtin" data-tool-kind="builtin" data-l10n-id="downloadit-tool-kind-builtin"></button>
+          <button id="tool-kind-custom" class="editor-kind-tab" type="button" role="tab" aria-selected="false" aria-controls="tool-editor-custom" data-tool-kind="custom" data-l10n-id="downloadit-tool-kind-custom"></button>
+        </div>
+
         <div class="editor-scroll">
-          <div class="editor-field">
-            <label for="custom-name" data-l10n-id="downloadit-custom-name-label"></label>
-            <input id="custom-name" type="text" maxlength="80" />
-          </div>
-
-          <label class="toggle-row compact-toggle" for="custom-enabled">
-            <input id="custom-enabled" type="checkbox" />
-            <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
-            <span class="toggle-copy">
-              <strong data-l10n-id="downloadit-custom-enabled-title"></strong>
-              <small data-l10n-id="downloadit-custom-enabled-help"></small>
-            </span>
-          </label>
-
-          <div class="editor-field">
-            <span class="field-label" data-l10n-id="downloadit-custom-type-label"></span>
-            <div class="segmented-control" role="radiogroup" data-l10n-id="downloadit-custom-type-control" data-l10n-attrs="aria-label">
-              <button type="button" class="segment is-active" role="radio" data-custom-type="command" aria-checked="true" data-l10n-id="downloadit-custom-type-command"></button>
-              <button type="button" class="segment" role="radio" data-custom-type="aria2" aria-checked="false" data-l10n-id="downloadit-custom-type-aria2"></button>
+          <section id="tool-editor-builtin" class="tool-editor-panel" role="tabpanel" aria-labelledby="tool-kind-builtin">
+            <div class="editor-field protocol-picker">
+              <label for="built-in-protocol" data-l10n-id="downloadit-built-in-protocol-label"></label>
+              <select id="built-in-protocol"></select>
             </div>
-          </div>
 
-          <label class="toggle-row compact-toggle" for="custom-start-hidden">
-            <input id="custom-start-hidden" type="checkbox" checked="checked" />
-            <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
-            <span class="toggle-copy">
-              <strong data-l10n-id="downloadit-custom-start-hidden-title"></strong>
-              <small data-l10n-id="downloadit-custom-start-hidden-help"></small>
-            </span>
-          </label>
-
-          <div id="custom-command-fields" class="type-fields">
-            <div class="editor-field">
-              <label for="custom-command-path" data-l10n-id="downloadit-command-path-label"></label>
-              <div class="input-action-row">
-                <input id="custom-command-path" type="text" readonly="readonly" />
-                <button id="browse-command-path" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
+            <div data-built-in-protocol-fields="jdownloader">
+              <div class="protocol-status-line">
+                <span id="jdownloader-status-dot" class="manager-dot is-error" aria-hidden="true"></span>
+                <span class="protocol-status-copy">
+                  <strong>JDownloader</strong>
+                  <span id="jdownloader-status" data-l10n-id="downloadit-jdownloader-status-unavailable"></span>
+                </span>
+                <span id="jdownloader-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
               </div>
-              <p class="field-help" data-l10n-id="downloadit-executable-path-help"></p>
-            </div>
-            <div class="editor-field">
-              <div class="field-heading">
-                <div class="field-label-actions">
-                  <label for="custom-command-template" data-l10n-id="downloadit-command-template-label"></label>
-                  <select id="custom-command-preset" data-l10n-id="downloadit-command-preset" data-l10n-attrs="aria-label">
-                    <option value="" data-l10n-id="downloadit-command-preset-placeholder"></option>
-                    <option value="aria2c">aria2c</option>
-                    <option value="wget">wget</option>
-                    <option value="curl">curl</option>
-                  </select>
-                </div>
-                <div class="placeholder-control">
-                  <select id="custom-command-placeholder" data-l10n-id="downloadit-command-placeholder" data-l10n-attrs="aria-label"></select>
-                  <button id="insert-command-placeholder" class="icon-button" type="button" data-l10n-id="downloadit-command-placeholder-insert" data-l10n-attrs="title,aria-label">+</button>
-                </div>
-              </div>
-              <textarea id="custom-command-template" rows="4" spellcheck="false"></textarea>
-            </div>
-          </div>
 
-          <div id="custom-aria2-fields" class="type-fields" hidden="hidden">
-            <div class="editor-field">
-              <label for="custom-aria2-url" data-l10n-id="downloadit-aria2-url-label"></label>
-              <input id="custom-aria2-url" type="url" />
+              <label class="toggle-row compact-toggle" for="jdownloader-auto-launch">
+                <input id="jdownloader-auto-launch" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-l10n-id="downloadit-jdownloader-auto-launch-title"></strong>
+                  <small data-l10n-id="downloadit-jdownloader-auto-launch-help"></small>
+                </span>
+              </label>
+
+              <div class="editor-field">
+                <label for="jdownloader-launch-path" data-l10n-id="downloadit-jdownloader-path-label"></label>
+                <div class="input-action-row">
+                  <input id="jdownloader-launch-path" type="text" readonly="readonly" />
+                  <button id="browse-jdownloader-path" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
+                  <button id="clear-jdownloader-path" class="text-button" type="button" data-l10n-id="downloadit-clear"></button>
+                </div>
+                <p id="jdownloader-detected-path" class="field-help"></p>
+              </div>
+
+              <details class="advanced-settings">
+                <summary data-l10n-id="downloadit-advanced-settings"></summary>
+                <div class="advanced-settings-body">
+                  <div class="editor-field">
+                    <label for="jdownloader-endpoint" data-l10n-id="downloadit-jdownloader-endpoint-label"></label>
+                    <input id="jdownloader-endpoint" type="url" spellcheck="false" />
+                    <p class="field-help" data-l10n-id="downloadit-jdownloader-endpoint-help"></p>
+                  </div>
+                </div>
+              </details>
+
+              <div class="connection-row">
+                <button id="test-jdownloader" class="secondary-button" type="button" data-l10n-id="downloadit-jdownloader-test"></button>
+                <span id="jdownloader-test-state" role="status"></span>
+              </div>
             </div>
+          </section>
+
+          <section id="tool-editor-custom" class="tool-editor-panel" role="tabpanel" aria-labelledby="tool-kind-custom" hidden="hidden">
             <div class="editor-field">
-              <label for="custom-aria2-secret" data-l10n-id="downloadit-aria2-secret-label"></label>
-              <input id="custom-aria2-secret" type="password" autocomplete="off" />
+              <label for="custom-name" data-l10n-id="downloadit-custom-name-label"></label>
+              <input id="custom-name" type="text" maxlength="80" />
             </div>
-            <div class="editor-field">
-              <label for="custom-aria2-directory" data-l10n-id="downloadit-aria2-directory-label"></label>
-              <input id="custom-aria2-directory" type="text" />
-            </div>
-            <label class="toggle-row compact-toggle" for="custom-aria2-autostart">
-              <input id="custom-aria2-autostart" type="checkbox" />
+
+            <label class="toggle-row compact-toggle" for="custom-enabled">
+              <input id="custom-enabled" type="checkbox" />
               <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
               <span class="toggle-copy">
-                <strong data-l10n-id="downloadit-aria2-autostart-title"></strong>
-                <small data-l10n-id="downloadit-aria2-autostart-help"></small>
+                <strong data-l10n-id="downloadit-custom-enabled-title"></strong>
+                <small data-l10n-id="downloadit-custom-enabled-help"></small>
               </span>
             </label>
-            <div id="custom-aria2-start-fields">
+
+            <div class="editor-field">
+              <span class="field-label" data-l10n-id="downloadit-custom-type-label"></span>
+              <div class="segmented-control" role="radiogroup" data-l10n-id="downloadit-custom-type-control" data-l10n-attrs="aria-label">
+                <button type="button" class="segment is-active" role="radio" data-custom-type="command" aria-checked="true" data-l10n-id="downloadit-custom-type-command"></button>
+                <button type="button" class="segment" role="radio" data-custom-type="aria2" aria-checked="false" data-l10n-id="downloadit-custom-type-aria2"></button>
+              </div>
+            </div>
+
+            <label class="toggle-row compact-toggle" for="custom-start-hidden">
+              <input id="custom-start-hidden" type="checkbox" checked="checked" />
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong data-l10n-id="downloadit-custom-start-hidden-title"></strong>
+                <small data-l10n-id="downloadit-custom-start-hidden-help"></small>
+              </span>
+            </label>
+
+            <div id="custom-command-fields" class="type-fields">
               <div class="editor-field">
-                <label for="custom-aria2-path" data-l10n-id="downloadit-aria2-path-label"></label>
+                <label for="custom-command-path" data-l10n-id="downloadit-command-path-label"></label>
                 <div class="input-action-row">
-                  <input id="custom-aria2-path" type="text" readonly="readonly" />
-                  <button id="browse-aria2-path" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
-                  <button id="clear-aria2-path" class="text-button" type="button" data-l10n-id="downloadit-clear"></button>
+                  <input id="custom-command-path" type="text" readonly="readonly" />
+                  <button id="browse-command-path" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
                 </div>
                 <p class="field-help" data-l10n-id="downloadit-executable-path-help"></p>
               </div>
               <div class="editor-field">
-                <label for="custom-aria2-configuration" data-l10n-id="downloadit-aria2-configuration-label"></label>
-                <div class="input-action-row">
-                  <input id="custom-aria2-configuration" type="text" readonly="readonly" />
-                  <button id="browse-aria2-configuration" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
-                  <button id="clear-aria2-configuration" class="text-button" type="button" data-l10n-id="downloadit-clear"></button>
+                <div class="field-heading">
+                  <div class="field-label-actions">
+                    <label for="custom-command-template" data-l10n-id="downloadit-command-template-label"></label>
+                    <select id="custom-command-preset" data-l10n-id="downloadit-command-preset" data-l10n-attrs="aria-label">
+                      <option value="" data-l10n-id="downloadit-command-preset-placeholder"></option>
+                      <option value="aria2c">aria2c</option>
+                      <option value="wget">wget</option>
+                      <option value="curl">curl</option>
+                    </select>
+                  </div>
+                  <div class="placeholder-control">
+                    <select id="custom-command-placeholder" data-l10n-id="downloadit-command-placeholder" data-l10n-attrs="aria-label"></select>
+                    <button id="insert-command-placeholder" class="icon-button" type="button" data-l10n-id="downloadit-command-placeholder-insert" data-l10n-attrs="title,aria-label">+</button>
+                  </div>
                 </div>
-                <p class="field-help" data-l10n-id="downloadit-aria2-configuration-help"></p>
+                <textarea id="custom-command-template" rows="4" spellcheck="false"></textarea>
+              </div>
+            </div>
+
+            <div id="custom-aria2-fields" class="type-fields" hidden="hidden">
+              <div class="editor-field">
+                <label for="custom-aria2-url" data-l10n-id="downloadit-aria2-url-label"></label>
+                <input id="custom-aria2-url" type="url" />
               </div>
               <div class="editor-field">
-                <label for="custom-aria2-arguments" data-l10n-id="downloadit-aria2-arguments-label"></label>
-                <textarea id="custom-aria2-arguments" rows="2" spellcheck="false"></textarea>
+                <label for="custom-aria2-secret" data-l10n-id="downloadit-aria2-secret-label"></label>
+                <input id="custom-aria2-secret" type="password" autocomplete="off" />
+              </div>
+              <div class="editor-field">
+                <label for="custom-aria2-directory" data-l10n-id="downloadit-aria2-directory-label"></label>
+                <input id="custom-aria2-directory" type="text" />
+              </div>
+              <label class="toggle-row compact-toggle" for="custom-aria2-autostart">
+                <input id="custom-aria2-autostart" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-l10n-id="downloadit-aria2-autostart-title"></strong>
+                  <small data-l10n-id="downloadit-aria2-autostart-help"></small>
+                </span>
+              </label>
+              <div id="custom-aria2-start-fields">
+                <div class="editor-field">
+                  <label for="custom-aria2-path" data-l10n-id="downloadit-aria2-path-label"></label>
+                  <div class="input-action-row">
+                    <input id="custom-aria2-path" type="text" readonly="readonly" />
+                    <button id="browse-aria2-path" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
+                    <button id="clear-aria2-path" class="text-button" type="button" data-l10n-id="downloadit-clear"></button>
+                  </div>
+                  <p class="field-help" data-l10n-id="downloadit-executable-path-help"></p>
+                </div>
+                <div class="editor-field">
+                  <label for="custom-aria2-configuration" data-l10n-id="downloadit-aria2-configuration-label"></label>
+                  <div class="input-action-row">
+                    <input id="custom-aria2-configuration" type="text" readonly="readonly" />
+                    <button id="browse-aria2-configuration" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
+                    <button id="clear-aria2-configuration" class="text-button" type="button" data-l10n-id="downloadit-clear"></button>
+                  </div>
+                  <p class="field-help" data-l10n-id="downloadit-aria2-configuration-help"></p>
+                </div>
+                <div class="editor-field">
+                  <label for="custom-aria2-arguments" data-l10n-id="downloadit-aria2-arguments-label"></label>
+                  <textarea id="custom-aria2-arguments" rows="2" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <div class="connection-row">
+                <button id="test-aria2" class="secondary-button" type="button" data-l10n-id="downloadit-aria2-test"></button>
+                <span id="aria2-test-state" role="status"></span>
               </div>
             </div>
-            <div class="connection-row">
-              <button id="test-aria2" class="secondary-button" type="button" data-l10n-id="downloadit-aria2-test"></button>
-              <span id="aria2-test-state" role="status"></span>
-            </div>
-          </div>
+          </section>
 
-          <div id="custom-editor-error" class="inline-note is-warning" hidden="hidden">
+          <div id="tool-editor-error" class="inline-note is-warning" hidden="hidden">
             <span class="note-mark" aria-hidden="true">!</span>
-            <span id="custom-editor-error-message"></span>
+            <span id="tool-editor-error-message"></span>
           </div>
         </div>
 
         <footer class="editor-footer">
-          <button id="custom-editor-cancel" class="text-button" type="button" data-l10n-id="downloadit-cancel"></button>
-          <button id="custom-editor-save" class="primary-button" type="button" data-l10n-id="downloadit-custom-editor-save"></button>
+          <button id="tool-editor-cancel" class="text-button" type="button" data-l10n-id="downloadit-cancel"></button>
+          <button id="tool-editor-save" class="primary-button" type="button" data-l10n-id="downloadit-tool-editor-save-built-in"></button>
         </footer>
       </section>
     </div>

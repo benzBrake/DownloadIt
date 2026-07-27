@@ -1,14 +1,29 @@
 export const CUSTOM_DOWNLOADER_VERSION = 1;
 export const FLASHGOT_PROVIDER = "flashgot";
 export const CUSTOM_PROVIDER = "custom";
+export const JDOWNLOADER_PROVIDER = "jdownloader";
+export const JDOWNLOADER_DOWNLOADER_ID = "jdownloader";
+export const JDOWNLOADER_DEFAULT_ENDPOINT =
+  "http://127.0.0.1:9666/flashgot";
 export const NATIVE_PROVIDER = "native";
 export const NATIVE_DOWNLOADER_ID = "firefox";
+
+export const BUILT_IN_PROTOCOLS = Object.freeze([
+  Object.freeze({
+    id: JDOWNLOADER_PROVIDER,
+    provider: JDOWNLOADER_PROVIDER,
+    downloaderId: JDOWNLOADER_DOWNLOADER_ID,
+    name: "JDownloader",
+    singleton: true,
+  }),
+]);
 
 export const DOWNLOADER_CAPABILITY_KEYS = Object.freeze([
   "post",
   "cookies",
   "batch",
   "directory",
+  "taskStart",
 ]);
 
 const FLASHGOT_DEFAULT_CAPABILITIES = Object.freeze({
@@ -16,6 +31,7 @@ const FLASHGOT_DEFAULT_CAPABILITIES = Object.freeze({
   cookies: null,
   batch: null,
   directory: false,
+  taskStart: false,
 });
 
 // These describe the current Grabby-FlashGot bridge, not the applications in
@@ -69,6 +85,7 @@ export function getFlashGotDownloaderCapabilities(name) {
   return normalizeDownloaderCapabilities({
     ...values,
     directory: false,
+    taskStart: false,
   });
 }
 
@@ -79,6 +96,7 @@ export function getCustomDownloaderCapabilities(downloader) {
       cookies: true,
       batch: true,
       directory: true,
+      taskStart: false,
     });
   }
   if (downloader?.type !== "command") {
@@ -94,6 +112,7 @@ export function getCustomDownloaderCapabilities(downloader) {
       placeholders.has("HEADERS"),
     batch: true,
     directory: placeholders.has("FOLDER"),
+    taskStart: false,
   });
 }
 
@@ -103,7 +122,183 @@ export function getNativeDownloaderCapabilities() {
     cookies: true,
     batch: true,
     directory: true,
+    taskStart: false,
   });
+}
+
+export class JDownloaderConfigError extends Error {
+  constructor(code, args = {}) {
+    super(code);
+    this.name = "JDownloaderConfigError";
+    this.code = code;
+    this.args = args;
+  }
+}
+
+export function getJDownloaderCapabilities() {
+  return normalizeDownloaderCapabilities({
+    post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+    taskStart: true,
+  });
+}
+
+export function normalizeJDownloaderEndpoint(
+  value = JDOWNLOADER_DEFAULT_ENDPOINT,
+) {
+  const input = String(value).trim();
+  let url;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new JDownloaderConfigError("jdownloader-endpoint-invalid");
+  }
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const ipv4 = hostname.split(".");
+  const loopbackIPv4 = ipv4.length === 4 && ipv4[0] === "127" &&
+    ipv4.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+  const loopback = hostname === "localhost" || loopbackIPv4 || hostname === "::1";
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  if (
+    url.protocol !== "http:" ||
+    !loopback ||
+    input.includes("@") ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (path !== "/" && path !== "/flashgot")
+  ) {
+    throw new JDownloaderConfigError("jdownloader-endpoint-invalid");
+  }
+  url.pathname = "/flashgot";
+  return url.href;
+}
+
+export function getJDownloaderReferer(value = JDOWNLOADER_DEFAULT_ENDPOINT) {
+  const url = new URL(normalizeJDownloaderEndpoint(value));
+  url.hostname = "localhost";
+  return url.href;
+}
+
+const JDOWNLOADER_VM_ARGUMENT = /^-Xm[sx]\d{1,6}[kKmMgG]?$/;
+
+export function normalizeJDownloaderJavaArguments(value) {
+  const values = Array.isArray(value) ? value : [];
+  if (!values.every(argument =>
+    typeof argument === "string" && JDOWNLOADER_VM_ARGUMENT.test(argument)
+  )) {
+    throw new JDownloaderConfigError("jdownloader-discovery-invalid");
+  }
+  return [...values];
+}
+
+export function parseJDownloaderDiscoveryResponse(value) {
+  const lines = String(value || "")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  if (lines.length !== 2) {
+    throw new JDownloaderConfigError("jdownloader-discovery-invalid");
+  }
+
+  const pathLine = lines[0];
+  const quotedPath = pathLine.startsWith('"') && pathLine.endsWith('"');
+  if (pathLine.startsWith('"') !== pathLine.endsWith('"')) {
+    throw new JDownloaderConfigError("jdownloader-discovery-invalid");
+  }
+  const path = quotedPath ? pathLine.slice(1, -1) : pathLine;
+  if (
+    !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(path) ||
+    !/\.(?:exe|jar)$/i.test(path)
+  ) {
+    throw new JDownloaderConfigError("jdownloader-discovery-invalid");
+  }
+
+  const command = lines[1];
+  const commandPath = `"${path}"`;
+  let prefix = "";
+  if (command.endsWith(commandPath)) {
+    prefix = command.slice(0, -commandPath.length).trim();
+  } else if (command.endsWith(path)) {
+    prefix = command.slice(0, -path.length).trim();
+  } else {
+    throw new JDownloaderConfigError("jdownloader-discovery-invalid");
+  }
+  const match = /^(?:javaw?|javaw?\.exe)\s+(.*?)\s*-jar$/i.exec(prefix);
+  if (!match) {
+    throw new JDownloaderConfigError("jdownloader-discovery-invalid");
+  }
+  const javaArguments = match[1]
+    ? match[1].trim().split(/\s+/).filter(Boolean)
+    : [];
+  normalizeJDownloaderJavaArguments(javaArguments);
+  return {
+    path: path.replace(/\//g, "\\"),
+    javaArguments,
+  };
+}
+
+export function validateJDownloaderLaunchPath(value) {
+  const path = String(value || "").trim();
+  if (path && !/\.(?:exe|jar)$/i.test(path)) {
+    throw new JDownloaderConfigError("jdownloader-launch-path-invalid");
+  }
+  return path;
+}
+
+function jDownloaderLine(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
+}
+
+export function buildJDownloaderRequest(job, {
+  autoStartTask = true,
+  directory = "",
+  packageName = "DownloadIt",
+} = {}) {
+  const links = Array.isArray(job?.links) ? job.links : [];
+  if (!links.length) {
+    throw new JDownloaderConfigError("jdownloader-submit-failed");
+  }
+  const postDataValues = new Set(links.map(link => String(link.postdata || "")));
+  if (postDataValues.size > 1) {
+    throw new JDownloaderConfigError("jdownloader-mixed-post-data");
+  }
+
+  const params = new URLSearchParams();
+  params.set("autostart", autoStartTask ? "1" : "0");
+  params.set("package", String(packageName || "DownloadIt"));
+  const referer = String(job.referer || job.dlpageReferer || "");
+  if (referer) {
+    params.set("referer", referer);
+  }
+  if (directory) {
+    params.set("dir", String(directory));
+  }
+  const postData = [...postDataValues][0] || "";
+  if (postData) {
+    params.set("postData", postData);
+  }
+  params.set("urls", links.map(link => String(link.url || "")).join("\n"));
+  params.set(
+    "descriptions",
+    links.map(link => jDownloaderLine(link.desc)).join("\n"),
+  );
+  params.set(
+    "fnames",
+    links.map(link => jDownloaderLine(link.filename)).join("\n"),
+  );
+
+  const cookieValues = new Set(links.map(link => String(link.cookies || "")));
+  if (cookieValues.size === 1) {
+    const cookies = [...cookieValues][0];
+    if (cookies) {
+      params.set("cookies", cookies);
+    }
+  }
+  return params.toString();
 }
 
 export function isNativeDownloadURL(value) {
@@ -692,12 +887,12 @@ export class DownloaderProviderRegistry {
     return this.providers.get(ref?.provider)?.getDownloader(ref.id) || null;
   }
 
-  async download(ref, task, runtimeContext = null) {
+  async download(ref, task, runtimeContext = null, options = {}) {
     const provider = this.providers.get(ref?.provider);
     if (!provider) {
       throw new Error(`Unknown downloader provider: ${ref?.provider || ""}`);
     }
-    return provider.download(ref.id, task, runtimeContext);
+    return provider.download(ref.id, task, runtimeContext, options);
   }
 
   async refresh(name, options) {

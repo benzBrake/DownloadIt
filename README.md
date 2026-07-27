@@ -14,15 +14,16 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Adds a Downloadit Selection item below it when selected page content contains links.
 - Adds a DownloadIt Links selector for collecting, filtering, and batch-downloading explicit page links from the current document and its frames.
 - Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
-- Shows POST, cookie, batch, and download-directory capabilities for each downloader.
+- Shows POST, cookie, batch, download-directory, and task-start capabilities for each downloader.
 - Provides an always-available Firefox downloader without routing requests through `FlashGot.exe`.
+- Supports JDownloader directly through its loopback FlashGot endpoint without routing requests through `FlashGot.exe`.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
 - Lets you remember supported file extensions and automatically forward them to the current default manager.
 - Supports `http`, `https`, `ftp`, and `magnet` links.
 - Passes the URL, filename, referrer, cookies, and User-Agent to external download tools; the Firefox downloader uses the native browsing and cookie context.
-- Provides Firefox settings for the default download manager and cookie-forwarding policy.
+- Provides Firefox settings for the default download manager, task-start behavior, and cookie-forwarding policy.
 - Provides a dedicated **Auto-capture** settings tab for remembered automatic file extensions.
 - Supports Simplified Chinese and English in the UI and context menu.
 - Stores UI messages in Firefox's built-in Fluent resources.
@@ -45,6 +46,7 @@ DownloadIt background service
         │
         ├── native provider ── Firefox Downloads API
         ├── flashgot provider ── temporary job JSON ── FlashGot.exe
+        ├── jdownloader provider ── loopback HTTP `/flashgot`
         ├── custom command provider ── native Firefox process API
         └── custom aria2 provider ── JSON-RPC
 ```
@@ -98,7 +100,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, JDownloader endpoint validation and startup orchestration, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature.
 
@@ -117,14 +119,22 @@ To upgrade, install the newly built `addon.xpi` over the existing installation. 
 
 The DownloadIt toolbar button opens a native Firefox panel. Use “DownloadIt Links” to open the batch-link selector for the active tab, select an available tool to change the default download manager immediately, use “Detect download managers again” to refresh the detected-tool list, or open DownloadIt settings from the panel footer. The button is added to the navigation bar initially and can be moved or removed through Firefox's Customize Toolbar interface.
 
-The discovered-tool list in settings shows capability metadata for the active DownloadIt integration route: `+` means supported, `-` means unsupported, and `?` means the capability is not yet known. The labels cover POST request bodies, cookie handling, DownloadIt batch submissions, and caller-provided download directories. The native provider uses Firefox's own request context, FlashGot capabilities follow the integrations implemented by the bundled bridge, custom command capabilities are inferred from their argument placeholders, and aria2 capabilities follow the JSON-RPC provider. These labels describe what DownloadIt can pass through the configured route, not every feature offered by the downloader itself.
+The discovered-tool list in settings shows capability metadata for the active DownloadIt integration route: `+` means supported, `-` means unsupported, and `?` means the capability is not yet known. The labels cover POST request bodies, cookie handling, DownloadIt batch submissions, caller-provided download directories, and control over whether submitted tasks start automatically. The native provider uses Firefox's own request context, FlashGot capabilities follow the integrations implemented by the bundled bridge, JDownloader capabilities follow its loopback protocol, custom command capabilities are inferred from their argument placeholders, and aria2 capabilities follow the JSON-RPC provider. These labels describe what DownloadIt can pass through the configured route, not every feature offered by the downloader itself.
 
 Open the settings page from the toolbar panel, from “DownloadIt Settings” in the context menu, or from the extension settings in `about:addons`.
 
+The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader is a singleton and its list action reopens the same configuration instead of creating a duplicate. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
+
 | Preference | Type | Description |
 | --- | --- | --- |
-| `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"native","id":"firefox"}`, `{"provider":"flashgot","id":"Internet Download Manager"}`, or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
+| `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"native","id":"firefox"}`, `{"provider":"jdownloader","id":"jdownloader"}`, `{"provider":"flashgot","id":"Internet Download Manager"}`, or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
+| `downloadit.autoStartTasks` | Boolean | Requests automatic start for providers with the task-start capability. The default is `true`; currently only JDownloader consumes it. |
+| `downloadit.jdownloader.endpoint` | String | JDownloader FlashGot endpoint. The default is `http://127.0.0.1:9666/flashgot`. |
+| `downloadit.jdownloader.launchPath` | String | Optional absolute path to a JDownloader `.exe` or `.jar`; a manual value overrides detected installation data. |
+| `downloadit.jdownloader.autoLaunch` | Boolean | Starts JDownloader when its endpoint is unavailable. The default is `true`. |
+| `downloadit.jdownloader.detectedPath` | String | Installation path reported by a successful GET probe and maintained automatically. |
+| `downloadit.jdownloader.detectedJavaArgs` | String | JSON array of validated JVM arguments reported by a successful GET probe and maintained automatically. |
 | `downloadit.idmBridgeEnabled` | Boolean | Intercepts compatible IDM local HTTP requests and sends them to the current default downloader. The default is `false`. |
 | `downloadit.detectedManagers` | String | Cached download-manager detection results, maintained automatically by the extension. |
 | `downloadit.autoExtensions` | String | JSON array of file extensions that should be sent to the current default manager automatically. |
@@ -134,6 +144,16 @@ When a preference is locked by Firefox policy, the settings page displays its lo
 
 Only explicitly remembered extensions are intercepted. Empty extensions, Firefox install packages (`.xpi`/`xpinstall`), and unsupported URL schemes always remain in Firefox's native flow. Executable extensions such as `.exe` can be remembered explicitly. When the Firefox downloader is the default, the remembered-extension hook also leaves the existing native launcher untouched instead of issuing a duplicate request.
 
+### JDownloader provider
+
+The `jdownloader:jdownloader` provider talks directly to JDownloader's FlashGot-compatible endpoint. Its singleton row is always shown in the manager list and can be configured from that row or from **Add download tool**. It becomes selectable after a successful current GET probe, or when automatic startup is enabled and the manual or cached installation path resolves to a valid launch target. The endpoint is kept under the editor's advanced settings and must be unauthenticated HTTP on `localhost`, `127.0.0.0/8`, or `::1`, with no query or fragment; its path is normalized to `/flashgot`. Redirects are disabled, and probe requests bypass the HTTP cache.
+
+A successful GET response must contain exactly two non-empty lines: an existing absolute `.jar` or `.exe` path, followed by a `java ... -jar` command ending in that same path. DownloadIt never executes or stores the returned command. It retains only validated `-Xms` and `-Xmx` arguments. A manual launch path takes precedence over the detected cache, and an invalid manual path is reported instead of falling back. Changing the endpoint clears the old discovery cache. The connection-test button probes the draft endpoint without saving it, changing online state, or starting a process.
+
+When a submission finds the endpoint offline and automatic startup is enabled, `.exe` files are launched visibly through Firefox's native process API. For a `.jar`, DownloadIt first checks a same-named executable, `JDownloader2.exe`, `JDownloader 2.exe`, and `JDownloader.exe`. It then searches bundled `jre`/`runtime` directories, `JAVA_HOME`, JavaSoft registry homes, and Windows System32, preferring `javaw.exe` to `java.exe`. Java receives only the validated JVM arguments plus `-jar <path>`; no command shell is involved. Concurrent submissions share one startup wait. DownloadIt probes every eight seconds up to six times, then performs each submission POST only once after readiness so a retry cannot duplicate a task.
+
+The UTF-8 form sends newline-aligned `urls`, `descriptions`, and `fnames`, plus `package=DownloadIt`, the task referrer (or download-page URL), and Firefox's preferred download directory when readable. `autostart` follows `downloadit.autoStartTasks`; disabling it does not change any provider without the task-start capability. A batch sends cookies only when every link has the same cookie string, otherwise cookies are omitted for the whole batch. POST data is omitted when all links are empty and sent when all links are identical; mixed or partially different POST bodies reject the batch before probing or launching JDownloader. Download and archive passwords (`dpass` and `apass`) are not implemented.
+
 ### IDM local protocol compatibility
 
 When enabled under **Request & privacy**, DownloadIt recognizes the IDM local HTTP request form used by compatible extension clients such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift): `POST http://127.0.0.1:1001/client/<id>?seq=<seq>`. It requires a Firefox extension principal and validates the byte-length-prefixed `MSG#` payload, then redirects the request to a temporary loopback listener owned by DownloadIt. The task is submitted to the current default downloader, and the requesting client receives the expected sequence response after the downloader accepts or rejects the task.
@@ -142,7 +162,7 @@ DownloadIt does not bind port `1001`, replace IDM's native listener, or intercep
 
 ### Custom downloaders
 
-Custom definitions are stored as formatted UTF-8 JSON in `DownloadIt\custom-downloaders.json` under the Firefox profile. The file is loaded at startup and can be reloaded from the settings page. Invalid JSON and unsupported versions are preserved without being overwritten; use the explicit reset action to replace a damaged file with an empty configuration.
+Custom definitions are stored as formatted UTF-8 JSON in `DownloadIt\custom-downloaders.json` under the Firefox profile. The built-in-protocol tab never writes entries to this file: JDownloader uses its namespaced Firefox preferences, while FlashGot detection uses `downloadit.detectedManagers`. The file is loaded at startup and can be reloaded from the settings page. Invalid JSON and unsupported versions are preserved without being overwritten; use the explicit reset action to replace a damaged file with an empty configuration. A damaged custom file disables only the custom tab; built-in protocol configuration remains available.
 
 The file is created when custom definitions are first applied and uses stable, non-editable UUIDs:
 
@@ -188,7 +208,7 @@ addon/
     ├── DownloadItPanelView.sys.mjs      # Native toolbar panel behavior
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
-    ├── DownloadItDownloaders.sys.mjs    # Provider references, custom schema, templates, and aria2 protocol
+    ├── DownloadItDownloaders.sys.mjs    # Provider references, JDownloader/aria2 protocols, custom schema, and templates
     ├── DownloadItIDMBridge.sys.mjs      # Firefox request hook and loopback response bridge
     ├── DownloadItIDMProtocol.sys.mjs    # IDM local endpoint and byte-level message parser
     ├── DownloadItXUL.sys.mjs             # Shared Firefox XUL element construction helper

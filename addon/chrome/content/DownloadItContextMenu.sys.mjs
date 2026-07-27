@@ -20,6 +20,15 @@ const DOWNLOAD_ERROR_MESSAGES = {
   "aria2-partial-failure": "downloadit-error-aria2-partial",
   "aria2-autostart-local-only": "downloadit-error-aria2-local",
   "aria2-start-timeout": "downloadit-error-aria2-start-timeout",
+  "jdownloader-endpoint-invalid": "downloadit-error-jdownloader-endpoint",
+  "jdownloader-unavailable": "downloadit-error-jdownloader-unavailable",
+  "jdownloader-discovery-invalid": "downloadit-error-jdownloader-discovery",
+  "jdownloader-http-error": "downloadit-error-jdownloader-http",
+  "jdownloader-launch-path-invalid": "downloadit-error-jdownloader-path",
+  "jdownloader-launch-failed": "downloadit-error-jdownloader-launch",
+  "jdownloader-start-timeout": "downloadit-error-jdownloader-start-timeout",
+  "jdownloader-submit-failed": "downloadit-error-jdownloader-submit",
+  "jdownloader-mixed-post-data": "downloadit-error-jdownloader-mixed-post",
 };
 
 const CONTEXT_MENU_ID = "contentAreaContextMenu";

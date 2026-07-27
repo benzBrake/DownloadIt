@@ -47,7 +47,13 @@ test("custom XUL menu labels use the Fluent label attribute", () => {
 test("downloader capability states have accessible Fluent labels", () => {
   for (const locale of ["en-US", "zh-CN"]) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
-    for (const capability of ["post", "cookies", "batch", "directory"]) {
+    for (const capability of [
+      "post",
+      "cookies",
+      "batch",
+      "directory",
+      "task-start",
+    ]) {
       for (const state of ["supported", "unsupported", "unknown"]) {
         const id = `downloadit-manager-capability-${capability}-${state}`;
         const pattern = new RegExp(
@@ -55,6 +61,25 @@ test("downloader capability states have accessible Fluent labels", () => {
         );
         assert.match(source, pattern);
       }
+    }
+  }
+});
+
+test("unified download-tool editor tabs and actions are accessible", () => {
+  for (const locale of ["en-US", "zh-CN"]) {
+    const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    assert.match(
+      source,
+      /downloadit-tool-kind-tabs\s*=\s*\r?\n\s+\.aria-label\s*=/,
+    );
+    for (const id of [
+      "downloadit-tool-editor-close",
+      "downloadit-configure-built-in",
+    ]) {
+      const pattern = new RegExp(
+        `${id}\\s*=.*\\r?\\n\\s+\\.title\\s*=.*\\r?\\n\\s+\\.aria-label\\s*=`,
+      );
+      assert.match(source, pattern);
     }
   }
 });

@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   buildAria2Request,
   buildAria2StartupArguments,
+  buildJDownloaderRequest,
+  BUILT_IN_PROTOCOLS,
   COMMAND_PLACEHOLDERS,
   COMMAND_TEMPLATE_PRESETS,
   commandTemplateUsesBatch,
@@ -14,14 +16,22 @@ import {
   expandCommandTemplate,
   getCustomDownloaderCapabilities,
   getFlashGotDownloaderCapabilities,
+  getJDownloaderCapabilities,
+  getJDownloaderReferer,
   getNativeDownloadFilenameCandidate,
   getNativeDownloaderCapabilities,
   inspectAria2Response,
   isLoopbackAria2URL,
   isNativeDownloadURL,
+  JDOWNLOADER_DEFAULT_ENDPOINT,
+  JDOWNLOADER_DOWNLOADER_ID,
+  JDOWNLOADER_PROVIDER,
   NATIVE_DOWNLOADER_ID,
   normalizeCustomDownloaderDocument,
   normalizeDownloaderCapabilities,
+  normalizeJDownloaderEndpoint,
+  normalizeJDownloaderJavaArguments,
+  parseJDownloaderDiscoveryResponse,
   parseDownloaderRef,
   serializeDownloaderRef,
   stringifyCustomDownloaderDocument,
@@ -39,17 +49,18 @@ test("downloader capabilities are normalized as tri-state metadata", () => {
     cookies: false,
     batch: null,
     directory: null,
+    taskStart: null,
   });
 });
 
 test("FlashGot capability metadata is conservative for unknown managers", () => {
   assert.deepEqual(
     getFlashGotDownloaderCapabilities("Internet Download Manager"),
-    { post: true, cookies: true, batch: true, directory: false },
+    { post: true, cookies: true, batch: true, directory: false, taskStart: false },
   );
   assert.deepEqual(
     getFlashGotDownloaderCapabilities("Future Download Manager"),
-    { post: null, cookies: null, batch: null, directory: false },
+    { post: null, cookies: null, batch: null, directory: false, taskStart: false },
   );
 });
 
@@ -64,6 +75,7 @@ test("custom downloader capabilities follow command placeholders and provider fe
     cookies: true,
     batch: true,
     directory: true,
+    taskStart: false,
   });
   assert.deepEqual(getCustomDownloaderCapabilities({
     type: "command",
@@ -73,12 +85,14 @@ test("custom downloader capabilities follow command placeholders and provider fe
     cookies: false,
     batch: true,
     directory: false,
+    taskStart: false,
   });
   assert.deepEqual(getCustomDownloaderCapabilities({ type: "aria2" }), {
     post: false,
     cookies: true,
     batch: true,
     directory: true,
+    taskStart: false,
   });
 });
 
@@ -89,6 +103,7 @@ test("native downloader policy supports Firefox HTTP downloads", () => {
     cookies: true,
     batch: true,
     directory: true,
+    taskStart: false,
   });
   assert.equal(isNativeDownloadURL("https://example.com/file.zip"), true);
   assert.equal(isNativeDownloadURL("http://example.com/file.zip"), true);
@@ -111,6 +126,143 @@ test("native downloader policy supports Firefox HTTP downloads", () => {
     getNativeDownloadFilenameCandidate({ url: "https://example.com/" }),
     "download",
   );
+});
+
+test("JDownloader protocol validates loopback endpoints and discovery output", () => {
+  assert.equal(JDOWNLOADER_PROVIDER, "jdownloader");
+  assert.equal(JDOWNLOADER_DOWNLOADER_ID, "jdownloader");
+  assert.equal(
+    normalizeJDownloaderEndpoint("http://localhost:9666/"),
+    "http://localhost:9666/flashgot",
+  );
+  assert.equal(
+    normalizeJDownloaderEndpoint("http://127.0.0.2:9777/flashgot/"),
+    "http://127.0.0.2:9777/flashgot",
+  );
+  assert.equal(
+    normalizeJDownloaderEndpoint("http://[::1]:9666/flashgot"),
+    "http://[::1]:9666/flashgot",
+  );
+  assert.equal(
+    getJDownloaderReferer(JDOWNLOADER_DEFAULT_ENDPOINT),
+    "http://localhost:9666/flashgot",
+  );
+  for (const endpoint of [
+    "https://127.0.0.1:9666/flashgot",
+    "http://example.com:9666/flashgot",
+    "http://127.example.com:9666/flashgot",
+    "http://127.0.0.1:9666/other",
+    "",
+    "http://@127.0.0.1:9666/flashgot",
+    "http://user@127.0.0.1:9666/flashgot",
+    "http://127.0.0.1:9666/flashgot?token=secret",
+    "http://127.0.0.1:9666/flashgot#fragment",
+  ]) {
+    assert.throws(
+      () => normalizeJDownloaderEndpoint(endpoint),
+      error => error.code === "jdownloader-endpoint-invalid",
+    );
+  }
+
+  assert.deepEqual(
+    parseJDownloaderDiscoveryResponse(
+      "C:/Program Files/JDownloader/JDownloader.jar\r\n" +
+      "java -Xmx512m -jar C:/Program Files/JDownloader/JDownloader.jar\r\n",
+    ),
+    {
+      path: "C:\\Program Files\\JDownloader\\JDownloader.jar",
+      javaArguments: ["-Xmx512m"],
+    },
+  );
+  assert.deepEqual(normalizeJDownloaderJavaArguments(["-Xmx512m"]), ["-Xmx512m"]);
+  assert.deepEqual(normalizeJDownloaderJavaArguments(["-Xms64m", "-Xmx1G"]), [
+    "-Xms64m",
+    "-Xmx1G",
+  ]);
+  for (const response of [
+    "",
+    "relative/JDownloader.jar\njava -jar relative/JDownloader.jar",
+    "C:\\JDownloader.jar\ncmd /c calc C:\\JDownloader.jar",
+    "C:\\JDownloader.jar\njava -Dfoo=\"bad value\" -jar C:\\JDownloader.jar",
+    '"C:\\JDownloader.jar\njava -Xmx512m -jar C:\\JDownloader.jar',
+    "C:\\JDownloader.jar\njava -javaagent:evil.jar -jar C:\\JDownloader.jar",
+    "C:\\JDownloader.jar\njava -agentlib:jdwp -jar C:\\JDownloader.jar",
+  ]) {
+    assert.throws(
+      () => parseJDownloaderDiscoveryResponse(response),
+      error => error.code === "jdownloader-discovery-invalid",
+    );
+  }
+});
+
+test("built-in protocol catalog keeps singleton provider identity in code", () => {
+  assert.deepEqual(BUILT_IN_PROTOCOLS, [{
+    id: "jdownloader",
+    provider: "jdownloader",
+    downloaderId: "jdownloader",
+    name: "JDownloader",
+    singleton: true,
+  }]);
+  assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS), true);
+  assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[0]), true);
+});
+
+test("JDownloader request bodies preserve aligned fields and task-start policy", () => {
+  const job = {
+    referer: "https://example.com/page",
+    links: [
+      {
+        url: "https://example.com/a?name=one",
+        desc: "First\r\nfile",
+        filename: "A file.zip",
+        cookies: "session=unicode-\u4f60\u597d",
+        postdata: "key=\u503c",
+      },
+      {
+        url: "https://example.com/b",
+        desc: "Second",
+        filename: "B.zip",
+        cookies: "session=unicode-\u4f60\u597d",
+        postdata: "key=\u503c",
+      },
+    ],
+  };
+  const params = new URLSearchParams(buildJDownloaderRequest(job, {
+    autoStartTask: false,
+    directory: "D:\\Downloads",
+  }));
+  assert.equal(params.get("autostart"), "0");
+  assert.equal(params.get("package"), "DownloadIt");
+  assert.equal(params.get("referer"), "https://example.com/page");
+  assert.equal(params.get("dir"), "D:\\Downloads");
+  assert.equal(params.get("urls"), [job.links[0].url, job.links[1].url].join("\n"));
+  assert.equal(params.get("descriptions"), "First file\nSecond");
+  assert.equal(params.get("fnames"), "A file.zip\nB.zip");
+  assert.equal(params.get("cookies"), "session=unicode-\u4f60\u597d");
+  assert.equal(params.get("postData"), "key=\u503c");
+
+  const mixedCookies = structuredClone(job);
+  mixedCookies.links[1].cookies = "other=1";
+  assert.equal(
+    new URLSearchParams(buildJDownloaderRequest(mixedCookies)).has("cookies"),
+    false,
+  );
+  const mixedPost = structuredClone(job);
+  mixedPost.links[1].postdata = "";
+  assert.throws(
+    () => buildJDownloaderRequest(mixedPost),
+    error => error.code === "jdownloader-mixed-post-data",
+  );
+});
+
+test("JDownloader capabilities are explicit and task-start aware", () => {
+  assert.deepEqual(getJDownloaderCapabilities(), {
+    post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+    taskStart: true,
+  });
 });
 
 const COMMAND_ID = "123e4567-e89b-42d3-a456-426614174000";
@@ -376,16 +528,18 @@ test("provider registry keeps provider-local IDs separate", async () => {
       provider: "custom",
       listDownloaders: () => [{ ref: { provider: "custom", id: "Same" } }],
       getDownloader: id => ({ provider: "custom", id }),
-      download: async (id, task, runtimeContext) =>
-        calls.push(["custom", id, task, runtimeContext]),
+      download: async (id, task, runtimeContext, options) =>
+        calls.push(["custom", id, task, runtimeContext, options]),
     },
   ]);
   assert.equal(registry.listDownloaders().length, 2);
   const runtimeContext = { links: [{ browsingContextId: 7 }] };
+  const options = { autoStartTask: false };
   await registry.download(
     { provider: "custom", id: "Same" },
     "task",
     runtimeContext,
+    options,
   );
-  assert.deepEqual(calls, [["custom", "Same", "task", runtimeContext]]);
+  assert.deepEqual(calls, [["custom", "Same", "task", runtimeContext, options]]);
 });

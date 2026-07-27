@@ -55,6 +55,23 @@ test("settings dialog contains the current capability controls", () => {
   for (const id of [
     "section-managers",
     "default-manager",
+    "auto-start-tasks",
+    "auto-start-tasks-lock",
+    "add-download-tool",
+    "download-tool-editor",
+    "tool-kind-builtin",
+    "tool-kind-custom",
+    "tool-editor-builtin",
+    "tool-editor-custom",
+    "built-in-protocol",
+    "jdownloader-endpoint",
+    "jdownloader-auto-launch",
+    "jdownloader-launch-path",
+    "browse-jdownloader-path",
+    "clear-jdownloader-path",
+    "jdownloader-detected-path",
+    "test-jdownloader",
+    "jdownloader-test-state",
     "refresh-managers",
     "section-auto-capture",
     "auto-extension-list",
@@ -128,6 +145,9 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /customDownloaders/);
   assert.match(script, /reloadCustomDownloaders/);
   assert.match(script, /testAria2Configuration/);
+  assert.match(script, /testJDownloaderConfiguration/);
+  assert.match(script, /autoStartTasks/);
+  assert.match(script, /jdownloader/);
   assert.match(
     script,
     /"inIsolatedMozBrowser" in window\.browsingContext\.originAttributes/,
@@ -136,17 +156,114 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /picker\.init\(pickerParent, title, Ci\.nsIFilePicker\.modeOpen\)/);
 });
 
-test("settings dialog exposes custom downloader controls", () => {
+test("JDownloader provider settings and guarded local protocol are wired end to end", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const script = read("addon/chrome/content/options.js");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const downloaders = read("addon/chrome/content/DownloadItDownloaders.sys.mjs");
+
+  for (const preference of [
+    "downloadit.autoStartTasks",
+    "downloadit.jdownloader.endpoint",
+    "downloadit.jdownloader.launchPath",
+    "downloadit.jdownloader.autoLaunch",
+    "downloadit.jdownloader.detectedPath",
+    "downloadit.jdownloader.detectedJavaArgs",
+  ]) {
+    assert.match(service, new RegExp(preference.replaceAll(".", "\\.")));
+  }
+  assert.match(service, /provider: JDOWNLOADER_PROVIDER/);
+  assert.match(service, /downloadViaJDownloader/);
+  assert.match(service, /JDOWNLOADER_RETRY_DELAY_MS = 8000/);
+  assert.match(service, /JDOWNLOADER_MAX_STARTUP_PROBES = 6/);
+  assert.match(service, /jDownloaderStartupPromise/);
+  assert.match(service, /process\.startHidden = Boolean\(startHidden\)/);
+  assert.match(service, /channel\.redirectionLimit = 0/);
+  assert.match(service, /Ci\.nsIRequest\.LOAD_BYPASS_CACHE/);
+  assert.match(service, /createPrivilegedXMLHttpRequest\(\)/);
+  assert.match(service, /new globalThis\.XMLHttpRequest\(\)/);
+  assert.doesNotMatch(service, /xmlextras\/xmlhttprequest/);
+  assert.match(service, /allowDeprecatedSystemRequests = true/);
+  assert.match(service, /Ci\.nsILoadInfo\.HTTPS_ONLY_EXEMPT/);
+  assert.match(service, /getJDownloaderReferer\(endpoint\)/);
+  assert.match(service, /channel\.setNewReferrerInfo\(/);
+  assert.match(service, /Ci\.nsIReferrerInfo\.UNSAFE_URL/);
+  assert.doesNotMatch(service, /channel\.setRequestHeader\(\s*"Referer"/);
+  assert.match(service, /application\/x-www-form-urlencoded; charset=UTF-8/);
+  assert.match(downloaders, /JDOWNLOADER_PROVIDER = "jdownloader"/);
+  assert.match(downloaders, /BUILT_IN_PROTOCOLS = Object\.freeze/);
+  assert.match(downloaders, /taskStart: true/);
+  assert.match(downloaders, /hostname === "::1"/);
+  assert.match(downloaders, /url\.protocol !== "http:"/);
+  assert.match(downloaders, /url\.username/);
+  assert.match(downloaders, /url\.search/);
+  assert.match(downloaders, /params\.set\("autostart"/);
+  assert.match(downloaders, /jdownloader-mixed-post-data/);
+  assert.match(script, /createJDownloaderDescriptor\(draft\)/);
+  assert.match(script, /filter: "\*\.exe;\*\.jar"/);
+  assert.match(script, /includeAllFiles: false/);
+  assert.match(markup, /id="jdownloader-launch-path"[^>]+readonly="readonly"/);
+
+  const errorCodes = [
+    "jdownloader-endpoint-invalid",
+    "jdownloader-unavailable",
+    "jdownloader-discovery-invalid",
+    "jdownloader-http-error",
+    "jdownloader-launch-path-invalid",
+    "jdownloader-launch-failed",
+    "jdownloader-start-timeout",
+    "jdownloader-submit-failed",
+    "jdownloader-mixed-post-data",
+  ];
+  for (const relativePath of [
+    "addon/chrome/content/options.js",
+    "addon/chrome/content/DownloadItContextMenu.sys.mjs",
+    "addon/chrome/content/DownloadItDownloadDialog.sys.mjs",
+    "addon/chrome/content/links.js",
+  ]) {
+    const source = read(relativePath);
+    for (const code of errorCodes) {
+      assert.match(source, new RegExp(`"${code}"`));
+    }
+  }
+
+  for (const relativePath of ["README.md", "README-zh_CN.md"]) {
+    const source = read(relativePath);
+    for (const text of [
+      "jdownloader:jdownloader",
+      "downloadit.autoStartTasks",
+      "downloadit.jdownloader.endpoint",
+      "downloadit.jdownloader.launchPath",
+      "downloadit.jdownloader.autoLaunch",
+      "downloadit.jdownloader.detectedPath",
+      "downloadit.jdownloader.detectedJavaArgs",
+      "127.0.0.0/8",
+      "JDownloader2.exe",
+      "dpass",
+      "apass",
+    ]) {
+      assert.match(source, new RegExp(text.replaceAll(".", "\\.")));
+    }
+  }
+});
+
+test("settings dialog exposes a unified download-tool editor", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   const script = read("addon/chrome/content/options.js");
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const downloaders = read("addon/chrome/content/DownloadItDownloaders.sys.mjs");
   for (const id of [
-    "add-custom-downloader",
+    "add-download-tool",
     "reload-custom-downloaders",
     "retry-custom-downloaders",
     "reset-custom-downloaders",
-    "custom-downloader-editor",
+    "download-tool-editor",
+    "tool-editor-save",
+    "tool-kind-builtin",
+    "tool-kind-custom",
+    "tool-editor-builtin",
+    "tool-editor-custom",
+    "built-in-protocol",
     "custom-command-preset",
     "custom-command-template",
     "custom-start-hidden",
@@ -164,12 +281,37 @@ test("settings dialog exposes custom downloader controls", () => {
     /class="segmented-control"[^>]+data-l10n-id="downloadit-custom-type-control"/,
   );
   assert.equal((markup.match(/data-custom-type="(?:command|aria2)"/g) || []).length, 2);
+  assert.match(
+    markup,
+    /id="tool-kind-builtin"[^>]+class="editor-kind-tab is-active"[^>]+aria-selected="true"/,
+  );
+  assert.match(markup, /id="tool-editor-custom"[^>]+hidden="hidden"/);
+  assert.match(markup, /data-built-in-protocol-fields="jdownloader"/);
+  assert.match(
+    markup,
+    /<details class="advanced-settings">[\s\S]*?id="jdownloader-endpoint"[\s\S]*?<\/details>/,
+  );
+  const managerPanel = markup.slice(
+    markup.indexOf('<section id="section-managers"'),
+    markup.indexOf('<section id="section-auto-capture"'),
+  );
+  assert.doesNotMatch(managerPanel, /id="jdownloader-endpoint"/);
   assert.doesNotMatch(
     markup,
     /class="segmented-control"[^>]+data-l10n-id="downloadit-custom-type-label"/,
   );
   assert.match(script, /startHidden: document\.getElementById\("custom-start-hidden"\)\.checked/);
+  assert.match(script, /function openDownloadToolEditor\(kind = "builtin"/);
+  assert.match(script, /state\.draft\.builtInProtocols\[protocol\] =/);
+  assert.match(script, /kind === "custom" && customBlocked/);
+  assert.match(
+    script,
+    /getElementById\("add-download-tool"\)\.disabled =\s*state\.busy \|\| !state\.service/,
+  );
+  assert.doesNotMatch(script, /customDownloaders\.downloaders\.push\([^)]*jdownloader/i);
   assert.match(service, /process\.startHidden = Boolean\(startHidden\)/);
+  assert.match(service, /builtInProtocols: this\.getBuiltInProtocols\(\)/);
+  assert.match(service, /builtInProtocols\[JDOWNLOADER_PROVIDER\]/);
   assert.match(script, /configurationPath: state\.service\.normalizeCustomFilePathForStorage/);
   assert.match(downloaders, /`--conf-path=\$\{configurationPath\}`/);
   assert.match(script, /createManagerCapabilities/);

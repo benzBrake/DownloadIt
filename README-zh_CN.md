@@ -14,15 +14,16 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 在有选区且选区包含链接时，在其下方提供“使用 DownloadIt 下载选中链接”。
 - 提供“使用 DownloadIt 批量下载”链接选择器，可收集、筛选并批量下载当前文档及其 frame 中的显式页面链接。
 - 自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
-- 显示每个下载器对 POST、Cookie、批量提交和下载目录的支持情况。
+- 显示每个下载器对 POST、Cookie、批量提交、下载目录和任务启动控制的支持情况。
 - 提供始终可用且不经过 `FlashGot.exe` 的 Firefox 内建下载器。
+- 通过 JDownloader 的本地 FlashGot 端点直接集成，不经过 `FlashGot.exe`。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
 - 可以记住支持的文件扩展名，并自动交给当前默认下载工具。
 - 支持 `http`、`https`、`ftp` 和 `magnet` 链接。
 - 向外部下载工具传递 URL、文件名、Referer、Cookie 和 User-Agent；Firefox 内建下载器使用原生浏览与 Cookie 上下文。
-- 在 Firefox 设置对话框中管理默认下载工具和 Cookie 转发策略。
+- 在 Firefox 设置对话框中管理默认下载工具、任务启动行为和 Cookie 转发策略。
 - 提供独立的“自动接管”设置标签页，用于管理已记住的自动处理扩展名。
 - 界面和右键菜单支持简体中文与英文。
 - 使用 Firefox 内置的 Fluent 资源存储界面消息。
@@ -45,6 +46,7 @@ DownloadIt 后台服务
         │
         ├── native provider ── Firefox Downloads API
         ├── flashgot provider ── 临时任务 JSON ── FlashGot.exe
+        ├── jdownloader provider ── 回环 HTTP `/flashgot`
         ├── 自定义命令 provider ── Firefox 原生进程 API
         └── 自定义 aria2 provider ── JSON-RPC
 ```
@@ -98,7 +100,7 @@ Linux：
 node --test .\tests\*.test.mjs
 ```
 
-测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型与后缀筛选、选择状态、下载管理器解析、工具栏 PanelView 与右键菜单插入点、已记住扩展名的自动接管与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
+测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型与后缀筛选、选择状态、下载管理器解析、JDownloader 端点校验与启动编排、工具栏 PanelView 与右键菜单插入点、已记住扩展名的自动接管与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
 
 DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。
 
@@ -117,14 +119,22 @@ DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中�
 
 DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 DownloadIt 批量下载”可为当前标签页打开批量链接选择器；选择可用工具可立即切换默认下载工具；“重新检测下载工具”会刷新已检测工具列表；面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
 
-设置页的已发现工具列表会显示当前 DownloadIt 集成路径的能力元数据：`+` 表示支持，`-` 表示不支持，`?` 表示目前尚不明确。标签分别表示 POST 请求正文、Cookie 处理、DownloadIt 批量提交，以及由调用方指定下载目录。native provider 使用 Firefox 自己的请求上下文，FlashGot 能力取决于随附桥接程序实现的集成，自定义命令的能力根据参数占位符推导，aria2 的能力则取决于 JSON-RPC provider。这些标签描述的是 DownloadIt 能否通过当前路径传递相应数据，并不代表下载器本身提供的全部功能。
+设置页的已发现工具列表会显示当前 DownloadIt 集成路径的能力元数据：`+` 表示支持，`-` 表示不支持，`?` 表示目前尚不明确。标签分别表示 POST 请求正文、Cookie 处理、DownloadIt 批量提交、由调用方指定下载目录，以及控制提交任务是否自动开始。native provider 使用 Firefox 自己的请求上下文，FlashGot 能力取决于随附桥接程序实现的集成，JDownloader 能力取决于其回环协议，自定义命令的能力根据参数占位符推导，aria2 的能力则取决于 JSON-RPC provider。这些标签描述的是 DownloadIt 能否通过当前路径传递相应数据，并不代表下载器本身提供的全部功能。
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
+下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader 是单例，列表中的配置操作会重新打开同一份配置，不会创建重复条目。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
+
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
-| `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
+| `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"jdownloader","id":"jdownloader"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
+| `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前仅 JDownloader 使用。 |
+| `downloadit.jdownloader.endpoint` | 字符串 | JDownloader FlashGot 端点；默认值为 `http://127.0.0.1:9666/flashgot`。 |
+| `downloadit.jdownloader.launchPath` | 字符串 | 可选的 JDownloader `.exe` 或 `.jar` 绝对路径；手动值优先于检测结果。 |
+| `downloadit.jdownloader.autoLaunch` | 布尔值 | 端点不可用时启动 JDownloader；默认值为 `true`。 |
+| `downloadit.jdownloader.detectedPath` | 字符串 | 成功 GET 探测返回的安装路径，由扩展自动维护。 |
+| `downloadit.jdownloader.detectedJavaArgs` | 字符串 | 成功 GET 探测返回并经过验证的 JVM 参数 JSON 数组，由扩展自动维护。 |
 | `downloadit.idmBridgeEnabled` | 布尔值 | 接管兼容的 IDM 本地 HTTP 请求并发送到当前默认下载器；默认值为 `false`。 |
 | `downloadit.detectedManagers` | 字符串 | 下载管理器检测缓存，由扩展自动维护。 |
 | `downloadit.autoExtensions` | 字符串 | 应自动发送到当前默认下载工具的文件扩展名 JSON 数组。 |
@@ -134,6 +144,16 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 只有用户明确记住的扩展名会被自动接管。空扩展名、Firefox 安装包（`.xpi`/`xpinstall`）以及不支持的 URL 协议始终保留在 Firefox 原生流程中；`.exe` 等可执行文件扩展名可以由用户明确记住。当 Firefox 内建下载器是默认项时，已记住扩展名的 hook 也会保留现有原生 launcher，不会再次请求同一地址。
 
+### JDownloader provider
+
+`jdownloader:jdownloader` provider 直接连接 JDownloader 的 FlashGot 兼容端点。下载工具列表始终显示它的单例条目，可以从该条目或“添加下载工具”进入配置；当前 GET 探测成功，或启用自动启动且手动/缓存安装路径能解析为有效启动目标时，它才会进入可选下载器列表。端点位于编辑器的高级设置中，必须是 `localhost`、`127.0.0.0/8` 或 `::1` 上无认证信息的 HTTP 地址，不允许查询参数或 fragment，路径统一规范化为 `/flashgot`。请求禁止重定向，探测 GET 也会绕过 HTTP 缓存。
+
+成功的 GET 响应必须恰好包含两个非空行：第一行是存在的绝对 `.jar` 或 `.exe` 路径，第二行是以同一路径结尾的 `java ... -jar` 命令。DownloadIt 不执行也不保存返回的命令，只保留经过验证的 `-Xms` 和 `-Xmx` 参数。手动启动路径优先于检测缓存；手动路径失效时会明确报错，不会退回缓存。修改端点会清除旧检测缓存。设置页的连接测试只探测当前草稿端点，不保存草稿、不改变在线状态，也不启动进程。
+
+提交时若端点离线且已启用自动启动，`.exe` 会通过 Firefox 原生进程 API 可见启动。对于 `.jar`，DownloadIt 依次检查同名可执行文件、`JDownloader2.exe`、`JDownloader 2.exe` 和 `JDownloader.exe`，随后依次查找安装目录内的 `jre`/`runtime`、`JAVA_HOME`、JavaSoft 注册表路径和 Windows System32，每处优先 `javaw.exe`，其次 `java.exe`。Java 只接收已验证的 JVM 参数和 `-jar <路径>`，不会经过命令 shell。并发提交共享一次启动等待；DownloadIt 每 8 秒探测一次，最多 6 次，就绪后每个提交只 POST 一次，避免重试造成重复任务。
+
+UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发送 `package=DownloadIt`、任务 Referer（缺失时使用下载页面 URL）以及可读取时的 Firefox 首选下载目录。`autostart` 取自 `downloadit.autoStartTasks`；关闭该偏好不会改变不具备任务启动能力的其他 provider。批量任务只有在所有链接 Cookie 完全相同时才发送 Cookie，否则整批省略。POST 数据全部为空时省略，全部相同时发送；混合或部分不同的 POST 正文会在探测或启动 JDownloader 之前拒绝该批次。下载密码和压缩包密码（`dpass`、`apass`）尚未实现。
+
 ### IDM 本地协议兼容
 
 在“请求与隐私”中启用后，DownloadIt 会识别 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等兼容扩展客户端使用的 IDM 本地 HTTP 请求格式：`POST http://127.0.0.1:1001/client/<id>?seq=<seq>`。它要求请求来自 Firefox 扩展 principal，并校验按字节声明长度的 `MSG#` 请求体，再把请求重定向到 DownloadIt 自己的临时回环监听器。任务会提交给当前默认下载器，下载器接受或拒绝任务后，请求客户端会收到预期的序号响应。
@@ -142,7 +162,7 @@ DownloadIt 不会绑定 `1001` 端口、替换 IDM 的原生监听器，也不�
 
 ### 自定义下载器
 
-自定义定义以格式化 UTF-8 JSON 保存在 Firefox profile 下的 `DownloadIt\custom-downloaders.json`。扩展启动时读取该文件，设置页也可以手动重新加载。JSON 无效或版本不受支持时会保留原文件并禁止覆盖；只有显式使用重置操作才会用空配置替换损坏文件。
+自定义定义以格式化 UTF-8 JSON 保存在 Firefox profile 下的 `DownloadIt\custom-downloaders.json`。“内建协议”标签不会向该文件写入条目：JDownloader 使用自己的 Firefox 偏好命名空间，FlashGot 检测结果使用 `downloadit.detectedManagers`。扩展启动时读取自定义文件，设置页也可以手动重新加载。JSON 无效或版本不受支持时会保留原文件并禁止覆盖；只有显式使用重置操作才会用空配置替换损坏文件。损坏的自定义文件只会禁用“自定义”标签，内建协议仍可配置。
 
 首次应用自定义定义时才会创建该文件；每个条目使用稳定且不可编辑的 UUID：
 
@@ -188,7 +208,7 @@ addon/
     ├── DownloadItPanelView.sys.mjs      # 原生工具栏面板行为
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItDownloadDialog.sys.mjs # Firefox 原生下载弹窗集成
-    ├── DownloadItDownloaders.sys.mjs    # provider 引用、自定义 schema、模板与 aria2 协议
+    ├── DownloadItDownloaders.sys.mjs    # provider 引用、JDownloader/aria2 协议、自定义 schema 与模板
     ├── DownloadItIDMBridge.sys.mjs      # Firefox 请求 hook 和回环响应桥
     ├── DownloadItIDMProtocol.sys.mjs    # IDM 本地端点和字节级消息解析
     ├── DownloadItXUL.sys.mjs             # 共享的 Firefox XUL 元素构造工具
