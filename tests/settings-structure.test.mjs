@@ -39,6 +39,23 @@ test("DownloadIt icon is packaged and used by branded Firefox UI", () => {
   }
 });
 
+test("packaging scripts select the authenticated API or nightly.link", () => {
+  const packPowerShell = read("pack.ps1");
+  const packShell = read("pack.sh");
+  const nightlyLink = "https://nightly.link/benzBrake/Grabby-FlashGot/workflows/nightly.yml/master/FlashGot-nightly.zip";
+
+  for (const source of [packPowerShell, packShell]) {
+    assert.match(source, new RegExp(nightlyLink.replaceAll(".", "\\.")));
+    assert.match(source, /GITHUB_TOKEN/);
+    assert.match(source, /GH_TOKEN/);
+    assert.match(source, /api\.github\.com\/repos/);
+    assert.match(source, /branch=.*master|nightlyBranch = "master"/);
+  }
+  assert.match(packPowerShell, /if \(\$hasGitHubToken\)/);
+  assert.match(packShell, /if \[\[ -n "\$\{github_token\}" \]\]/);
+  assert.doesNotMatch(packShell, /releases\/expanded_assets|releases\/download|FlashGot-v/);
+});
+
 test("settings dialog contains the current capability controls", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   assert.doesNotMatch(markup, /chrome:\/\/global\/skin\/menulist\.css/);

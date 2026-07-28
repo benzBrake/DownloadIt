@@ -62,10 +62,10 @@ When the extension starts, it deploys `FlashGot.exe` from the XPI to `DownloadIt
 - Firefox 136.0 or later;
 - A configured custom `userChrome.js-Loader` that is active in the target profile. The version released after 20250219 is recommended because it supports Firefox 135+;
 - External download managers are optional because the Firefox downloader is always available;
-- If `addon/FlashGot.exe` is missing during the build, the PowerShell script downloads it from the [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly build, while the Linux script parses the latest GitHub Release page and downloads the published `FlashGot-v*.zip` asset without using the GitHub API. If no formal release exists, provide `addon/FlashGot.exe` locally before using the Linux script. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
+- If `addon/FlashGot.exe` is missing during the build, both packaging scripts download the latest successful [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly artifact. They use the GitHub Actions API when `GITHUB_TOKEN` or `GH_TOKEN` is available and otherwise download through nightly.link. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
 - Node.js 18 or later for development and testing;
 - PowerShell 7 (`pwsh`) for building on Windows;
-- Bash, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux.
+- Bash, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. The authenticated GitHub API path additionally requires `jq`.
 
 ## Build
 
@@ -90,7 +90,7 @@ The script packages `addon/` into `addon.xpi` in the repository root and verifie
 - `chrome.manifest`;
 - `FlashGot.exe`.
 
-`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control. When it is missing, `pack.ps1` fetches the latest nightly build, while `pack.sh` parses the latest formal Release page and downloads its matching archive without calling the GitHub API. If the upstream project has no formal release, place `FlashGot.exe` in `addon/` before running `pack.sh`.
+`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control. When it is missing, both scripts use `GITHUB_TOKEN` first and then `GH_TOKEN` to access the latest successful nightly artifact through the GitHub Actions API. With neither token set, they download the same artifact through nightly.link.
 
 ## Testing
 

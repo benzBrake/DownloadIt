@@ -62,10 +62,10 @@ DownloadIt 后台服务
 - Firefox 136.0 或更高版本；
 - 已安装并正常配置的定制 `userChrome.js-Loader`。建议使用该 Loader 20250219 之后的版本（兼容 Firefox 135+）；
 - Firefox 内建下载器始终可用，因此外部下载管理器不是必需项；
-- 构建时如果缺少 `addon/FlashGot.exe`，PowerShell 脚本会从 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 的 nightly build 下载，Linux 脚本则不调用 GitHub API，而是解析最新 GitHub Release 页面并下载其中发布的 `FlashGot-v*.zip` 资产。如果上游尚无正式 Release，使用 Linux 脚本前需自行提供 `addon/FlashGot.exe`。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
+- 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会下载 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 最新成功构建的 nightly artifact。存在 `GITHUB_TOKEN` 或 `GH_TOKEN` 时通过 GitHub Actions API 下载，否则通过 nightly.link 下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
 - 开发和测试需要 Node.js 18 或更高版本；
 - 在 Windows 上构建需要 PowerShell 7（`pwsh`）；
-- 在 Linux 上构建需要 Bash、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils。
+- 在 Linux 上构建需要 Bash、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；使用带认证的 GitHub API 路径时还需要 `jq`。
 
 ## 构建
 
@@ -90,7 +90,7 @@ Linux：
 - `chrome.manifest`；
 - `FlashGot.exe`。
 
-`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时，`pack.ps1` 会获取最新 nightly build，`pack.sh` 则不调用 GitHub API，而是解析最新正式 Release 页面并下载匹配的压缩包。如果上游尚无正式 Release，请先把 `FlashGot.exe` 放入 `addon/` 再运行 `pack.sh`。
+`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时，两套脚本都会优先使用 `GITHUB_TOKEN`，其次使用 `GH_TOKEN`，通过 GitHub Actions API 获取最新成功构建的 nightly artifact。两个 token 都未设置时，则通过 nightly.link 下载同一 artifact。
 
 ## 测试
 
