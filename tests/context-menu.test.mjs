@@ -21,6 +21,138 @@ function mockContextMenu(anchors = {}) {
   return contextMenu;
 }
 
+function createMockMenuDocument() {
+  const document = {
+    l10n: {
+      setAttributes(element, id, args = null) {
+        element.l10nId = id;
+        element.l10nArgs = args;
+      },
+      async translateFragment() {},
+      async formatValue(id, args = null) {
+        return args?.error ? `${id}: ${args.error}` : id;
+      },
+    },
+    createXULElement(localName) {
+      const listeners = new Map();
+      return {
+        localName,
+        children: [],
+        attributes: new Map(),
+        listeners,
+        disabled: false,
+        checked: false,
+        setAttribute(name, value) {
+          const text = String(value);
+          this.attributes.set(name, text);
+          if (name === "disabled") {
+            this.disabled = text === "true";
+          } else if (name === "checked") {
+            this.checked = text === "true";
+          }
+        },
+        removeAttribute(name) {
+          this.attributes.delete(name);
+          if (name === "disabled") {
+            this.disabled = false;
+          } else if (name === "checked") {
+            this.checked = false;
+          }
+        },
+        getAttribute(name) {
+          return this.attributes.get(name) ?? null;
+        },
+        append(...children) {
+          for (const child of children) {
+            this.appendChild(child);
+          }
+        },
+        appendChild(child) {
+          child.parentNode = this;
+          this.children.push(child);
+          return child;
+        },
+        replaceChildren(...children) {
+          this.children = [];
+          this.append(...children);
+        },
+        addEventListener(type, listener) {
+          const values = listeners.get(type) || [];
+          values.push(listener);
+          listeners.set(type, values);
+        },
+        async dispatch(type) {
+          const event = { type, target: this, currentTarget: this };
+          for (const listener of listeners.get(type) || []) {
+            const result = typeof listener === "function"
+              ? listener(event)
+              : listener.handleEvent(event);
+            await result;
+          }
+        },
+      };
+    },
+  };
+  return document;
+}
+
+function createPopupController({
+  managers = [
+    { key: "default-manager", name: "Default Manager", custom: false },
+    { key: "custom-manager", name: "Custom Manager", custom: true },
+  ],
+  defaultManager = "default-manager",
+  defaultManagerLocked = false,
+  context = { url: "https://example.com/file.zip" },
+  defaultChangeError = null,
+  downloadError = null,
+} = {}) {
+  const document = createMockMenuDocument();
+  const events = [];
+  const downloads = [];
+  const alerts = [];
+  let selectedManager = defaultManager;
+  const service = {
+    managers,
+    get defaultManager() {
+      return selectedManager;
+    },
+    set defaultManager(value) {
+      events.push(`default:${value}`);
+      if (defaultChangeError) {
+        throw defaultChangeError;
+      }
+      selectedManager = value;
+    },
+    readSettings() {
+      return { defaultManagerLocked };
+    },
+    async downloadLink(downloadContext, manager) {
+      events.push(`download:${manager}`);
+      downloads.push({ context: downloadContext, manager });
+      if (downloadError) {
+        throw downloadError;
+      }
+    },
+    resolveDownloader(manager) {
+      return managers.find(value => value.key === manager) || null;
+    },
+    alert(_window, message) {
+      alerts.push(message);
+    },
+    async refreshManagers() {
+      return managers;
+    },
+    openSettings() {},
+  };
+  const window = { document };
+  const controller = new DownloadItContextMenuController(service, window, null);
+  controller.context = context;
+  controller.popup = document.createXULElement("menupopup");
+  controller.rebuildPopup();
+  return { alerts, controller, document, downloads, events, service };
+}
+
 test("context menu insertion prefers the current Firefox media group", () => {
   const mediaSeparator = {};
   const learnMore = {};
@@ -212,7 +344,7 @@ test("context menu explicitly synchronizes the selected downloader", () => {
     { document: {} },
     null,
   );
-  controller.popup = { children: [flashGot, custom, {}] };
+  controller.defaultManagerItems = [flashGot, custom];
 
   controller.syncPopupSelection();
   assert.equal(flashGot.checked, false);
@@ -223,6 +355,117 @@ test("context menu explicitly synchronizes the selected downloader", () => {
   controller.syncPopupSelection(flashGot.downloadItManagerKey);
   assert.equal(flashGot.checked, true);
   assert.equal(custom.checked, false);
+});
+
+test("context menu separates one-time downloads from default changes", async () => {
+  const { controller, downloads, events, service } = createPopupController();
+  const [defaultItem, customItem, firstSeparator, defaultMenu] =
+    controller.popup.children;
+
+  assert.equal(defaultItem.localName, "menuitem");
+  assert.equal(defaultItem.getAttribute("type"), null);
+  assert.equal(defaultItem.disabled, false);
+  assert.equal(customItem.l10nId, "downloadit-custom-downloader-menu-label");
+  assert.deepEqual(customItem.l10nArgs, { name: "Custom Manager" });
+  assert.equal(firstSeparator.localName, "menuseparator");
+  assert.equal(defaultMenu, controller.defaultManagerMenu);
+  assert.equal(defaultMenu.localName, "menu");
+  assert.equal(defaultMenu.l10nId, "downloadit-set-default-and-download");
+  assert.equal(controller.defaultManagerPopup.localName, "menupopup");
+  assert.equal(controller.defaultManagerItems.length, 2);
+  assert.equal(controller.defaultManagerItems[0].getAttribute("type"), "radio");
+  assert.equal(controller.defaultManagerItems[0].checked, true);
+  assert.equal(controller.defaultManagerItems[1].checked, false);
+  assert.equal(
+    controller.defaultManagerItems[1].l10nId,
+    "downloadit-custom-downloader-menu-label",
+  );
+
+  await customItem.dispatch("command");
+
+  assert.equal(service.defaultManager, "default-manager");
+  assert.deepEqual(events, ["download:custom-manager"]);
+  assert.equal(downloads[0].manager, "custom-manager");
+});
+
+test("default-and-download changes the preference before downloading", async () => {
+  const { controller, events, service } = createPopupController();
+
+  await controller.defaultManagerItems[1].dispatch("command");
+
+  assert.equal(service.defaultManager, "custom-manager");
+  assert.deepEqual(events, [
+    "default:custom-manager",
+    "download:custom-manager",
+  ]);
+  assert.equal(controller.defaultManagerItems[0].checked, false);
+  assert.equal(controller.defaultManagerItems[1].checked, true);
+});
+
+test("failed default changes restore selection and do not download", async () => {
+  const { alerts, controller, downloads, service } = createPopupController({
+    defaultChangeError: new Error("preference is locked"),
+  });
+  controller.defaultManagerItems[0].removeAttribute("checked");
+  controller.defaultManagerItems[1].setAttribute("checked", "true");
+
+  await controller.defaultManagerItems[1].dispatch("command");
+
+  assert.equal(service.defaultManager, "default-manager");
+  assert.equal(controller.defaultManagerItems[0].checked, true);
+  assert.equal(controller.defaultManagerItems[1].checked, false);
+  assert.equal(downloads.length, 0);
+  assert.deepEqual(alerts, [
+    "downloadit-context-default-change-failed: preference is locked",
+  ]);
+});
+
+test("download failure preserves a successful default change", async () => {
+  const { alerts, controller, service } = createPopupController({
+    downloadError: new Error("launch failed"),
+  });
+
+  await controller.defaultManagerItems[1].dispatch("command");
+
+  assert.equal(service.defaultManager, "custom-manager");
+  assert.equal(controller.defaultManagerItems[1].checked, true);
+  assert.deepEqual(alerts, [
+    "downloadit-download-failed: launch failed",
+  ]);
+});
+
+test("locked preferences and missing links disable only download actions", () => {
+  const locked = createPopupController({ defaultManagerLocked: true });
+  assert.equal(locked.controller.popup.children[0].disabled, false);
+  assert.equal(locked.controller.defaultManagerMenu.disabled, true);
+
+  const noContext = createPopupController({ context: null });
+  assert.equal(noContext.controller.popup.children[0].disabled, true);
+  assert.equal(noContext.controller.popup.children[1].disabled, true);
+  assert.equal(noContext.controller.defaultManagerMenu.disabled, true);
+  assert.equal(
+    noContext.controller.popup.children.at(-3).l10nId,
+    "downloadit-refresh",
+  );
+  assert.equal(
+    noContext.controller.popup.children.at(-1).l10nId,
+    "downloadit-settings",
+  );
+});
+
+test("empty manager lists omit the default-change submenu", () => {
+  const { controller } = createPopupController({
+    managers: [],
+    defaultManager: "",
+  });
+
+  assert.equal(controller.defaultManagerMenu, null);
+  assert.equal(controller.defaultManagerPopup, null);
+  assert.deepEqual(controller.defaultManagerItems, []);
+  assert.equal(controller.popup.children[0].l10nId, "downloadit-no-manager");
+  assert.equal(controller.popup.children[0].disabled, true);
+  assert.equal(controller.popup.children[1].l10nId, "downloadit-refresh");
+  assert.equal(controller.popup.children.at(-1).l10nId, "downloadit-settings");
 });
 
 test("context menu exposes only supported download targets", () => {

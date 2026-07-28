@@ -107,6 +107,9 @@ export class DownloadItContextMenuController {
     this.selectionGeneration = 0;
     this.menu = null;
     this.popup = null;
+    this.defaultManagerMenu = null;
+    this.defaultManagerPopup = null;
+    this.defaultManagerItems = [];
     this.contextMenu = null;
   }
 
@@ -200,6 +203,9 @@ export class DownloadItContextMenuController {
     this.linksDownloadItem = null;
     this.menu = null;
     this.popup = null;
+    this.defaultManagerMenu = null;
+    this.defaultManagerPopup = null;
+    this.defaultManagerItems = [];
     this.contextMenu = null;
   }
 
@@ -395,29 +401,28 @@ export class DownloadItContextMenuController {
 
   rebuildPopup() {
     this.popup.replaceChildren();
+    this.defaultManagerMenu = null;
+    this.defaultManagerPopup = null;
+    this.defaultManagerItems = [];
 
     const defaultManager = this.service.defaultManager;
+    const defaultManagerLocked = Boolean(
+      this.service.readSettings?.()?.defaultManagerLocked,
+    );
     for (const value of this.service.managers) {
       const downloader = normalizeDownloader(value);
       const item = createXULElement(this.document, "menuitem", {
         label: downloader.name,
-        type: "radio",
-        name: "downloadit-download-manager",
         value: downloader.key,
-        checked: downloader.key === defaultManager ? "true" : null,
+        disabled: !this.context,
       });
       item.downloadItManagerKey = downloader.key;
-      item.checked = downloader.key === defaultManager;
       if (downloader.custom) {
         this.setLocalized(item, "downloadit-custom-downloader-menu-label", {
           name: downloader.name,
         });
       }
-      item.addEventListener("command", () => {
-        this.service.defaultManager = downloader.key;
-        this.syncPopupSelection(downloader.key);
-        this.download(downloader.key);
-      });
+      item.addEventListener("command", () => this.download(downloader.key));
       this.popup.appendChild(item);
     }
 
@@ -430,6 +435,43 @@ export class DownloadItContextMenuController {
     }
 
     if (this.service.managers.length > 0) {
+      this.popup.appendChild(createXULElement(this.document, "menuseparator"));
+
+      this.defaultManagerMenu = createXULElement(this.document, "menu", {
+        disabled: !this.context || defaultManagerLocked,
+      });
+      this.setLocalized(
+        this.defaultManagerMenu,
+        "downloadit-set-default-and-download",
+      );
+      this.defaultManagerPopup = createXULElement(this.document, "menupopup");
+      this.defaultManagerMenu.appendChild(this.defaultManagerPopup);
+
+      for (const value of this.service.managers) {
+        const downloader = normalizeDownloader(value);
+        const item = createXULElement(this.document, "menuitem", {
+          label: downloader.name,
+          type: "radio",
+          name: "downloadit-download-manager",
+          value: downloader.key,
+          checked: downloader.key === defaultManager ? "true" : null,
+        });
+        item.downloadItManagerKey = downloader.key;
+        item.checked = downloader.key === defaultManager;
+        if (downloader.custom) {
+          this.setLocalized(item, "downloadit-custom-downloader-menu-label", {
+            name: downloader.name,
+          });
+        }
+        item.addEventListener(
+          "command",
+          () => this.setDefaultAndDownload(downloader.key),
+        );
+        this.defaultManagerItems.push(item);
+        this.defaultManagerPopup.appendChild(item);
+      }
+
+      this.popup.appendChild(this.defaultManagerMenu);
       this.popup.appendChild(createXULElement(this.document, "menuseparator"));
     }
     const refreshItem = createXULElement(this.document, "menuitem", {
@@ -454,10 +496,7 @@ export class DownloadItContextMenuController {
   }
 
   syncPopupSelection(defaultManager = this.service.defaultManager) {
-    for (const item of this.popup?.children || []) {
-      if (!item.downloadItManagerKey) {
-        continue;
-      }
+    for (const item of this.defaultManagerItems) {
       const checked = item.downloadItManagerKey === defaultManager;
       item.checked = checked;
       if (checked) {
@@ -466,6 +505,26 @@ export class DownloadItContextMenuController {
         item.removeAttribute("checked");
       }
     }
+  }
+
+  async setDefaultAndDownload(manager) {
+    if (!this.context || !manager) {
+      return;
+    }
+    try {
+      this.service.defaultManager = manager;
+    } catch (error) {
+      this.syncPopupSelection();
+      this.service.alert(
+        this.window,
+        await this.formatMessage("downloadit-context-default-change-failed", {
+          error: error?.message || String(error),
+        }),
+      );
+      return;
+    }
+    this.syncPopupSelection(manager);
+    await this.download(manager);
   }
 
   async download(manager) {
