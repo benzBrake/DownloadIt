@@ -612,6 +612,11 @@ button {
   color: var(--accent);
 }
 
+#refresh-managers {
+  height: 40px;
+  margin: var(--space-xsmall) var(--space-xxsmall);
+}
+
 .button-glyph {
   margin-right: 4px;
   color: var(--accent);
@@ -722,7 +727,7 @@ button {
   border-radius: 2px;
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
