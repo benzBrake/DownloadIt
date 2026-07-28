@@ -20,11 +20,11 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
-- Lets you remember supported file extensions and automatically forward them to the current default manager.
+- Provides allow and deny lists for automatic file-type capture, with deny rules taking priority.
 - Supports `http`, `https`, `ftp`, and `magnet` links.
 - Passes the URL, filename, referrer, cookies, and User-Agent to external download tools; the Firefox downloader uses the native browsing and cookie context.
 - Provides Firefox settings for the default download manager, task-start behavior, and cookie-forwarding policy.
-- Provides a dedicated **Auto-capture** settings tab for remembered automatic file extensions.
+- Provides a dedicated **Auto-capture** settings tab for editing allow and deny rules and reviewing built-in protections.
 - Supports Simplified Chinese and English in the UI and context menu.
 - Stores UI messages in Firefox's built-in Fluent resources.
 - Verifies the bundled `FlashGot.exe` during the build and at runtime.
@@ -100,7 +100,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, JDownloader endpoint validation and startup orchestration, the toolbar PanelView and context-menu insertion point, remembered-extension interception and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, JDownloader endpoint validation and startup orchestration, the toolbar PanelView and context-menu insertion point, allow/deny automatic-capture matching and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature.
 
@@ -138,12 +138,33 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.jdownloader.detectedJavaArgs` | String | JSON array of validated JVM arguments reported by a successful GET probe and maintained automatically. |
 | `downloadit.idmBridgeEnabled` | Boolean | Intercepts compatible IDM local HTTP requests and sends them to the current default downloader. The default is `false`. |
 | `downloadit.detectedManagers` | String | Cached FlashGot-backed download-manager detection results, maintained automatically by the extension. |
-| `downloadit.autoExtensions` | String | JSON array of file extensions that should be sent to the current default manager automatically. |
 | `downloadit.linkGroups` | String | Versioned JSON configuration for built-in and custom batch-link suffix groups. |
 
-When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes. Remembered extensions can be removed individually or cleared from the **Auto-capture** tab.
+When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes.
 
-Only explicitly remembered extensions are intercepted. Empty extensions, Firefox install packages (`.xpi`/`xpinstall`), and unsupported URL schemes always remain in Firefox's native flow. Executable extensions such as `.exe` can be remembered explicitly. When the Firefox downloader is the default, the remembered-extension hook also leaves the existing native launcher untouched instead of issuing a duplicate request.
+### Automatic capture rules
+
+User rules are stored as formatted UTF-8 JSON in `DownloadIt\auto-capture-rules.json` under the Firefox profile. The file uses stable UUIDs and typed matchers so additional matcher types, such as domains, can be added without moving the configuration again. The current version accepts extension matchers:
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "action": "allow",
+      "match": {
+        "type": "extension",
+        "value": "zip"
+      }
+    }
+  ]
+}
+```
+
+The file is created on the first saved rule and written atomically. Invalid JSON, duplicate matches, invalid IDs, and unsupported versions are preserved without being overwritten; automatic capture is disabled until the file is reloaded or explicitly reset from settings. User allow and deny rules can be added, removed individually, or cleared independently from the **Auto-capture** tab.
+
+Automatic capture uses deny-first matching: built-in and user deny rules take priority, user allow rules are captured, and file types in neither list continue through Firefox's native prompt. `.xpi` is an immutable built-in deny entry, and downloads identified by Firefox as `xpinstall` remain native even when their filename is misleading. Empty extensions and unsupported URL schemes also remain native. Executable extensions such as `.exe` can be added explicitly to the allow list. When the Firefox downloader is the default, the hook leaves the existing native launcher untouched instead of issuing a duplicate request.
 
 ### JDownloader provider
 
@@ -206,6 +227,7 @@ addon/
 ├── FlashGot.exe                          # Download-manager bridge
 └── chrome/content/
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
+    ├── DownloadItAutoCapture.sys.mjs    # Versioned typed rules and built-in capture protections
     ├── DownloadItPanelView.sys.mjs      # Native toolbar panel behavior
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration

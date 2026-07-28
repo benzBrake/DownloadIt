@@ -15,6 +15,7 @@ const preferenceLocks = new Set();
 const environmentValues = new Map();
 const createdStreams = [];
 let xmlHttpRequestFactory = () => ({});
+let uuidCounter = 0;
 const downloadsMock = { ALL: Symbol("Downloads.ALL") };
 const downloadPathsMock = {};
 const ioUtilsMock = {};
@@ -53,6 +54,12 @@ const servicesMock = {
     prefIsLocked: name => preferenceLocks.has(name),
     setBoolPref: (name, value) => preferenceValues.set(name, value),
     setStringPref: (name, value) => preferenceValues.set(name, value),
+  },
+  uuid: {
+    generateUUID: () => {
+      uuidCounter += 1;
+      return `{11111111-1111-4111-8111-${String(uuidCounter).padStart(12, "0")}}`;
+    },
   },
 };
 
@@ -160,6 +167,11 @@ function createSettingsService() {
   service.flashGotManagers = [];
   service.customDownloaderDocument = { version: 1, downloaders: [] };
   service.customDownloaderLoadError = null;
+  service.autoCaptureRulesPath =
+    "C:\\Profile\\DownloadIt\\auto-capture-rules.json";
+  service.autoCaptureRuleDocument = { version: 1, rules: [] };
+  service.autoCaptureRulesLoadError = null;
+  service.autoCaptureRulesWritePromise = Promise.resolve();
   service.jDownloaderOnline = false;
   service.jDownloaderProbePromise = null;
   service.jDownloaderProbeEndpoint = "";
@@ -169,6 +181,63 @@ function createSettingsService() {
   service.providers = service.createProviderRegistry();
   return service;
 }
+
+test("automatic capture file updates are serialized without losing rules", async () => {
+  const service = createSettingsService();
+  const writes = [];
+  service.writeAutoCaptureRules = async document => {
+    writes.push(JSON.parse(JSON.stringify(document)));
+  };
+
+  await Promise.all([
+    service.setAutoCaptureRule("zip", "allow"),
+    service.setAutoCaptureRule("exe", "deny"),
+  ]);
+
+  assert.equal(writes.length, 2);
+  assert.deepEqual(
+    service.autoCaptureRules.rules.map(rule => [
+      rule.action,
+      rule.match.type,
+      rule.match.value,
+    ]),
+    [
+      ["allow", "extension", "zip"],
+      ["deny", "extension", "exe"],
+    ],
+  );
+  assert.equal(writes[1].rules.length, 2);
+});
+
+test("damaged automatic capture files disable rules until a valid reload", async () => {
+  const service = createSettingsService();
+  const originalReadUTF8 = ioUtilsMock.readUTF8;
+  try {
+    ioUtilsMock.readUTF8 = async () => "{invalid";
+    let snapshot = await service.reloadAutoCaptureRules();
+    assert.deepEqual(service.autoCaptureRules.rules, []);
+    assert.ok(snapshot.autoCaptureRulesError);
+    assert.equal(service.getAutoCaptureDisposition("zip"), "default");
+
+    ioUtilsMock.readUTF8 = async () => JSON.stringify({
+      version: 1,
+      rules: [{
+        id: "33333333-3333-4333-8333-333333333333",
+        action: "allow",
+        match: { type: "extension", value: "zip" },
+      }],
+    });
+    snapshot = await service.reloadAutoCaptureRules();
+    assert.equal(snapshot.autoCaptureRulesError, null);
+    assert.equal(service.getAutoCaptureDisposition("zip"), "allow");
+  } finally {
+    if (originalReadUTF8) {
+      ioUtilsMock.readUTF8 = originalReadUTF8;
+    } else {
+      delete ioUtilsMock.readUTF8;
+    }
+  }
+});
 
 test("service registers Firefox as the always-available native provider", () => {
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");

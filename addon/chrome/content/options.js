@@ -25,6 +25,14 @@ const {
 const { validateLinkGroupSettings } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItLinks.sys.mjs",
 );
+const {
+  isBuiltInAutoCaptureDeny,
+  listAutoCaptureExtensions,
+  normalizeAutoExtensions,
+  updateAutoCaptureRule,
+} = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItAutoCapture.sys.mjs",
+);
 const localizationReady = initializeDownloadItLocalization(window);
 
 const SECTION_META = {
@@ -102,6 +110,7 @@ const CUSTOM_ERROR_MESSAGES = {
   "aria2-managed-argument": "downloadit-error-aria2-managed-argument",
   "executable-relative-path-invalid": "downloadit-error-executable-relative-path",
   "custom-config-blocked": "downloadit-error-custom-config-blocked",
+  "auto-capture-config-blocked": "downloadit-error-auto-capture-config-blocked",
   "aria2-unavailable": "downloadit-error-aria2-unavailable",
   "aria2-http-error": "downloadit-error-aria2-http",
   "aria2-response-invalid": "downloadit-error-aria2-response",
@@ -169,7 +178,7 @@ function createSettingsState(snapshot) {
       ]),
     ),
     idmBridgeEnabled: snapshot.idmBridgeEnabled,
-    autoExtensions: [...snapshot.autoExtensions],
+    autoCaptureRules: clone(snapshot.autoCaptureRules),
     linkGroups: clone(snapshot.linkGroups),
     customDownloaders: clone(snapshot.customDownloaders),
   };
@@ -225,6 +234,14 @@ function bindEvents() {
     "click",
     resetCustomDownloaders,
   );
+  document.getElementById("retry-auto-capture-rules").addEventListener(
+    "click",
+    reloadAutoCaptureRules,
+  );
+  document.getElementById("reset-auto-capture-rules").addEventListener(
+    "click",
+    resetAutoCaptureRules,
+  );
   document.getElementById("add-download-tool").addEventListener(
     "click",
     () => openDownloadToolEditor(),
@@ -250,25 +267,29 @@ function bindEvents() {
       toggleCustomDownloader(toggle.dataset.toggleCustom);
     }
   });
-  document.getElementById("clear-auto-extensions").addEventListener("click", () => {
-    if (!state.draft || state.snapshot?.autoExtensionsLocked) {
-      return;
-    }
-    state.draft.autoExtensions = [];
-    clearFeedback();
-    render();
-  });
-  document.getElementById("auto-extension-list").addEventListener("click", event => {
-    const button = event.target.closest("[data-remove-extension]");
-    if (!button || !state.draft || state.snapshot?.autoExtensionsLocked) {
-      return;
-    }
-    state.draft.autoExtensions = state.draft.autoExtensions.filter(
-      value => value !== button.dataset.removeExtension,
+  for (const disposition of ["allow", "deny"]) {
+    document.getElementById(`add-auto-${disposition}`).addEventListener(
+      "click",
+      () => addAutoCaptureRules(disposition),
     );
-    clearFeedback();
-    render();
-  });
+    document.getElementById(`auto-${disposition}-input`).addEventListener(
+      "keydown",
+      event => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          addAutoCaptureRules(disposition);
+        }
+      },
+    );
+    document.getElementById(`clear-auto-${disposition}`).addEventListener(
+      "click",
+      () => clearAutoCaptureRules(disposition),
+    );
+    document.getElementById(`auto-${disposition}-list`).addEventListener(
+      "click",
+      removeAutoCaptureRule,
+    );
+  }
   document.getElementById("add-custom-link-group").addEventListener(
     "click",
     () => openLinkGroupEditor(),
@@ -453,7 +474,7 @@ function render() {
   renderServiceState();
   renderManagers();
   renderTaskStartSettings();
-  renderAutoExtensions();
+  renderAutoCaptureRules();
   renderLinkGroups();
   renderPrivacy();
   renderAbout();
@@ -839,14 +860,95 @@ function renderPrivacy() {
   idmBridgeLock.hidden = !snapshot?.idmBridgeLocked;
 }
 
-function renderAutoExtensions() {
+function parseAutoCaptureInput(value) {
+  const entries = String(value || "")
+    .split(/[\s,;]+/)
+    .map(entry => entry.trim())
+    .filter(Boolean);
+  if (entries.some(entry => normalizeAutoExtensions([entry]).length === 0)) {
+    return null;
+  }
+  return normalizeAutoExtensions(entries);
+}
+
+function autoCaptureRulesAreDirty() {
+  return Boolean(
+    state.initial &&
+    state.draft &&
+    JSON.stringify(state.initial.autoCaptureRules) !==
+      JSON.stringify(state.draft.autoCaptureRules)
+  );
+}
+
+function addAutoCaptureRules(disposition) {
+  if (!state.draft || state.snapshot?.autoCaptureRulesError) {
+    return;
+  }
+  const input = document.getElementById(`auto-${disposition}-input`);
+  const extensions = parseAutoCaptureInput(input.value);
+  if (!extensions?.length) {
+    setFeedback(localizedMessage("downloadit-error-auto-capture-extension"), "error");
+    return;
+  }
+  const builtIn = extensions.find(isBuiltInAutoCaptureDeny);
+  if (builtIn) {
+    setFeedback(localizedMessage("downloadit-error-auto-capture-built-in", {
+      extension: `.${builtIn}`,
+    }), "error");
+    return;
+  }
+  for (const extension of extensions) {
+    state.draft.autoCaptureRules = updateAutoCaptureRule(
+      state.draft.autoCaptureRules,
+      extension,
+      disposition,
+      state.service.createAutoCaptureRuleId(),
+    );
+  }
+  input.value = "";
+  clearFeedback();
+  render();
+}
+
+function clearAutoCaptureRules(disposition) {
+  if (!state.draft || state.snapshot?.autoCaptureRulesError) {
+    return;
+  }
+  state.draft.autoCaptureRules.rules = state.draft.autoCaptureRules.rules.filter(
+    rule => rule.action !== disposition,
+  );
+  clearFeedback();
+  render();
+}
+
+function removeAutoCaptureRule(event) {
+  const button = event.target.closest("[data-remove-auto-rule]");
+  if (!button || !state.draft || state.snapshot?.autoCaptureRulesError) {
+    return;
+  }
+  state.draft.autoCaptureRules = updateAutoCaptureRule(
+    state.draft.autoCaptureRules,
+    button.dataset.removeAutoRule,
+    "default",
+  );
+  clearFeedback();
+  render();
+}
+
+function renderAutoCaptureRuleList(disposition) {
   const snapshot = state.snapshot;
-  const extensions = state.draft?.autoExtensions || snapshot?.autoExtensions || [];
-  const list = document.getElementById("auto-extension-list");
-  const clearButton = document.getElementById("clear-auto-extensions");
-  const lock = document.getElementById("auto-extension-lock");
+  const ruleDocument = state.draft?.autoCaptureRules || snapshot?.autoCaptureRules;
+  const extensions = ruleDocument
+    ? listAutoCaptureExtensions(ruleDocument, disposition)
+    : [];
+  const builtInRules = disposition === "deny"
+    ? snapshot?.builtInAutoCaptureDeny || []
+    : [];
+  const list = document.getElementById(`auto-${disposition}-list`);
+  const clearButton = document.getElementById(`clear-auto-${disposition}`);
+  const input = document.getElementById(`auto-${disposition}-input`);
   list.replaceChildren();
-  if (!extensions.length) {
+  if (!extensions.length && !builtInRules.length) {
     const empty = document.createElement("li");
     empty.className = "empty-row";
     const mark = document.createElement("span");
@@ -855,30 +957,81 @@ function renderAutoExtensions() {
     const message = document.createElement("span");
     empty.append(mark, message);
     list.append(empty);
-    setLocalized(message, "downloadit-no-auto-extensions");
+    setLocalized(message, disposition === "allow"
+      ? "downloadit-no-auto-allow"
+      : "downloadit-no-auto-deny");
   } else {
-    for (const extension of extensions) {
+    const rules = [
+      ...builtInRules.map(rule => ({ ...rule, builtIn: true })),
+      ...extensions.map(extension => ({ extension, builtIn: false })),
+    ];
+    for (const rule of rules) {
       const row = document.createElement("li");
       row.className = "auto-extension-row";
+      if (rule.builtIn) {
+        row.classList.add("is-built-in");
+      }
       const name = document.createElement("code");
       name.className = "auto-extension-name";
-      name.textContent = `.${extension}`;
-      const remove = document.createElement("button");
-      remove.className = "icon-button";
-      remove.type = "button";
-      remove.dataset.removeExtension = extension;
-      remove.textContent = "\u00d7";
-      setLocalized(remove, "downloadit-remove-extension", { extension: `.${extension}` });
-      row.append(name, remove);
+      name.textContent = `.${rule.extension}`;
+      const details = document.createElement("span");
+      details.className = "auto-extension-details";
+      details.append(name);
+      if (rule.builtIn) {
+        const badge = document.createElement("span");
+        badge.className = "rule-badge";
+        setLocalized(badge, "downloadit-auto-rule-built-in");
+        const reason = document.createElement("span");
+        reason.className = "auto-rule-reason";
+        setLocalized(reason, "downloadit-auto-rule-xpi-reason");
+        details.append(badge, reason);
+        row.append(details);
+      } else {
+        const remove = document.createElement("button");
+        remove.className = "icon-button";
+        remove.type = "button";
+        remove.dataset.removeAutoRule = rule.extension;
+        remove.textContent = "\u00d7";
+        setLocalized(
+          remove,
+          disposition === "allow"
+            ? "downloadit-remove-auto-allow"
+            : "downloadit-remove-auto-deny",
+          { extension: `.${rule.extension}` },
+        );
+        row.append(details, remove);
+      }
       list.append(row);
     }
   }
-  const locked = Boolean(snapshot?.autoExtensionsLocked);
-  clearButton.disabled = locked || state.busy || !extensions.length;
-  lock.hidden = !locked;
-  for (const button of list.querySelectorAll("[data-remove-extension]")) {
-    button.disabled = locked || state.busy;
+  const blocked = Boolean(snapshot?.autoCaptureRulesError);
+  clearButton.parentElement.hidden = !extensions.length;
+  clearButton.disabled = blocked || state.busy;
+  input.disabled = blocked || state.busy;
+  document.getElementById(`add-auto-${disposition}`).disabled =
+    blocked || state.busy;
+  for (const button of list.querySelectorAll("[data-remove-auto-rule]")) {
+    button.disabled = blocked || state.busy;
   }
+}
+
+function renderAutoCaptureRules() {
+  const configError = document.getElementById("auto-capture-config-error");
+  const configErrorMessage = document.getElementById(
+    "auto-capture-config-error-message",
+  );
+  const error = state.snapshot?.autoCaptureRulesError;
+  configError.hidden = !error;
+  if (error) {
+    setLocalized(configErrorMessage, "downloadit-auto-capture-config-load-error", {
+      error: error.message || error.code,
+      path: state.snapshot.autoCaptureRulesPath,
+    });
+  }
+  document.getElementById("retry-auto-capture-rules").disabled = state.busy;
+  document.getElementById("reset-auto-capture-rules").disabled = state.busy;
+  renderAutoCaptureRuleList("allow");
+  renderAutoCaptureRuleList("deny");
 }
 
 function linkGroupDisplayName(group) {
@@ -1043,9 +1196,6 @@ function localizedError(error) {
   if (/JDownloader .* preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-jdownloader");
   }
-  if (/automatic extension preference is locked/i.test(message)) {
-    return localizedMessage("downloadit-error-locked-extensions");
-  }
   if (/link group preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-link-groups");
   }
@@ -1131,6 +1281,57 @@ async function resetCustomDownloaders() {
     syncUntouchedDefaultManager();
     renderedManagerKeys = null;
     setFeedback(localizedMessage("downloadit-custom-reset"), "success");
+  } catch (error) {
+    setFeedback(localizedError(error), "error");
+  } finally {
+    state.busy = false;
+  }
+  render();
+}
+
+async function reloadAutoCaptureRules() {
+  if (!state.service || state.busy) {
+    return;
+  }
+  if (autoCaptureRulesAreDirty()) {
+    const message = await document.l10n.formatValue(
+      "downloadit-confirm-reload-auto-capture",
+    );
+    if (!window.confirm(message)) {
+      return;
+    }
+  }
+  state.busy = true;
+  render();
+  try {
+    state.snapshot = await state.service.reloadAutoCaptureRules();
+    state.initial.autoCaptureRules = clone(state.snapshot.autoCaptureRules);
+    state.draft.autoCaptureRules = clone(state.snapshot.autoCaptureRules);
+    if (!state.snapshot.autoCaptureRulesError) {
+      setFeedback(localizedMessage("downloadit-auto-capture-reloaded"), "success");
+    }
+  } catch (error) {
+    setFeedback(localizedError(error), "error");
+  } finally {
+    state.busy = false;
+  }
+  render();
+}
+
+async function resetAutoCaptureRules() {
+  const message = await document.l10n.formatValue(
+    "downloadit-confirm-reset-auto-capture",
+  );
+  if (!window.confirm(message)) {
+    return;
+  }
+  state.busy = true;
+  render();
+  try {
+    state.snapshot = await state.service.resetAutoCaptureRules();
+    state.initial.autoCaptureRules = clone(state.snapshot.autoCaptureRules);
+    state.draft.autoCaptureRules = clone(state.snapshot.autoCaptureRules);
+    setFeedback(localizedMessage("downloadit-auto-capture-reset"), "success");
   } catch (error) {
     setFeedback(localizedError(error), "error");
   } finally {
@@ -1875,6 +2076,9 @@ async function applySettings() {
       : null;
     if (state.snapshot.customDownloadersError) {
       payload.customDownloaders = null;
+    }
+    if (state.snapshot.autoCaptureRulesError) {
+      payload.autoCaptureRules = null;
     }
     const nextSnapshot = await state.service.applySettings(payload);
     state.snapshot = nextSnapshot;

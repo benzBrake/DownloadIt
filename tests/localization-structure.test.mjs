@@ -24,13 +24,18 @@ test("supported Fluent resources contain the same message IDs", () => {
   assert.ok(english.size > 0);
 });
 
-test("remembered-extension removal uses an accessible Fluent label", () => {
+test("automatic capture rule removal uses accessible Fluent labels", () => {
   for (const locale of ["en-US", "zh-CN"]) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
-    assert.match(
-      source,
-      /downloadit-remove-extension\s*=\s*\r?\n\s+\.aria-label\s*=/,
-    );
+    for (const id of [
+      "downloadit-remove-auto-allow",
+      "downloadit-remove-auto-deny",
+    ]) {
+      assert.match(
+        source,
+        new RegExp(`${id}\\s*=\\s*\\r?\\n\\s+\\.aria-label\\s*=`),
+      );
+    }
   }
 });
 

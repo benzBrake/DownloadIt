@@ -20,11 +20,11 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
-- 可以记住支持的文件扩展名，并自动交给当前默认下载工具。
+- 为文件类型自动接管提供白名单和黑名单，并由黑名单优先判定。
 - 支持 `http`、`https`、`ftp` 和 `magnet` 链接。
 - 向外部下载工具传递 URL、文件名、Referer、Cookie 和 User-Agent；Firefox 内建下载器使用原生浏览与 Cookie 上下文。
 - 在 Firefox 设置对话框中管理默认下载工具、任务启动行为和 Cookie 转发策略。
-- 提供独立的“自动接管”设置标签页，用于管理已记住的自动处理扩展名。
+- 提供独立的“自动接管”设置标签页，用于编辑黑白名单并查看内置保护规则。
 - 界面和右键菜单支持简体中文与英文。
 - 使用 Firefox 内置的 Fluent 资源存储界面消息。
 - 构建时校验并在运行时校验随扩展发布的 `FlashGot.exe`。
@@ -100,7 +100,7 @@ Linux：
 node --test .\tests\*.test.mjs
 ```
 
-测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型与后缀筛选、选择状态、下载管理器解析、JDownloader 端点校验与启动编排、工具栏 PanelView 与右键菜单插入点、已记住扩展名的自动接管与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
+测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型与后缀筛选、选择状态、下载管理器解析、JDownloader 端点校验与启动编排、工具栏 PanelView 与右键菜单插入点、自动接管黑白名单判定与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
 
 DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。
 
@@ -138,12 +138,33 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.jdownloader.detectedJavaArgs` | 字符串 | 成功 GET 探测返回并经过验证的 JVM 参数 JSON 数组，由扩展自动维护。 |
 | `downloadit.idmBridgeEnabled` | 布尔值 | 接管兼容的 IDM 本地 HTTP 请求并发送到当前默认下载器；默认值为 `false`。 |
 | `downloadit.detectedManagers` | 字符串 | FlashGot 下载管理器检测缓存，由扩展自动维护。 |
-| `downloadit.autoExtensions` | 字符串 | 应自动发送到当前默认下载工具的文件扩展名 JSON 数组。 |
 | `downloadit.linkGroups` | 字符串 | 内置及自定义批量链接后缀分组的版本化 JSON 配置。 |
 
-当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。已记住的扩展名可以在“自动接管”标签页逐项移除或全部清除。
+当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。
 
-只有用户明确记住的扩展名会被自动接管。空扩展名、Firefox 安装包（`.xpi`/`xpinstall`）以及不支持的 URL 协议始终保留在 Firefox 原生流程中；`.exe` 等可执行文件扩展名可以由用户明确记住。当 Firefox 内建下载器是默认项时，已记住扩展名的 hook 也会保留现有原生 launcher，不会再次请求同一地址。
+### 自动接管规则
+
+用户规则以格式化 UTF-8 JSON 保存在 Firefox profile 下的 `DownloadIt\auto-capture-rules.json`。文件使用稳定 UUID 和带类型的匹配器，因此以后增加域名等匹配类型时不需要再次迁移存储位置。当前版本接受扩展名匹配器：
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "action": "allow",
+      "match": {
+        "type": "extension",
+        "value": "zip"
+      }
+    }
+  ]
+}
+```
+
+首次保存规则时才会创建该文件，并通过原子写入更新。JSON 无效、匹配项重复、ID 无效或版本不受支持时会保留原文件且禁止覆盖，同时停用自动接管，直到用户从设置页重新加载或明确重置。用户黑白名单规则可以在“自动接管”标签页添加、逐项移除或分别清空。
+
+自动接管按黑名单优先判定：内置和用户黑名单优先，用户白名单中的类型会被接管，未出现在两张名单中的类型继续进入 Firefox 原生下载提示。`.xpi` 是不可修改的内置黑名单条目；Firefox 识别为 `xpinstall` 的下载即使文件名有误导性也会保留在原生流程中。空扩展名和不支持的 URL 协议同样保持原生处理；`.exe` 等可执行文件扩展名可以明确加入白名单。当 Firefox 内建下载器是默认项时，hook 会保留现有原生 launcher，不会再次请求同一地址。
 
 ### JDownloader provider
 
@@ -206,6 +227,7 @@ addon/
 ├── FlashGot.exe                          # 下载管理器桥接程序
 └── chrome/content/
     ├── DownloadItService.sys.mjs        # 服务、进程和偏好管理
+    ├── DownloadItAutoCapture.sys.mjs    # 版本化类型规则与内置接管保护
     ├── DownloadItPanelView.sys.mjs      # 原生工具栏面板行为
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItDownloadDialog.sys.mjs # Firefox 原生下载弹窗集成

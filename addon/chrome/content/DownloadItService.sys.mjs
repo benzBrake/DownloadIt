@@ -11,11 +11,18 @@ import {
 } from "./DownloadItPanelView.sys.mjs";
 import {
   DownloadItDownloadDialogController,
-  normalizeAutoExtensions,
   registerDownloadItHelperAppHook,
   unregisterDownloadItHelperAppHook,
   isDownloadDialogWindow,
 } from "./DownloadItDownloadDialog.sys.mjs";
+import {
+  BUILT_IN_AUTO_CAPTURE_DENY,
+  createEmptyAutoCaptureDocument,
+  getAutoCaptureDisposition,
+  normalizeAutoCaptureDocument,
+  stringifyAutoCaptureDocument,
+  updateAutoCaptureRule,
+} from "./DownloadItAutoCapture.sys.mjs";
 import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
 import { DownloadItIDMBridge } from "./DownloadItIDMBridge.sys.mjs";
 import {
@@ -113,11 +120,11 @@ const BINARY_RESOURCE = "FlashGot.exe";
 const BINARY_NAME = "FlashGot.exe";
 const PROFILE_DIRECTORY = "DownloadIt";
 const CUSTOM_DOWNLOADERS_FILE = "custom-downloaders.json";
+const AUTO_CAPTURE_RULES_FILE = "auto-capture-rules.json";
 
 const PREF_DEFAULT_MANAGER = "downloadit.defaultDM";
 const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
 const PREF_OMIT_COOKIES = "downloadit.omitCookies";
-const PREF_AUTO_EXTENSIONS = "downloadit.autoExtensions";
 const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 const PREF_LINK_GROUPS = "downloadit.linkGroups";
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
@@ -234,9 +241,16 @@ export class DownloadItService {
       this.profileDirectory,
       CUSTOM_DOWNLOADERS_FILE,
     );
+    this.autoCaptureRulesPath = PathUtils.join(
+      this.profileDirectory,
+      AUTO_CAPTURE_RULES_FILE,
+    );
     this.flashGotManagers = this.loadManagerCache();
     this.customDownloaderDocument = createEmptyCustomDownloaderDocument();
     this.customDownloaderLoadError = null;
+    this.autoCaptureRuleDocument = createEmptyAutoCaptureDocument();
+    this.autoCaptureRulesLoadError = null;
+    this.autoCaptureRulesWritePromise = Promise.resolve();
     this.controllers = new Map();
     this.panelControllers = new Map();
     this.downloadDialogControllers = new Map();
@@ -625,6 +639,62 @@ export class DownloadItService {
     }
   }
 
+  async reloadAutoCaptureRules() {
+    await this.autoCaptureRulesWritePromise;
+    try {
+      const raw = await IOUtils.readUTF8(this.autoCaptureRulesPath);
+      this.autoCaptureRuleDocument = normalizeAutoCaptureDocument(
+        JSON.parse(raw.replace(/^\uFEFF/, "")),
+      );
+      this.autoCaptureRulesLoadError = null;
+    } catch (error) {
+      this.autoCaptureRuleDocument = createEmptyAutoCaptureDocument();
+      if (error?.name === "NotFoundError") {
+        this.autoCaptureRulesLoadError = null;
+      } else {
+        this.autoCaptureRulesLoadError = error;
+      }
+    }
+    return this.readSettings();
+  }
+
+  async resetAutoCaptureRules() {
+    const document = createEmptyAutoCaptureDocument();
+    await this.enqueueAutoCaptureRulesUpdate(() => document);
+    return this.readSettings();
+  }
+
+  async writeAutoCaptureRules(document) {
+    const serialized = stringifyAutoCaptureDocument(document);
+    await IOUtils.makeDirectory(this.profileDirectory, { ignoreExisting: true });
+    const temporaryId = Services.uuid.generateUUID().toString().replace(/[{}-]/g, "");
+    const temporaryPath = `${this.autoCaptureRulesPath}.${temporaryId}.tmp`;
+    await IOUtils.remove(temporaryPath, { ignoreAbsent: true });
+    try {
+      await IOUtils.writeUTF8(
+        this.autoCaptureRulesPath,
+        serialized,
+        { tmpPath: temporaryPath },
+      );
+    } finally {
+      await IOUtils.remove(temporaryPath, { ignoreAbsent: true });
+    }
+  }
+
+  enqueueAutoCaptureRulesUpdate(transform) {
+    const operation = this.autoCaptureRulesWritePromise.then(async () => {
+      const document = normalizeAutoCaptureDocument(
+        transform(this.autoCaptureRuleDocument),
+      );
+      await this.writeAutoCaptureRules(document);
+      this.autoCaptureRuleDocument = document;
+      this.autoCaptureRulesLoadError = null;
+      return normalizeAutoCaptureDocument(document);
+    });
+    this.autoCaptureRulesWritePromise = operation.catch(() => {});
+    return operation;
+  }
+
   getJDownloaderSettings() {
     let detectedJavaArgs = [];
     try {
@@ -956,19 +1026,10 @@ export class DownloadItService {
     return response.result || {};
   }
 
-  get autoExtensions() {
-    try {
-      const value = JSON.parse(
-        Services.prefs.getStringPref(PREF_AUTO_EXTENSIONS, "[]"),
-      );
-      return Array.isArray(value) ? normalizeAutoExtensions(value) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  get autoExtensionsLocked() {
-    return Services.prefs.prefIsLocked(PREF_AUTO_EXTENSIONS);
+  get autoCaptureRules() {
+    return normalizeAutoCaptureDocument(
+      this.autoCaptureRuleDocument || createEmptyAutoCaptureDocument(),
+    );
   }
 
   get linkGroups() {
@@ -987,27 +1048,27 @@ export class DownloadItService {
   }
 
   hasAutoExtension(value) {
-    const extension = normalizeAutoExtensions([value])[0] || "";
-    return Boolean(extension && this.autoExtensions.includes(extension));
+    return this.getAutoCaptureDisposition(value) === "allow";
   }
 
-  setAutoExtension(value, enabled) {
-    if (this.autoExtensionsLocked) {
-      throw new Error("The automatic extension preference is locked");
+  getAutoCaptureDisposition(value) {
+    return getAutoCaptureDisposition(this.autoCaptureRules, value);
+  }
+
+  createAutoCaptureRuleId() {
+    return Services.uuid.generateUUID().toString().replace(/[{}]/g, "").toLowerCase();
+  }
+
+  async setAutoCaptureRule(value, disposition) {
+    if (this.autoCaptureRulesLoadError) {
+      throw new DownloadItError("auto-capture-config-blocked");
     }
-    const extension = normalizeAutoExtensions([value])[0] || "";
-    if (!extension) {
-      return this.autoExtensions;
-    }
-    const current = new Set(this.autoExtensions);
-    if (enabled) {
-      current.add(extension);
-    } else {
-      current.delete(extension);
-    }
-    const next = normalizeAutoExtensions([...current]);
-    Services.prefs.setStringPref(PREF_AUTO_EXTENSIONS, JSON.stringify(next));
-    return next;
+    return this.enqueueAutoCaptureRulesUpdate(current => updateAutoCaptureRule(
+      current,
+      value,
+      disposition,
+      this.createAutoCaptureRuleId(),
+    ));
   }
 
   readSettings() {
@@ -1047,13 +1108,24 @@ export class DownloadItService {
         false,
       ),
       idmBridgeActive: this.idmBridge.running,
-      autoExtensions: this.autoExtensions,
+      autoCaptureRules: this.autoCaptureRules,
+      builtInAutoCaptureDeny: BUILT_IN_AUTO_CAPTURE_DENY.map(rule => ({
+        ...rule,
+      })),
+      autoCaptureRulesPath: this.autoCaptureRulesPath,
+      autoCaptureRulesError: this.autoCaptureRulesLoadError
+        ? {
+            code: this.autoCaptureRulesLoadError.code || "read-failed",
+            message: this.autoCaptureRulesLoadError.message ||
+              String(this.autoCaptureRulesLoadError),
+            args: this.autoCaptureRulesLoadError.args || {},
+          }
+        : null,
       linkGroups: this.linkGroups,
       defaultManagerLocked: Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER),
       omitCookiesLocked: Services.prefs.prefIsLocked(PREF_OMIT_COOKIES),
       autoStartTasksLocked: Services.prefs.prefIsLocked(PREF_AUTO_START_TASKS),
       idmBridgeLocked: Services.prefs.prefIsLocked(PREF_IDM_BRIDGE),
-      autoExtensionsLocked: this.autoExtensionsLocked,
       linkGroupsLocked: this.linkGroupsLocked,
       binaryPath: this.binaryPath,
       serviceReady: Boolean(this.binaryPath),
@@ -1068,17 +1140,17 @@ export class DownloadItService {
     builtInProtocols = null,
     jdownloader = null,
     idmBridgeEnabled = null,
-    autoExtensions = null,
+    autoCaptureRules = null,
     linkGroups = null,
     customDownloaders = null,
   } = {}) {
     const defaultManagerRequested = defaultManager !== null &&
       defaultManager !== undefined;
     const manager = defaultManagerRequested ? String(defaultManager || "") : "";
-    const currentAutoExtensions = this.autoExtensions;
-    const requestedAutoExtensions = autoExtensions == null
-      ? currentAutoExtensions
-      : normalizeAutoExtensions(autoExtensions);
+    const currentAutoCaptureRules = this.autoCaptureRules;
+    const requestedAutoCaptureRules = autoCaptureRules == null
+      ? currentAutoCaptureRules
+      : normalizeAutoCaptureDocument(autoCaptureRules);
     const currentLinkGroups = this.linkGroups;
     const requestedLinkGroups = linkGroups == null
       ? currentLinkGroups
@@ -1130,6 +1202,9 @@ export class DownloadItService {
       : validateCustomDownloaderDocument(customDownloaders);
     if (requestedCustomDownloaders && this.customDownloaderLoadError) {
       throw new DownloadItError("custom-config-blocked");
+    }
+    if (autoCaptureRules != null && this.autoCaptureRulesLoadError) {
+      throw new DownloadItError("auto-capture-config-blocked");
     }
     const customDownloaderInputChanged = requestedCustomDownloaders !== null &&
       JSON.stringify(requestedCustomDownloaders) !==
@@ -1198,12 +1273,6 @@ export class DownloadItService {
       requestedIDMBridgeEnabled !== currentIDMBridgeEnabled
     ) {
       throw new Error("The IDM bridge preference is locked");
-    }
-    if (
-      this.autoExtensionsLocked &&
-      JSON.stringify(requestedAutoExtensions) !== JSON.stringify(currentAutoExtensions)
-    ) {
-      throw new Error("The automatic extension preference is locked");
     }
     if (
       this.linkGroupsLocked &&
@@ -1300,11 +1369,11 @@ export class DownloadItService {
       }
     }
     if (
-      JSON.stringify(requestedAutoExtensions) !== JSON.stringify(currentAutoExtensions)
+      JSON.stringify(requestedAutoCaptureRules) !==
+        JSON.stringify(currentAutoCaptureRules)
     ) {
-      Services.prefs.setStringPref(
-        PREF_AUTO_EXTENSIONS,
-        JSON.stringify(requestedAutoExtensions),
+      await this.enqueueAutoCaptureRulesUpdate(
+        () => requestedAutoCaptureRules,
       );
     }
     if (JSON.stringify(requestedLinkGroups) !== JSON.stringify(currentLinkGroups)) {
@@ -1320,6 +1389,7 @@ export class DownloadItService {
 
     this.binaryPath = await this.deployBinary();
     await this.reloadCustomDownloaders();
+    await this.reloadAutoCaptureRules();
     registerLinkCollectorActor();
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
     Services.obs.addObserver(this, APP_LOCALES_CHANGED_TOPIC);

@@ -74,8 +74,17 @@ test("settings dialog contains the current capability controls", () => {
     "jdownloader-test-state",
     "refresh-managers",
     "section-auto-capture",
-    "auto-extension-list",
-    "clear-auto-extensions",
+    "auto-capture-config-error",
+    "retry-auto-capture-rules",
+    "reset-auto-capture-rules",
+    "auto-allow-input",
+    "add-auto-allow",
+    "auto-allow-list",
+    "clear-auto-allow",
+    "auto-deny-input",
+    "add-auto-deny",
+    "auto-deny-list",
+    "clear-auto-deny",
     "section-link-groups",
     "built-in-link-group-list",
     "custom-link-group-list",
@@ -114,10 +123,15 @@ test("automatic capture controls live in a dedicated settings tab", () => {
   assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 5);
   assert.ok(managerPanel);
   assert.ok(autoCapturePanel);
-  assert.doesNotMatch(managerPanel, /id="auto-extension-list"/);
+  assert.doesNotMatch(managerPanel, /id="auto-allow-list"/);
   assert.match(autoCapturePanel, /data-section-panel="auto-capture"/);
-  assert.match(autoCapturePanel, /id="auto-extension-list"/);
-  assert.match(autoCapturePanel, /id="clear-auto-extensions"/);
+  assert.match(autoCapturePanel, /id="auto-allow-list"/);
+  assert.match(autoCapturePanel, /id="auto-deny-list"/);
+  assert.match(autoCapturePanel, /id="clear-auto-allow"/);
+  assert.match(autoCapturePanel, /id="clear-auto-deny"/);
+  assert.match(autoCapturePanel, /id="auto-capture-config-error"/);
+  assert.match(autoCapturePanel, /id="retry-auto-capture-rules"/);
+  assert.match(autoCapturePanel, /id="reset-auto-capture-rules"/);
   assert.match(script, /"auto-capture": \[/);
   assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
 });
@@ -136,12 +150,15 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /item => item\.downloadItManagerKey === selected\?\.key/);
   assert.match(script, /refreshManagers\(\{ persistDefault: false \}\)/);
   assert.match(script, /await state\.service\.applySettings\(payload\)/);
-  assert.match(script, /autoExtensions/);
+  assert.match(script, /autoCaptureRules/);
   assert.match(script, /linkGroups/);
   assert.match(script, /validateLinkGroupSettings/);
   assert.match(script, /idmBridgeEnabled/);
-  assert.match(script, /data-remove-extension/);
-  assert.match(script, /downloadit-remove-extension/);
+  assert.match(script, /data-remove-auto-rule/);
+  assert.match(script, /downloadit-remove-auto-allow/);
+  assert.match(script, /downloadit-remove-auto-deny/);
+  assert.match(script, /reloadAutoCaptureRules/);
+  assert.match(script, /resetAutoCaptureRules/);
   assert.match(script, /customDownloaders/);
   assert.match(script, /reloadCustomDownloaders/);
   assert.match(script, /testAria2Configuration/);
@@ -382,17 +399,27 @@ test("custom executable paths are portable within the Firefox configuration dire
   assert.match(chineseReadme, /`UChrm`/);
 });
 
-test("remembered extensions are wired through service preferences and documentation", () => {
+test("automatic capture rules are versioned, profile-scoped, and atomic", () => {
+  const rules = read("addon/chrome/content/DownloadItAutoCapture.sys.mjs");
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const englishReadme = read("README.md");
   const chineseReadme = read("README-zh_CN.md");
 
   for (const source of [service, englishReadme, chineseReadme]) {
-    assert.match(source, /downloadit\.autoExtensions/);
+    assert.doesNotMatch(source, /downloadit\.autoExtensions/);
+    assert.match(source, /auto-capture-rules\.json/);
   }
-  assert.match(service, /autoExtensionsLocked/);
-  assert.match(service, /normalizeAutoExtensions\(autoExtensions\)/);
-  assert.match(service, /JSON\.stringify\(requestedAutoExtensions\)/);
+  assert.match(rules, /AUTO_CAPTURE_RULES_VERSION = 1/);
+  assert.match(rules, /BUILT_IN_AUTO_CAPTURE_DENY/);
+  assert.match(rules, /extension: "xpi"/);
+  assert.match(rules, /match\.type !== "extension"/);
+  assert.match(rules, /stringifyAutoCaptureDocument/);
+  assert.match(service, /AUTO_CAPTURE_RULES_FILE = "auto-capture-rules\.json"/);
+  assert.match(service, /autoCaptureRulesLoadError/);
+  assert.match(service, /reloadAutoCaptureRules\(\)/);
+  assert.match(service, /writeAutoCaptureRules\(document\)/);
+  assert.match(service, /IOUtils\.writeUTF8\([\s\S]*this\.autoCaptureRulesPath,[\s\S]*\{ tmpPath: temporaryPath \}/);
+  assert.match(service, /autoCaptureRulesWritePromise/);
 });
 
 test("link groups are validated, policy-aware, and documented", () => {

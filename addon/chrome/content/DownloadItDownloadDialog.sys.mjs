@@ -1,5 +1,10 @@
 import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
 import { createXULElement } from "./DownloadItXUL.sys.mjs";
+import {
+  getAutoCaptureDisposition,
+  isBuiltInAutoCaptureDeny,
+  normalizeAutoExtensions,
+} from "./DownloadItAutoCapture.sys.mjs";
 
 const DOWNLOAD_DIALOG_URL =
   "chrome://mozapps/content/downloads/unknownContentType.xhtml";
@@ -59,34 +64,6 @@ function bindingAbortedResult () {
   return undefined;
 }
 
-export function normalizeAutoExtensions (value) {
-  if (!Array.isArray(value)) {
-    throw new TypeError("Automatic download extensions must be an array");
-  }
-
-  const extensions = [];
-  const seen = new Set();
-  for (const entry of value) {
-    if (typeof entry !== "string") {
-      continue;
-    }
-    const extension = entry
-      .trim()
-      .toLowerCase()
-      .replace(/^\.+/, "");
-    if (
-      !extension ||
-      !/^[a-z0-9][a-z0-9_-]*$/.test(extension) ||
-      seen.has(extension)
-    ) {
-      continue;
-    }
-    seen.add(extension);
-    extensions.push(extension);
-  }
-  return extensions.sort();
-}
-
 export function getLauncherExtension (launcher) {
   const filename = String(launcher?.suggestedFileName || "").trim();
   const separator = filename.lastIndexOf(".");
@@ -96,17 +73,51 @@ export function getLauncherExtension (launcher) {
   return normalizeAutoExtensions([filename.slice(separator + 1)])[0] || "";
 }
 
+function isBuiltInDeniedLauncher(launcher) {
+  const mimeInfo = launcher?.MIMEInfo;
+  const mimeType = String(
+    mimeInfo?.MIMEType || mimeInfo?.type || "",
+  ).toLowerCase();
+  if (
+    isBuiltInAutoCaptureDeny(getLauncherExtension(launcher)) ||
+    isBuiltInAutoCaptureDeny(mimeInfo?.primaryExtension || "") ||
+    mimeType.includes("xpinstall")
+  ) {
+    return true;
+  }
+  try {
+    const sourceURL = new URL(launcher?.source?.spec || "");
+    const filename = sourceURL.pathname.split("/").at(-1) || "";
+    const separator = filename.lastIndexOf(".");
+    return separator >= 0 && isBuiltInAutoCaptureDeny(
+      filename.slice(separator + 1),
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function canRememberLauncherExtension (launcher) {
   const extension = getLauncherExtension(launcher);
-  const mimeType = String(
-    launcher?.MIMEInfo?.MIMEType || launcher?.MIMEInfo?.type || "",
-  ).toLowerCase();
   return Boolean(
     extension &&
-    extension !== "xpi" &&
-    !mimeType.includes("xpinstall") &&
+    !isBuiltInDeniedLauncher(launcher) &&
     isSupportedURL(launcher?.source?.spec || ""),
   );
+}
+
+function launcherAutoCaptureDisposition(service, launcher) {
+  const extension = getLauncherExtension(launcher);
+  if (!extension || isBuiltInDeniedLauncher(launcher)) {
+    return "deny";
+  }
+  if (typeof service?.getAutoCaptureDisposition === "function") {
+    return service.getAutoCaptureDisposition(extension);
+  }
+  if (service?.autoCaptureRules) {
+    return getAutoCaptureDisposition(service.autoCaptureRules, extension);
+  }
+  return service?.hasAutoExtension?.(extension) ? "allow" : "default";
 }
 
 function shouldAutomaticallyHandle (service, launcher) {
@@ -115,8 +126,9 @@ function shouldAutomaticallyHandle (service, launcher) {
     return Boolean(
       service?.defaultManager &&
       service.defaultDownloader?.ref?.provider !== "native" &&
-      canRememberLauncherExtension(launcher) &&
-      service.hasAutoExtension?.(extension),
+      isSupportedURL(launcher?.source?.spec || "") &&
+      extension &&
+      launcherAutoCaptureDisposition(service, launcher) === "allow",
     );
   } catch (error) {
     console.error("DownloadIt: automatic extension check failed", error);
@@ -593,10 +605,13 @@ export class DownloadItDownloadDialogController {
       if (rememberChoice) {
         const extension = getLauncherExtension(this.dialog?.mLauncher);
         const canRemember = canRememberLauncherExtension(this.dialog?.mLauncher);
-        const canEdit = canRemember && !this.service.autoExtensionsLocked;
+        const canEdit = canRemember && !this.service.autoCaptureRulesLoadError;
         if (!this.downloadItModeActive) {
           rememberChoice.checked = canRemember &&
-            this.service.hasAutoExtension?.(extension);
+            launcherAutoCaptureDisposition(
+              this.service,
+              this.dialog?.mLauncher,
+            ) === "allow";
         }
         rememberChoice.disabled = !canEdit;
         if (!canRemember) {
@@ -669,14 +684,25 @@ export class DownloadItDownloadDialogController {
       });
       if (
         this.rememberChoice &&
-        !this.service.autoExtensionsLocked &&
+        !this.service.autoCaptureRulesLoadError &&
         canRememberLauncherExtension(this.dialog.mLauncher)
       ) {
         try {
-          this.service.setAutoExtension?.(
-            getLauncherExtension(this.dialog.mLauncher),
-            Boolean(this.rememberChoice?.checked),
+          const extension = getLauncherExtension(this.dialog.mLauncher);
+          const current = launcherAutoCaptureDisposition(
+            this.service,
+            this.dialog.mLauncher,
           );
+          const next = this.rememberChoice.checked
+            ? "allow"
+            : current === "allow" ? "default" : current;
+          if (next !== current) {
+            if (typeof this.service.setAutoCaptureRule === "function") {
+              await this.service.setAutoCaptureRule(extension, next);
+            } else {
+              await this.service.setAutoExtension?.(extension, next === "allow");
+            }
+          }
         } catch (error) {
           console.error("DownloadIt: could not update the remembered file type", error);
         }
@@ -725,3 +751,4 @@ export class DownloadItDownloadDialogController {
 }
 
 export { DOWNLOAD_DIALOG_URL };
+export { normalizeAutoExtensions };

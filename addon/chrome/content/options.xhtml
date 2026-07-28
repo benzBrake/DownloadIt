@@ -134,18 +134,51 @@
           </section>
 
           <section id="section-auto-capture" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="auto-capture" hidden="hidden">
-            <div class="setting-group">
-              <div class="group-heading compact-heading">
-                <div>
-                  <div class="eyebrow" data-l10n-id="downloadit-auto-extensions-eyebrow"></div>
-                  <h2 data-l10n-id="downloadit-auto-extensions-title"></h2>
+            <div id="auto-capture-config-error" class="inline-note is-warning" role="alert" hidden="hidden">
+              <span class="note-mark" aria-hidden="true">!</span>
+              <span id="auto-capture-config-error-message"></span>
+              <span class="inline-note-actions">
+                <button id="retry-auto-capture-rules" class="text-button" type="button" data-l10n-id="downloadit-retry-auto-capture"></button>
+                <button id="reset-auto-capture-rules" class="text-button" type="button" data-l10n-id="downloadit-reset-auto-capture"></button>
+              </span>
+            </div>
+            <p class="auto-rule-policy" data-l10n-id="downloadit-auto-rules-help"></p>
+
+            <div class="auto-capture-grid">
+              <div class="setting-group auto-rule-group">
+                <div class="group-heading compact-heading">
+                  <div>
+                    <div class="eyebrow" data-l10n-id="downloadit-auto-allow-eyebrow"></div>
+                    <h3 data-l10n-id="downloadit-auto-allow-title"></h3>
+                  </div>
                 </div>
-                <span id="auto-extension-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
+                <p class="field-help" data-l10n-id="downloadit-auto-allow-help"></p>
+                <div class="auto-rule-entry">
+                  <input id="auto-allow-input" type="text" spellcheck="false" data-l10n-id="downloadit-auto-rule-input" data-l10n-attrs="placeholder,aria-label" />
+                  <button id="add-auto-allow" class="secondary-button" type="button" data-l10n-id="downloadit-add-auto-allow"></button>
+                </div>
+                <ul id="auto-allow-list" class="manager-list auto-extension-list"></ul>
+                <div class="auto-rule-footer">
+                  <button id="clear-auto-allow" class="text-button" type="button" data-l10n-id="downloadit-clear-auto-allow"></button>
+                </div>
               </div>
-              <ul id="auto-extension-list" class="manager-list auto-extension-list"></ul>
-              <div class="auto-extension-actions">
-                <p class="field-help" data-l10n-id="downloadit-auto-extensions-help"></p>
-                <button id="clear-auto-extensions" class="secondary-button" type="button" data-l10n-id="downloadit-clear-auto-extensions"></button>
+
+              <div class="setting-group auto-rule-group">
+                <div class="group-heading compact-heading">
+                  <div>
+                    <div class="eyebrow" data-l10n-id="downloadit-auto-deny-eyebrow"></div>
+                    <h3 data-l10n-id="downloadit-auto-deny-title"></h3>
+                  </div>
+                </div>
+                <p class="field-help" data-l10n-id="downloadit-auto-deny-help"></p>
+                <div class="auto-rule-entry">
+                  <input id="auto-deny-input" type="text" spellcheck="false" data-l10n-id="downloadit-auto-rule-input" data-l10n-attrs="placeholder,aria-label" />
+                  <button id="add-auto-deny" class="secondary-button" type="button" data-l10n-id="downloadit-add-auto-deny"></button>
+                </div>
+                <ul id="auto-deny-list" class="manager-list auto-extension-list"></ul>
+                <div class="auto-rule-footer">
+                  <button id="clear-auto-deny" class="text-button" type="button" data-l10n-id="downloadit-clear-auto-deny"></button>
+                </div>
               </div>
             </div>
           </section>

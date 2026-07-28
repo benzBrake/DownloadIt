@@ -280,18 +280,38 @@ function createService({
   fail = false,
   managers = ["Default", "Other"],
   autoExtensions = [],
-  autoExtensionsLocked = false,
+  autoDenyExtensions = [],
+  autoCaptureRulesError = false,
 } = {}) {
   const calls = [];
   const alerts = [];
   const remembered = new Set(autoExtensions);
+  const denied = new Set(autoDenyExtensions);
   return {
     managers,
     defaultManager: "Default",
-    autoExtensionsLocked,
+    autoCaptureRulesLoadError: autoCaptureRulesError
+      ? new Error("invalid automatic capture configuration")
+      : null,
     calls,
     alerts,
     remembered,
+    denied,
+    getAutoCaptureDisposition(extension) {
+      if (extension === "xpi" || denied.has(extension)) {
+        return "deny";
+      }
+      return remembered.has(extension) ? "allow" : "default";
+    },
+    setAutoCaptureRule(extension, disposition) {
+      remembered.delete(extension);
+      denied.delete(extension);
+      if (disposition === "allow") {
+        remembered.add(extension);
+      } else if (disposition === "deny") {
+        denied.add(extension);
+      }
+    },
     hasAutoExtension(extension) {
       return remembered.has(extension);
     },
@@ -363,6 +383,17 @@ test("automatic extension memory excludes install and unsupported launchers", ()
   assert.equal(canRememberLauncherExtension({
     ...base,
     MIMEInfo: { MIMEType: "application/x-xpinstall" },
+  }), false);
+  assert.equal(canRememberLauncherExtension({
+    ...base,
+    MIMEInfo: {
+      MIMEType: "application/octet-stream",
+      primaryExtension: "xpi",
+    },
+  }), false);
+  assert.equal(canRememberLauncherExtension({
+    ...base,
+    source: { spec: "https://example.com/addon.xpi?download=1" },
   }), false);
   assert.equal(canRememberLauncherExtension({
     ...base,
@@ -533,11 +564,11 @@ test("executable launchers can remember their extensions", async () => {
   assert.equal(window.document.getElementById("rememberChoice").checked, false);
 });
 
-test("locked extension preferences show the remembered state without allowing edits", async () => {
+test("damaged capture rules show remembered state without allowing edits", async () => {
   const window = createWindow();
   const service = createService({
     autoExtensions: ["zip"],
-    autoExtensionsLocked: true,
+    autoCaptureRulesError: true,
   });
   const controller = new DownloadItDownloadDialogController(service, window, async () => {});
   await controller.init();
@@ -708,6 +739,49 @@ test("helper-app hooks automatically hand off remembered extensions and restore 
     } else {
       globalThis.Components = originalComponents;
     }
+  }
+});
+
+test("helper-app hooks honor user and built-in deny rules before allow rules", async () => {
+  class MockHelperDialog {
+    show() {
+      this.showCalls = (this.showCalls || 0) + 1;
+    }
+  }
+
+  let downloadCalls = 0;
+  const service = {
+    defaultManager: "Default",
+    getAutoCaptureDisposition: () => "deny",
+    hasAutoExtension: () => true,
+    async downloadLauncher() {
+      downloadCalls += 1;
+    },
+  };
+  const dialog = new MockHelperDialog();
+  const base = {
+    source: { spec: "https://example.com/file.zip" },
+    suggestedFileName: "file.zip",
+    MIMEInfo: { MIMEType: "application/zip" },
+  };
+
+  registerDownloadItHelperAppHook(service, {
+    helperDialogConstructor: MockHelperDialog,
+  });
+  try {
+    dialog.show(base, null, 0);
+    service.getAutoCaptureDisposition = () => "allow";
+    dialog.show({
+      ...base,
+      source: { spec: "https://example.com/addon.xpi?download=1" },
+      suggestedFileName: "addon.xpi",
+    }, null, 0);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(dialog.showCalls, 2);
+    assert.equal(downloadCalls, 0);
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
   }
 });
 
