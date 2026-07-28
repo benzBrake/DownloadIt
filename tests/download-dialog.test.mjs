@@ -626,6 +626,9 @@ test("failed external submission does not change remembered extension state", as
 test("unsupported URLs, empty manager lists, and missing localization leave native UI intact", async () => {
   for (const [window, service] of [
     [createWindow({ source: "about:config" }), createService()],
+    [createWindow({ source: "blob:https://example.com/id" }), createService()],
+    [createWindow({ source: "data:application/zip;base64,AA==" }), createService()],
+    [createWindow({ source: "https://example.com/addon%2Expi" }), createService()],
     [createWindow(), createService({ managers: [] })],
     [createWindow({ withLocalization: false }), createService()],
   ]) {
@@ -742,7 +745,7 @@ test("helper-app hooks automatically hand off remembered extensions and restore 
   }
 });
 
-test("helper-app hooks honor user and built-in deny rules before allow rules", async () => {
+test("helper-app hooks keep denied and browser-native targets in Firefox", async () => {
   class MockHelperDialog {
     show() {
       this.showCalls = (this.showCalls || 0) + 1;
@@ -776,9 +779,17 @@ test("helper-app hooks honor user and built-in deny rules before allow rules", a
       source: { spec: "https://example.com/addon.xpi?download=1" },
       suggestedFileName: "addon.xpi",
     }, null, 0);
+    dialog.show({
+      ...base,
+      source: { spec: "blob:https://example.com/id" },
+    }, null, 0);
+    dialog.show({
+      ...base,
+      source: { spec: "data:application/zip;base64,AA==" },
+    }, null, 0);
     await new Promise(resolve => setImmediate(resolve));
 
-    assert.equal(dialog.showCalls, 2);
+    assert.equal(dialog.showCalls, 4);
     assert.equal(downloadCalls, 0);
   } finally {
     unregisterDownloadItHelperAppHook(service);

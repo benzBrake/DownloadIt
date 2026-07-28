@@ -1,4 +1,7 @@
-import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
+import {
+  classifyDownloadTarget,
+  DOWNLOAD_TARGET_CLASSIFICATION,
+} from "./DownloadItProtocol.sys.mjs";
 import { openPageLinksDialog } from "./DownloadItLinks.sys.mjs";
 import { createXULElement } from "./DownloadItXUL.sys.mjs";
 
@@ -264,10 +267,12 @@ export class DownloadItContextMenuController {
     const downloadPageReferer = contentData?.referrerInfo
       ?.originalReferrer?.spec || "";
 
-    this.context = isSupportedURL(url) ? {
+    const filename = contextMenu?.linkDownload || "";
+    this.context = classifyDownloadTarget({ url, filename }) ===
+      DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED ? {
       url,
       description: contextMenu.linkTextStr || url,
-      filename: contextMenu.linkDownload || "",
+      filename,
       browser,
       referer,
       downloadPageReferer,
@@ -367,7 +372,11 @@ export class DownloadItContextMenuController {
     const seen = new Set();
     for (const response of responses) {
       for (const link of Array.isArray(response.links) ? response.links : []) {
-        if (!isSupportedURL(link?.url) || seen.has(link.url)) {
+        if (
+          classifyDownloadTarget(link) !==
+            DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED ||
+          seen.has(link.url)
+        ) {
           continue;
         }
         seen.add(link.url);

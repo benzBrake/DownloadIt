@@ -225,6 +225,47 @@ test("context menu explicitly synchronizes the selected downloader", () => {
   assert.equal(custom.checked, false);
 });
 
+test("context menu exposes only supported download targets", () => {
+  const contextMenu = {
+    onLink: true,
+    linkURL: "https://example.com/file.zip",
+    linkTextStr: "File",
+    linkDownload: "",
+    browser: { currentURI: { spec: "https://example.com/page" } },
+    contentData: {},
+  };
+  const controller = new DownloadItContextMenuController(
+    { defaultManager: "default-manager", managers: ["default-manager"] },
+    {
+      document: {},
+      gContextMenu: contextMenu,
+      gBrowser: { selectedBrowser: contextMenu.browser },
+    },
+    null,
+  );
+  controller.downloadItem = {};
+  controller.selectionDownloadItem = {};
+  controller.linksDownloadItem = {};
+  controller.menu = {};
+  controller.refreshMenuLabel = () => {};
+
+  controller.updateContext();
+  assert.equal(controller.context.url, "https://example.com/file.zip");
+  assert.equal(controller.downloadItem.hidden, false);
+
+  for (const [url, filename] of [
+    ["blob:https://example.com/id", "file.zip"],
+    ["https://example.com/addon%2Expi", ""],
+    ["https://example.com/download?id=1", "addon.xpi"],
+  ]) {
+    contextMenu.linkURL = url;
+    contextMenu.linkDownload = filename;
+    controller.updateContext();
+    assert.equal(controller.context, null, `${url} (${filename})`);
+    assert.equal(controller.downloadItem.hidden, true, `${url} (${filename})`);
+  }
+});
+
 test("selection link queries retain each source frame browsing context", async () => {
   const createBrowsingContext = (id, links, children = []) => ({
     id,
@@ -240,11 +281,23 @@ test("selection link queries retain each source frame browsing context", async (
     description: "Child",
     filename: "",
   }]);
-  const root = createBrowsingContext(10, [{
-    url: "https://example.com/root.zip",
-    description: "Root",
-    filename: "root.zip",
-  }], [child]);
+  const root = createBrowsingContext(10, [
+    {
+      url: "https://example.com/root.zip",
+      description: "Root",
+      filename: "root.zip",
+    },
+    {
+      url: "https://example.com/download?id=1",
+      description: "Firefox add-on",
+      filename: "addon.xpi",
+    },
+    {
+      url: "blob:https://example.com/id",
+      description: "Browser native",
+      filename: "file.zip",
+    },
+  ], [child]);
   const controller = new DownloadItContextMenuController(
     {},
     { document: {} },

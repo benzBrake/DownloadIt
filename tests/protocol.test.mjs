@@ -4,6 +4,10 @@ import assert from "node:assert/strict";
 import {
   buildDownloadBatchJob,
   buildDownloadJob,
+  classifyDownloadTarget,
+  classifyDownloadTargetURL,
+  DOWNLOAD_TARGET_CLASSIFICATION,
+  isSupportedContextURL,
   isSupportedURL,
   OP_SEL,
   parseAvailableManagers,
@@ -23,12 +27,74 @@ test("parseAvailableManagers rejects a non-array response", () => {
   assert.throws(() => parseAvailableManagers({}), TypeError);
 });
 
-test("supported URL filtering excludes browser-internal and local URLs", () => {
-  assert.equal(isSupportedURL("https://example.com/file.zip"), true);
-  assert.equal(isSupportedURL("magnet:?xt=urn:btih:test"), true);
-  assert.equal(isSupportedURL("about:config"), false);
-  assert.equal(isSupportedURL("file:///C:/secret.txt"), false);
-  assert.equal(isSupportedURL("not a URL"), false);
+test("download target URLs are classified before provider dispatch", () => {
+  const {
+    SUPPORTED,
+    BROWSER_NATIVE_ONLY,
+    FIREFOX_INSTALL,
+    UNSUPPORTED,
+  } = DOWNLOAD_TARGET_CLASSIFICATION;
+  for (const url of [
+    "https://example.com/file.zip",
+    "http://example.com/file.zip",
+    "ftp://example.com/file.iso",
+    "magnet:?xt=urn:btih:test",
+  ]) {
+    assert.equal(classifyDownloadTargetURL(url), SUPPORTED, url);
+    assert.equal(isSupportedURL(url), true, url);
+  }
+  assert.equal(classifyDownloadTargetURL("blob:https://example.com/id"), BROWSER_NATIVE_ONLY);
+  assert.equal(classifyDownloadTargetURL("data:text/plain,hello"), BROWSER_NATIVE_ONLY);
+  for (const url of [
+    "about:config",
+    "chrome://browser/content/browser.xhtml",
+    "resource://gre/modules/AppConstants.sys.mjs",
+    "file:///C:/secret.txt",
+    "mailto:user@example.com",
+    "javascript:alert(1)",
+    "view-source:https://example.com/",
+    "not a URL",
+  ]) {
+    assert.equal(classifyDownloadTargetURL(url), UNSUPPORTED, url);
+    assert.equal(isSupportedURL(url), false, url);
+  }
+  for (const url of [
+    "https://example.com/addon.xpi",
+    "https://example.com/ADDON.XPI?download=1#install",
+    "https://example.com/addon%2Expi",
+    "https://example.com/releases/xpinstall/addon.zip",
+    "https://example.com/releases/get-xpinstall",
+  ]) {
+    assert.equal(classifyDownloadTargetURL(url), FIREFOX_INSTALL, url);
+    assert.equal(isSupportedURL(url), false, url);
+  }
+});
+
+test("install markers are path-specific and context URLs ignore target policy", () => {
+  const { SUPPORTED, FIREFOX_INSTALL } = DOWNLOAD_TARGET_CLASSIFICATION;
+  for (const url of [
+    "https://xpinstall.example.com/file.zip",
+    "https://example.com/file.zip?mode=xpinstall",
+    "https://example.com/file.zip#xpinstall",
+    "https://example.com/myxpinstaller/file.zip",
+  ]) {
+    assert.equal(classifyDownloadTargetURL(url), SUPPORTED, url);
+  }
+  assert.equal(classifyDownloadTarget({
+    url: "https://example.com/download?id=1",
+    filename: "addon.xpi",
+  }), FIREFOX_INSTALL);
+  assert.equal(classifyDownloadTarget({
+    url: "https://example.com/download?id=1",
+    mimeType: "application/x-xpinstall",
+  }), FIREFOX_INSTALL);
+  assert.equal(classifyDownloadTarget({
+    url: "https://example.com/download?id=1",
+    primaryExtension: ".XPI",
+  }), FIREFOX_INSTALL);
+  assert.equal(isSupportedContextURL("https://example.com/addon.xpi"), true);
+  assert.equal(isSupportedContextURL("https://example.com/xpinstall/page"), true);
+  assert.equal(isSupportedContextURL("blob:https://example.com/id"), false);
 });
 
 test("buildDownloadJob emits the DownloadIt v0.60.1 JSON schema", () => {
@@ -67,6 +133,15 @@ test("buildDownloadJob validates required values", () => {
   assert.throws(() => buildDownloadJob({
     manager: "IDM",
     url: "javascript:alert(1)",
+  }), /URL/i);
+  assert.throws(() => buildDownloadJob({
+    manager: "IDM",
+    url: "https://example.com/addon%2Expi",
+  }), /URL/i);
+  assert.throws(() => buildDownloadJob({
+    manager: "IDM",
+    url: "https://example.com/download?id=1",
+    filename: "addon.xpi",
   }), /URL/i);
 });
 

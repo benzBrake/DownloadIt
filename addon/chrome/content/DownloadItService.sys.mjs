@@ -1,6 +1,8 @@
 import {
   buildDownloadBatchJob,
-  isSupportedURL,
+  classifyDownloadTarget,
+  DOWNLOAD_TARGET_CLASSIFICATION,
+  isSupportedContextURL,
   parseAvailableManagers,
 } from "./DownloadItProtocol.sys.mjs";
 import { DownloadItContextMenuController } from "./DownloadItContextMenu.sys.mjs";
@@ -1954,7 +1956,17 @@ export class DownloadItService {
     filename = "",
   } = {}) {
     const source = launcher?.source;
-    if (!source?.spec || !isSupportedURL(source.spec)) {
+    const mimeInfo = launcher?.MIMEInfo;
+    if (
+      !source?.spec ||
+      classifyDownloadTarget({
+        url: source.spec,
+        filename: filename || launcher.suggestedFileName ||
+          launcher?.targetFile?.leafName || "",
+        mimeType: mimeInfo?.MIMEType || mimeInfo?.type || "",
+        primaryExtension: mimeInfo?.primaryExtension || "",
+      }) !== DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED
+    ) {
       throw new DownloadItError("unsupported-url");
     }
 
@@ -2016,9 +2028,10 @@ export class DownloadItService {
 
     const pageContext = contexts[0] || {};
     const browser = pageContext.browser;
-    const pageReferrerURI = pageContext.downloadPageReferer && isSupportedURL(
-      pageContext.downloadPageReferer
-    ) ? Services.io.newURI(pageContext.downloadPageReferer) : null;
+    const pageReferrerURI = pageContext.downloadPageReferer &&
+      isSupportedContextURL(pageContext.downloadPageReferer)
+      ? Services.io.newURI(pageContext.downloadPageReferer)
+      : null;
     const omitCookies = Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false);
     const cookieOptions = {
       cookieService: Services.cookies,
@@ -2034,7 +2047,12 @@ export class DownloadItService {
     const links = [];
     const runtimeContexts = [];
     for (const context of contexts) {
-      if (!isSupportedURL(context?.url)) {
+      if (
+        classifyDownloadTarget({
+          url: context?.url || "",
+          filename: context?.filename || "",
+        }) !== DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED
+      ) {
         continue;
       }
       const uri = Services.io.newURI(context.url);
@@ -2063,7 +2081,9 @@ export class DownloadItService {
         ? downloader.ref.id
         : downloader.name,
       links,
-      referer: isSupportedURL(pageContext.referer) ? pageContext.referer : "",
+      referer: isSupportedContextURL(pageContext.referer)
+        ? pageContext.referer
+        : "",
       downloadPageReferer: pageReferrerURI?.spec || "",
       downloadPageCookies,
       userAgent,
@@ -2284,8 +2304,10 @@ export class DownloadItService {
         filename: task.filename,
         cookies,
       }],
-      referer: isSupportedURL(task.referer) ? task.referer : "",
-      downloadPageReferer: isSupportedURL(task.sourcePage) ? task.sourcePage : "",
+      referer: isSupportedContextURL(task.referer) ? task.referer : "",
+      downloadPageReferer: isSupportedContextURL(task.sourcePage)
+        ? task.sourcePage
+        : "",
       userAgent: String(task.userAgent || ""),
     });
     job.links[0].cookieRecords = [];

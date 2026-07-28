@@ -1,8 +1,10 @@
-import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
+import {
+  classifyDownloadTarget,
+  DOWNLOAD_TARGET_CLASSIFICATION,
+} from "./DownloadItProtocol.sys.mjs";
 import { createXULElement } from "./DownloadItXUL.sys.mjs";
 import {
   getAutoCaptureDisposition,
-  isBuiltInAutoCaptureDeny,
   normalizeAutoExtensions,
 } from "./DownloadItAutoCapture.sys.mjs";
 
@@ -73,42 +75,32 @@ export function getLauncherExtension (launcher) {
   return normalizeAutoExtensions([filename.slice(separator + 1)])[0] || "";
 }
 
-function isBuiltInDeniedLauncher(launcher) {
+function classifyLauncherTarget(launcher) {
   const mimeInfo = launcher?.MIMEInfo;
-  const mimeType = String(
-    mimeInfo?.MIMEType || mimeInfo?.type || "",
-  ).toLowerCase();
-  if (
-    isBuiltInAutoCaptureDeny(getLauncherExtension(launcher)) ||
-    isBuiltInAutoCaptureDeny(mimeInfo?.primaryExtension || "") ||
-    mimeType.includes("xpinstall")
-  ) {
-    return true;
-  }
-  try {
-    const sourceURL = new URL(launcher?.source?.spec || "");
-    const filename = sourceURL.pathname.split("/").at(-1) || "";
-    const separator = filename.lastIndexOf(".");
-    return separator >= 0 && isBuiltInAutoCaptureDeny(
-      filename.slice(separator + 1),
-    );
-  } catch {
-    return false;
-  }
+  return classifyDownloadTarget({
+    url: launcher?.source?.spec || "",
+    filename: launcher?.suggestedFileName || launcher?.targetFile?.leafName || "",
+    mimeType: mimeInfo?.MIMEType || mimeInfo?.type || "",
+    primaryExtension: mimeInfo?.primaryExtension || "",
+  });
 }
 
 export function canRememberLauncherExtension (launcher) {
   const extension = getLauncherExtension(launcher);
   return Boolean(
     extension &&
-    !isBuiltInDeniedLauncher(launcher) &&
-    isSupportedURL(launcher?.source?.spec || ""),
+    classifyLauncherTarget(launcher) ===
+      DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED,
   );
 }
 
 function launcherAutoCaptureDisposition(service, launcher) {
   const extension = getLauncherExtension(launcher);
-  if (!extension || isBuiltInDeniedLauncher(launcher)) {
+  if (
+    !extension ||
+    classifyLauncherTarget(launcher) !==
+      DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED
+  ) {
     return "deny";
   }
   if (typeof service?.getAutoCaptureDisposition === "function") {
@@ -126,7 +118,8 @@ function shouldAutomaticallyHandle (service, launcher) {
     return Boolean(
       service?.defaultManager &&
       service.defaultDownloader?.ref?.provider !== "native" &&
-      isSupportedURL(launcher?.source?.spec || "") &&
+      classifyLauncherTarget(launcher) ===
+        DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED &&
       extension &&
       launcherAutoCaptureDisposition(service, launcher) === "allow",
     );
@@ -331,9 +324,14 @@ export class DownloadItDownloadDialogController {
 
     const dialog = this.window.dialog;
     const launcher = dialog?.mLauncher;
-    const source = launcher?.source?.spec || "";
     const mode = this.document.getElementById(MODE_ID);
-    if (!dialog || !launcher || !isSupportedURL(source) || !mode) {
+    if (
+      !dialog ||
+      !launcher ||
+      classifyLauncherTarget(launcher) !==
+        DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED ||
+      !mode
+    ) {
       return false;
     }
 

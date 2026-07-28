@@ -235,6 +235,17 @@ test("page-link queries merge frames, filter protocols, and enrich duplicates", 
       filename: "",
     },
     { url: "javascript:void(0)", description: "Unsupported" },
+    { url: "blob:https://example.com/id", description: "Browser native" },
+    { url: "https://example.com/addon.xpi", description: "Firefox add-on" },
+    {
+      url: "https://example.com/download?id=1",
+      description: "Filename-protected add-on",
+      filename: "addon.xpi",
+    },
+    {
+      url: "https://example.com/file.zip?mode=xpinstall",
+      description: "Ordinary query text",
+    },
   ], [child], 11);
 
   assert.deepEqual(await queryPageLinks({ browsingContext: root }), [
@@ -242,6 +253,12 @@ test("page-link queries merge frames, filter protocols, and enrich duplicates", 
       url: "https://example.com/shared.zip",
       description: "Shared archive",
       filename: "shared.zip",
+      browsingContextId: 11,
+    },
+    {
+      url: "https://example.com/file.zip?mode=xpinstall",
+      description: "Ordinary query text",
+      filename: "",
       browsingContextId: 11,
     },
     {

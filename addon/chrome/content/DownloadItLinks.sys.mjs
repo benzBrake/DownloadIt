@@ -1,4 +1,7 @@
-import { isSupportedURL } from "./DownloadItProtocol.sys.mjs";
+import {
+  classifyDownloadTarget,
+  DOWNLOAD_TARGET_CLASSIFICATION,
+} from "./DownloadItProtocol.sys.mjs";
 
 export const PAGE_LINKS_QUERY = "DownloadIt:GetPageLinks";
 export const LINKS_DIALOG_URL = "chrome://downloadit/content/links.xhtml";
@@ -438,7 +441,12 @@ export async function queryPageLinks(browser, {
   for (const response of responses) {
     for (const value of Array.isArray(response.links) ? response.links : []) {
       const url = String(value?.url || "");
-      if (!isSupportedURL(url)) {
+      if (
+        classifyDownloadTarget({
+          url,
+          filename: value?.filename || "",
+        }) !== DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED
+      ) {
         continue;
       }
       const existing = byURL.get(url);

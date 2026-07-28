@@ -182,6 +182,49 @@ function createSettingsService() {
   return service;
 }
 
+test("download targets and context URLs use separate policies", async () => {
+  const service = createService();
+  const downloads = [];
+  service.resolveDownloader = () => ({
+    available: true,
+    name: "Test downloader",
+    ref: { provider: "custom", id: "test" },
+    capabilities: {},
+  });
+  service.providers = {
+    async download(...args) {
+      downloads.push(args);
+    },
+  };
+  preferenceValues.set("downloadit.omitCookies", true);
+  try {
+    await service.downloadLinks([
+      {
+        url: "https://example.com/file.zip",
+        filename: "file.zip",
+        referer: "https://example.com/releases/addon.xpi",
+        downloadPageReferer: "https://example.com/xpinstall/page",
+        browser: { browsingContext: { customUserAgent: "Test Agent" } },
+      },
+      {
+        url: "https://example.com/addon.xpi",
+        filename: "addon.xpi",
+      },
+    ], "test");
+  } finally {
+    preferenceValues.delete("downloadit.omitCookies");
+  }
+
+  assert.equal(downloads.length, 1);
+  const [, job, contexts] = downloads[0];
+  assert.deepEqual(job.links.map(link => link.url), [
+    "https://example.com/file.zip",
+  ]);
+  assert.equal(job.referer, "https://example.com/releases/addon.xpi");
+  assert.equal(job.dlpageReferer, "https://example.com/xpinstall/page");
+  assert.equal(contexts.length, 1);
+});
+
 test("automatic capture file updates are serialized without losing rules", async () => {
   const service = createSettingsService();
   const writes = [];

@@ -8,12 +8,111 @@ const SUPPORTED_PROTOCOLS = new Set([
   "magnet:",
 ]);
 
-export function isSupportedURL(value) {
+const BROWSER_NATIVE_ONLY_PROTOCOLS = new Set([
+  "blob:",
+  "data:",
+]);
+const FIREFOX_INSTALL_PROTOCOLS = new Set([
+  "http:",
+  "https:",
+]);
+const XPINSTALL_PATH_PATTERN = /(?:^|[/._-])xpinstall(?:$|[/._-])/i;
+
+export const DOWNLOAD_TARGET_CLASSIFICATION = Object.freeze({
+  SUPPORTED: "supported",
+  BROWSER_NATIVE_ONLY: "browser-native-only",
+  FIREFOX_INSTALL: "firefox-install",
+  UNSUPPORTED: "unsupported",
+});
+
+function parseURL(value) {
   try {
-    return SUPPORTED_PROTOCOLS.has(new URL(value).protocol);
+    return new URL(String(value || ""));
   } catch {
+    return null;
+  }
+}
+
+function decodePathname(pathname) {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname.replace(/(?:%[0-9a-f]{2})+/gi, value => {
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    });
+  }
+}
+
+function isFirefoxInstallPath(url) {
+  if (!FIREFOX_INSTALL_PROTOCOLS.has(url.protocol)) {
     return false;
   }
+  const pathname = decodePathname(url.pathname).toLowerCase();
+  const leafName = pathname.slice(pathname.lastIndexOf("/") + 1);
+  return leafName.endsWith(".xpi") || XPINSTALL_PATH_PATTERN.test(pathname);
+}
+
+function isFirefoxInstallMetadata({
+  filename = "",
+  mimeType = "",
+  primaryExtension = "",
+} = {}) {
+  const normalizedFilename = String(filename || "").trim().toLowerCase();
+  const normalizedExtension = String(primaryExtension || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\.+/, "");
+  return (
+    normalizedFilename.endsWith(".xpi") ||
+    normalizedExtension === "xpi" ||
+    String(mimeType || "").toLowerCase().includes("xpinstall")
+  );
+}
+
+export function classifyDownloadTargetURL(value) {
+  const url = parseURL(value);
+  if (!url) {
+    return DOWNLOAD_TARGET_CLASSIFICATION.UNSUPPORTED;
+  }
+  if (BROWSER_NATIVE_ONLY_PROTOCOLS.has(url.protocol)) {
+    return DOWNLOAD_TARGET_CLASSIFICATION.BROWSER_NATIVE_ONLY;
+  }
+  if (!SUPPORTED_PROTOCOLS.has(url.protocol)) {
+    return DOWNLOAD_TARGET_CLASSIFICATION.UNSUPPORTED;
+  }
+  if (isFirefoxInstallPath(url)) {
+    return DOWNLOAD_TARGET_CLASSIFICATION.FIREFOX_INSTALL;
+  }
+  return DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED;
+}
+
+export function classifyDownloadTarget({
+  url = "",
+  filename = "",
+  mimeType = "",
+  primaryExtension = "",
+} = {}) {
+  const classification = classifyDownloadTargetURL(url);
+  if (classification !== DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED) {
+    return classification;
+  }
+  return isFirefoxInstallMetadata({ filename, mimeType, primaryExtension })
+    ? DOWNLOAD_TARGET_CLASSIFICATION.FIREFOX_INSTALL
+    : DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED;
+}
+
+export function isSupportedContextURL(value) {
+  const url = parseURL(value);
+  return Boolean(url && SUPPORTED_PROTOCOLS.has(url.protocol));
+}
+
+export function isSupportedURL(value) {
+  return classifyDownloadTargetURL(value) ===
+    DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED;
 }
 
 export function parseAvailableManagers(value) {
@@ -46,7 +145,13 @@ function buildDownloadLink({
   filename = "",
   extension = "",
 }) {
-  if (!isSupportedURL(url)) {
+  if (
+    classifyDownloadTarget({
+      url,
+      filename,
+      primaryExtension: extension,
+    }) !== DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED
+  ) {
     throw new TypeError("Unsupported download URL");
   }
 
