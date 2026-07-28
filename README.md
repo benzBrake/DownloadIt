@@ -25,6 +25,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Passes the URL, filename, referrer, cookies, and User-Agent to external download tools; the Firefox downloader uses the native browsing and cookie context.
 - Provides Firefox settings for the default download manager, task-start behavior, and cookie-forwarding policy.
 - Provides a dedicated **Auto-capture** settings tab for editing allow and deny rules and reviewing built-in protections.
+- Provides an optional GitHub mirror adapter with a configurable endpoint and a registry designed for additional sites such as Hugging Face.
 - Supports Simplified Chinese and English in the UI and context menu.
 - Stores UI messages in Firefox's built-in Fluent resources.
 - Verifies the bundled `FlashGot.exe` during the build and at runtime.
@@ -141,6 +142,7 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.idmBridgeEnabled` | Boolean | Intercepts compatible IDM local HTTP requests and sends them to the current default downloader. The default is `false`. |
 | `downloadit.detectedManagers` | String | Cached FlashGot-backed download-manager detection results, maintained automatically by the extension. |
 | `downloadit.linkGroups` | String | Versioned JSON configuration for built-in and custom batch-link suffix groups. |
+| `downloadit.mirrors` | String | Versioned JSON configuration for built-in mirror adapters. The GitHub adapter defaults to disabled with `https://gh-proxy.com/` prefilled. |
 
 When a preference is locked by Firefox policy, the settings page displays its locked state and prevents changes.
 
@@ -167,6 +169,14 @@ User rules are stored as formatted UTF-8 JSON in `DownloadIt\auto-capture-rules.
 The file is created on the first saved rule and written atomically. Invalid JSON, duplicate matches, invalid IDs, and unsupported versions are preserved without being overwritten; automatic capture is disabled until the file is reloaded or explicitly reset from settings. User allow and deny rules can be added, removed individually, or cleared independently from the **Auto-capture** tab.
 
 Automatic capture uses deny-first matching: built-in and user deny rules take priority, user allow rules are captured, and file types in neither list continue through Firefox's native prompt. Download targets are classified before user rules: normal `http`, `https`, `ftp`, and `magnet` targets can be dispatched; `blob:` and `data:` resources remain in Firefox because their contents belong to the originating browser context; and other unsupported schemes are filtered. `.xpi` is an immutable built-in deny entry. HTTP and HTTPS targets whose decoded path ends in `.xpi` or contains a standalone `xpinstall` path marker are rejected by every DownloadIt entry point, while Firefox filename, primary-extension, and MIME metadata provide the same protection when the URL is ambiguous. Query strings, fragments, and hostnames containing the word `xpinstall` do not trigger this path rule. These target restrictions are code-owned and cannot be overridden by current extension rules or future domain rules; referrer and source-page URLs are validated separately and are not mistaken for download targets. Empty extensions likewise remain native. Executable extensions such as `.exe` can be added explicitly to the allow list. When the Firefox downloader is the default, the hook leaves the existing native launcher untouched instead of issuing a duplicate request.
+
+### Mirror adapters
+
+The experimental **Mirror acceleration** settings tab exposes code-owned site adapters and user-configurable endpoints. Adapters are privileged extension modules registered through `MirrorAdapterRegistry`; DownloadIt does not load arbitrary JavaScript from the profile. This keeps site-specific URL semantics isolated so future adapters, such as Hugging Face, can be added without changing the downloader dispatch path.
+
+The built-in GitHub adapter is disabled by default and pre-fills `https://gh-proxy.com/`. When enabled, it prefixes recognized HTTPS file URLs in the form `<endpoint><original-absolute-url>`. It supports release assets, `/archive/`, `/zipball/`, `/tarball/`, repository `/raw/` routes, `codeload.github.com`, and `raw.githubusercontent.com`. Ordinary GitHub pages, API URLs, and temporary `objects.githubusercontent.com` URLs are never guessed or rewritten. The native download dialog uses a matching original channel URI when Firefox retains one; otherwise a redirected object URL remains unchanged.
+
+Mirroring is applied once immediately before every provider dispatch, including context-menu, batch, download-dialog, automatic-capture, native Firefox, and IDM-bridge tasks. POST download tasks are not rewritten. A mirrored link drops its source-site cookies and cookie records, and any batch containing a mirrored link drops page-level cookies. Public endpoints must use HTTPS and may not include credentials, a query, or a fragment; HTTP is accepted only for loopback addresses. DownloadIt does not probe mirror health or retry the original URL after an external downloader accepts a mirrored task. Invalid externally supplied configuration falls back to all adapters disabled without overwriting the stored preference.
 
 ### JDownloader provider
 
@@ -234,6 +244,8 @@ addon/
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
     ├── DownloadItDownloaders.sys.mjs    # Provider references, JDownloader/aria2 protocols, custom schema, and templates
+    ├── DownloadItMirrors.sys.mjs        # Mirror adapter registry, settings validation, and task rewriting
+    ├── DownloadItGitHubMirror.sys.mjs   # GitHub file-URL adapter
     ├── DownloadItIDMBridge.sys.mjs      # Firefox request hook and loopback response bridge
     ├── DownloadItIDMProtocol.sys.mjs    # IDM local endpoint and byte-level message parser
     ├── DownloadItXUL.sys.mjs             # Shared Firefox XUL element construction helper

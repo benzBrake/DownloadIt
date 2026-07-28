@@ -34,6 +34,8 @@ const {
   "chrome://downloadit/content/DownloadItAutoCapture.sys.mjs",
 );
 const localizationReady = initializeDownloadItLocalization(window);
+const DEVELOPER_MODE_DOUBLE_CLICKS = 6;
+const DEVELOPER_MODE_GESTURE_TIMEOUT_MS = 4000;
 
 const SECTION_META = {
   managers: [
@@ -55,6 +57,11 @@ const SECTION_META = {
     "downloadit-link-groups-kicker",
     "downloadit-link-groups-title",
     "downloadit-link-groups-description",
+  ],
+  mirrors: [
+    "downloadit-mirrors-kicker",
+    "downloadit-mirrors-title",
+    "downloadit-mirrors-description",
   ],
   about: [
     "downloadit-about-kicker",
@@ -126,6 +133,15 @@ const CUSTOM_ERROR_MESSAGES = {
   "jdownloader-mixed-post-data": "downloadit-error-jdownloader-mixed-post",
 };
 
+const MIRROR_ERROR_MESSAGES = {
+  "mirror-settings-invalid": "downloadit-error-mirror-settings",
+  "mirror-settings-version": "downloadit-error-mirror-version",
+  "mirror-adapter-unknown": "downloadit-error-mirror-adapter",
+  "mirror-adapter-invalid": "downloadit-error-mirror-adapter",
+  "mirror-endpoint-invalid": "downloadit-error-mirror-endpoint",
+  "mirror-endpoint-insecure": "downloadit-error-mirror-insecure",
+};
+
 const state = {
   section: "managers",
   service: null,
@@ -137,6 +153,7 @@ const state = {
   busy: false,
   feedback: null,
   feedbackKind: "",
+  mirrorValidation: null,
   editor: null,
   linkGroupEditor: null,
   editorReturnFocus: null,
@@ -145,6 +162,8 @@ const state = {
 
 let renderedManagerKeys = null;
 let observedBuiltInRefresh = null;
+let developerModeDoubleClicks = 0;
+let developerModeLastGesture = 0;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -180,11 +199,16 @@ function createSettingsState(snapshot) {
     idmBridgeEnabled: snapshot.idmBridgeEnabled,
     autoCaptureRules: clone(snapshot.autoCaptureRules),
     linkGroups: clone(snapshot.linkGroups),
+    mirrorSettings: clone(snapshot.mirrorSettings),
     customDownloaders: clone(snapshot.customDownloaders),
   };
 }
 
 function bindEvents() {
+  document.getElementById("developer-mode-trigger").addEventListener(
+    "dblclick",
+    activateDeveloperModeFromGesture,
+  );
   for (const button of document.querySelectorAll(".nav-item")) {
     button.addEventListener("click", () => {
       state.section = button.dataset.section;
@@ -220,6 +244,36 @@ function bindEvents() {
     state.draft.idmBridgeEnabled = event.target.checked;
     clearFeedback();
     render();
+  });
+  const mirrorList = document.getElementById("mirror-adapter-list");
+  mirrorList.addEventListener("change", event => {
+    const toggle = event.target.closest("[data-mirror-enabled]");
+    if (!toggle || !state.draft?.mirrorSettings) {
+      return;
+    }
+    const settings = state.draft.mirrorSettings.adapters[toggle.dataset.mirrorEnabled];
+    if (!settings) {
+      return;
+    }
+    settings.enabled = toggle.checked;
+    clearFeedback();
+    validateMirrorDraft();
+    render();
+  });
+  mirrorList.addEventListener("input", event => {
+    const input = event.target.closest("[data-mirror-endpoint]");
+    if (!input || !state.draft?.mirrorSettings) {
+      return;
+    }
+    const settings = state.draft.mirrorSettings.adapters[input.dataset.mirrorEndpoint];
+    if (!settings) {
+      return;
+    }
+    settings.endpoint = input.value;
+    clearFeedback();
+    validateMirrorDraft();
+    renderMirrorValidation();
+    renderActionState();
   });
   document.getElementById("refresh-managers").addEventListener("click", refreshManagers);
   document.getElementById("reload-custom-downloaders").addEventListener(
@@ -457,7 +511,58 @@ function clearFeedback() {
   state.feedbackKind = "";
 }
 
+function activateDeveloperModeFromGesture(event) {
+  event.preventDefault();
+  if (state.snapshot?.developerMode) {
+    state.section = "mirrors";
+    render();
+    return;
+  }
+
+  const now = Date.now();
+  if (now - developerModeLastGesture > DEVELOPER_MODE_GESTURE_TIMEOUT_MS) {
+    developerModeDoubleClicks = 0;
+  }
+  developerModeLastGesture = now;
+  developerModeDoubleClicks++;
+  if (developerModeDoubleClicks < DEVELOPER_MODE_DOUBLE_CLICKS) {
+    return;
+  }
+
+  developerModeDoubleClicks = 0;
+  developerModeLastGesture = 0;
+  if (!state.service?.activateDeveloperMode()) {
+    return;
+  }
+  state.snapshot.developerMode = true;
+  state.section = "mirrors";
+  render();
+}
+
+function renderNavigation() {
+  const developerMode = Boolean(state.snapshot?.developerMode);
+  const navigation = document.querySelector(".section-nav");
+  const mirrorButton = navigation.querySelector('[data-section="mirrors"]');
+  const visibleSections = developerMode
+    ? ["managers", "auto-capture", "link-groups", "mirrors", "privacy", "about"]
+    : ["managers", "auto-capture", "link-groups", "privacy", "about"];
+
+  mirrorButton.hidden = !developerMode;
+  navigation.classList.toggle("has-developer-mode", developerMode);
+  document.body.classList.toggle("has-developer-mode", developerMode);
+  if (!developerMode && state.section === "mirrors") {
+    state.section = "managers";
+  }
+  for (const [index, section] of visibleSections.entries()) {
+    navigation.querySelector(`[data-section="${section}"] .nav-number`).textContent =
+      String(index + 1).padStart(2, "0");
+  }
+}
+
 function render() {
+  validateMirrorDraft();
+  renderNavigation();
+  document.body.dataset.activeSection = state.section;
   const meta = SECTION_META[state.section];
   setLocalized(document.getElementById("section-kicker"), meta[0]);
   setLocalized(document.getElementById("section-title"), meta[1]);
@@ -476,9 +581,14 @@ function render() {
   renderTaskStartSettings();
   renderAutoCaptureRules();
   renderLinkGroups();
+  renderMirrors();
   renderPrivacy();
   renderAbout();
 
+  renderActionState();
+}
+
+function renderActionState() {
   const dirty = isDirty();
   const changeState = document.getElementById("change-state");
   const applyButton = document.getElementById("apply");
@@ -494,7 +604,8 @@ function render() {
   } else {
     setLocalized(changeState, "downloadit-no-changes");
   }
-  applyButton.disabled = !dirty || state.busy || !state.service;
+  applyButton.disabled = !dirty || state.busy || !state.service ||
+    Boolean(state.mirrorValidation);
 }
 
 function renderServiceState() {
@@ -1164,6 +1275,115 @@ function renderLinkGroups() {
   addButton.disabled = locked || state.busy || !state.service;
 }
 
+function validateMirrorDraft() {
+  state.mirrorValidation = null;
+  if (!state.service || !state.draft?.mirrorSettings) {
+    return true;
+  }
+  try {
+    state.service.validateMirrorSettings(state.draft.mirrorSettings);
+    return true;
+  } catch (error) {
+    state.mirrorValidation = localizedError(error);
+    return false;
+  }
+}
+
+function renderMirrorValidation() {
+  const note = document.getElementById("mirror-validation");
+  const message = document.getElementById("mirror-validation-message");
+  note.hidden = !state.mirrorValidation;
+  if (state.mirrorValidation) {
+    setLocalizedMessage(message, state.mirrorValidation);
+  }
+  for (const input of document.querySelectorAll("[data-mirror-endpoint]")) {
+    const invalidAdapter = state.mirrorValidation?.args?.adapter || "";
+    input.setAttribute("aria-invalid", String(Boolean(
+      state.mirrorValidation &&
+      (!invalidAdapter || invalidAdapter === input.dataset.mirrorEndpoint)
+    )));
+  }
+}
+
+function renderMirrors() {
+  const list = document.getElementById("mirror-adapter-list");
+  const locked = Boolean(state.snapshot?.mirrorSettingsLocked);
+  const settings = state.draft?.mirrorSettings;
+  list.replaceChildren();
+
+  for (const adapter of state.snapshot?.mirrorAdapters || []) {
+    const adapterSettings = settings?.adapters?.[adapter.id];
+    if (!adapterSettings) {
+      continue;
+    }
+    const row = document.createElement("div");
+    row.className = `mirror-adapter-row${adapterSettings.enabled ? "" : " is-disabled"}`;
+
+    const heading = document.createElement("div");
+    heading.className = "mirror-adapter-heading";
+    const toggle = document.createElement("label");
+    toggle.className = "mini-toggle";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = adapterSettings.enabled;
+    checkbox.disabled = locked || state.busy;
+    checkbox.dataset.mirrorEnabled = adapter.id;
+    const titleId = `mirror-adapter-${adapter.id}-title`;
+    checkbox.setAttribute("aria-labelledby", titleId);
+    const track = document.createElement("span");
+    track.className = "toggle-track";
+    track.setAttribute("aria-hidden", "true");
+    const thumb = document.createElement("span");
+    thumb.className = "toggle-thumb";
+    track.append(thumb);
+    toggle.append(checkbox, track);
+
+    const copy = document.createElement("div");
+    copy.className = "mirror-adapter-copy";
+    const title = document.createElement("strong");
+    title.id = titleId;
+    setLocalized(title, adapter.nameL10nId);
+    const description = document.createElement("span");
+    description.id = `mirror-adapter-${adapter.id}-description`;
+    setLocalized(description, adapter.descriptionL10nId);
+    copy.append(title, description);
+
+    const status = document.createElement("span");
+    status.className = `mirror-status${adapterSettings.enabled ? " is-enabled" : ""}`;
+    setLocalized(
+      status,
+      adapterSettings.enabled
+        ? "downloadit-mirror-enabled"
+        : "downloadit-mirror-disabled",
+    );
+    heading.append(toggle, copy, status);
+
+    const field = document.createElement("div");
+    field.className = "mirror-endpoint-field";
+    const label = document.createElement("label");
+    label.htmlFor = `mirror-endpoint-${adapter.id}`;
+    setLocalized(label, "downloadit-mirror-endpoint-label");
+    const input = document.createElement("input");
+    input.id = `mirror-endpoint-${adapter.id}`;
+    input.type = "url";
+    input.value = adapterSettings.endpoint;
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.disabled = locked || state.busy;
+    input.dataset.mirrorEndpoint = adapter.id;
+    input.setAttribute(
+      "aria-describedby",
+      `mirror-adapter-${adapter.id}-description mirror-endpoint-help`,
+    );
+    field.append(label, input);
+    row.append(heading, field);
+    list.append(row);
+  }
+
+  document.getElementById("mirror-settings-lock").hidden = !locked;
+  renderMirrorValidation();
+}
+
 function renderAbout() {
   const snapshot = state.snapshot;
   document.getElementById("binary-path").textContent = snapshot?.binaryPath || "--";
@@ -1183,6 +1403,9 @@ function localizedError(error) {
   if (CUSTOM_ERROR_MESSAGES[error?.code]) {
     return localizedMessage(CUSTOM_ERROR_MESSAGES[error.code], error.args || null);
   }
+  if (MIRROR_ERROR_MESSAGES[error?.code]) {
+    return localizedMessage(MIRROR_ERROR_MESSAGES[error.code], error.args || null);
+  }
   const message = errorText(error);
   if (/default download manager preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-default");
@@ -1198,6 +1421,9 @@ function localizedError(error) {
   }
   if (/link group preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-link-groups");
+  }
+  if (/mirror preference is locked/i.test(message)) {
+    return localizedMessage("downloadit-error-locked-mirrors");
   }
   if (/IDM bridge preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-idm-bridge");

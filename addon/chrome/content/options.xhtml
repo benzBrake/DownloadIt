@@ -15,7 +15,7 @@
     <div id="app">
       <aside class="sidebar">
         <div class="brand-lockup">
-          <img class="brand-mark" src="chrome://downloadit/content/icons/downloadit.svg" alt="" aria-hidden="true" />
+          <img id="developer-mode-trigger" class="brand-mark" src="chrome://downloadit/content/icons/downloadit.svg" alt="" aria-hidden="true" draggable="false" />
           <div>
             <div class="brand-name">DownloadIt</div>
             <div class="brand-subtitle" data-l10n-id="downloadit-brand-subtitle"></div>
@@ -34,6 +34,10 @@
           <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-link-groups" data-section="link-groups">
             <span class="nav-number">03</span>
             <span data-l10n-id="downloadit-nav-link-groups"></span>
+          </button>
+          <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-mirrors" data-section="mirrors" hidden="hidden">
+            <span class="nav-number">04</span>
+            <span data-l10n-id="downloadit-nav-mirrors"></span>
           </button>
           <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-privacy" data-section="privacy">
             <span class="nav-number">04</span>
@@ -217,6 +221,29 @@
               </div>
               <p class="field-help group-intro" data-l10n-id="downloadit-custom-link-groups-help"></p>
               <ul id="custom-link-group-list" class="link-group-list"></ul>
+            </div>
+          </section>
+
+          <section id="section-mirrors" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="mirrors" hidden="hidden">
+            <div class="setting-group mirror-group">
+              <div class="group-heading compact-heading">
+                <div>
+                  <div class="eyebrow" data-l10n-id="downloadit-mirror-adapters-eyebrow"></div>
+                  <h2 data-l10n-id="downloadit-mirror-adapters-title"></h2>
+                </div>
+                <span id="mirror-settings-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
+              </div>
+              <p id="mirror-endpoint-help" class="field-help group-intro" data-l10n-id="downloadit-mirror-adapters-help"></p>
+              <div id="mirror-adapter-list" class="mirror-adapter-list"></div>
+              <div id="mirror-validation" class="inline-note is-warning" role="alert" hidden="hidden">
+                <span class="note-mark" aria-hidden="true">!</span>
+                <span id="mirror-validation-message"></span>
+              </div>
+            </div>
+
+            <div class="inline-note mirror-cookie-note">
+              <span class="note-mark" aria-hidden="true">i</span>
+              <span data-l10n-id="downloadit-mirror-cookie-policy"></span>
             </div>
           </section>
 

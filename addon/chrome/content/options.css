@@ -148,6 +148,12 @@ textarea:focus-visible {
   height: 38px;
   flex: 0 0 auto;
   object-fit: contain;
+  user-select: none;
+  transition: transform 100ms ease;
+}
+
+.brand-mark:active {
+  transform: scale(0.94);
 }
 
 .callout-mark {
@@ -545,6 +551,99 @@ textarea:focus-visible {
 
 .link-group-editor-dialog {
   width: min(590px, 100%);
+}
+
+.mirror-group {
+  margin-bottom: 12px;
+  padding: 19px 22px 14px;
+}
+
+.mirror-group .group-heading {
+  margin-bottom: 9px;
+}
+
+.mirror-group .group-intro {
+  margin: 0;
+}
+
+.mirror-adapter-list {
+  margin-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.mirror-adapter-row {
+  padding: 14px 0 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mirror-adapter-heading {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.mirror-adapter-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.mirror-adapter-copy strong {
+  font-size: 14px;
+}
+
+.mirror-adapter-copy span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mirror-adapter-row.is-disabled .mirror-adapter-copy {
+  opacity: 0.68;
+}
+
+.mirror-status {
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.mirror-status.is-enabled {
+  border-color: color-mix(in srgb, var(--success) 48%, var(--line));
+  color: var(--success);
+}
+
+.mirror-endpoint-field {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 11px 0 0 48px;
+}
+
+.mirror-endpoint-field label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#mirror-validation-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mirror-cookie-note {
+  margin: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  color: var(--muted);
+}
+
+body[data-active-section="mirrors"] .content-scroll {
+  padding-top: 20px;
 }
 
 #link-group-key[readonly] {
@@ -1409,6 +1508,12 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .mirror-endpoint-field {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin-left: 0;
+  }
+
 }
 
 #auto-capture-config-error-message {
@@ -1442,6 +1547,10 @@ button {
 
   .section-nav {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .section-nav.has-developer-mode {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .nav-item {

@@ -176,6 +176,7 @@ function createSettingsService() {
   service.jDownloaderProbePromise = null;
   service.jDownloaderProbeEndpoint = "";
   service.jDownloaderStartupPromise = null;
+  service.mirrorRegistry = service.createMirrorRegistry();
   service.idmBridge = { running: false };
   service.isLocalFile = value => value === "C:\\JD\\JDownloader.exe";
   service.providers = service.createProviderRegistry();
@@ -184,6 +185,7 @@ function createSettingsService() {
 
 test("download targets and context URLs use separate policies", async () => {
   const service = createService();
+  service.mirrorRegistry = service.createMirrorRegistry();
   const downloads = [];
   service.resolveDownloader = () => ({
     available: true,
@@ -223,6 +225,134 @@ test("download targets and context URLs use separate policies", async () => {
   assert.equal(job.referer, "https://example.com/releases/addon.xpi");
   assert.equal(job.dlpageReferer, "https://example.com/xpinstall/page");
   assert.equal(contexts.length, 1);
+});
+
+test("download dispatch rewrites GitHub jobs before every provider", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.omitCookies", true);
+  preferenceValues.set("downloadit.mirrors", JSON.stringify({
+    version: 1,
+    adapters: {
+      github: { enabled: true, endpoint: "https://gh-proxy.com/" },
+    },
+  }));
+  const service = createService();
+  service.mirrorRegistry = service.createMirrorRegistry();
+  const downloader = {
+    available: true,
+    name: "Test downloader",
+    ref: { provider: "custom", id: "test" },
+    capabilities: {},
+  };
+  service.resolveDownloader = () => downloader;
+  const downloads = [];
+  service.providers = {
+    async download(...args) {
+      downloads.push(args);
+    },
+  };
+
+  try {
+    await service.downloadLinks([{
+      url: "https://github.com/owner/repo/releases/download/v1/app.zip",
+      filename: "app.zip",
+      browser: { browsingContext: { customUserAgent: "Test Agent" } },
+    }], "test");
+
+    const nativeDownloader = service.createNativeDownloaderDescriptor();
+    service.resolveDownloader = () => nativeDownloader;
+    await service.downloadLinks([{
+      url: "https://github.com/owner/repo/archive/refs/heads/main.zip",
+      filename: "source.zip",
+      browser: { browsingContext: { customUserAgent: "Test Agent" } },
+    }], "firefox");
+
+    Object.defineProperty(service, "defaultDownloader", {
+      configurable: true,
+      value: downloader,
+    });
+    await service.downloadIDMTask({
+      url: "https://raw.githubusercontent.com/owner/repo/main/file.txt",
+      filename: "file.txt",
+      cookie: "github_session=secret",
+    });
+  } finally {
+    preferenceValues.clear();
+  }
+
+  assert.equal(downloads.length, 3);
+  assert.equal(downloads[0][0].provider, "custom");
+  assert.equal(
+    downloads[0][1].links[0].url,
+    "https://gh-proxy.com/https://github.com/owner/repo/releases/download/v1/app.zip",
+  );
+  assert.equal(downloads[1][0].provider, "native");
+  assert.equal(
+    downloads[1][1].links[0].url,
+    "https://gh-proxy.com/https://github.com/owner/repo/archive/refs/heads/main.zip",
+  );
+  assert.equal(
+    downloads[2][1].links[0].url,
+    "https://gh-proxy.com/https://raw.githubusercontent.com/owner/repo/main/file.txt",
+  );
+  assert.equal(downloads[2][1].links[0].cookies, "");
+});
+
+test("download launchers prefer a matching original GitHub URI", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.mirrors", JSON.stringify({
+    version: 1,
+    adapters: {
+      github: { enabled: true, endpoint: "https://gh-proxy.com/" },
+    },
+  }));
+  const service = createService();
+  service.mirrorRegistry = service.createMirrorRegistry();
+  service.getLauncherSourceWindow = () => null;
+  service.getBrowserWindow = () => null;
+  let submitted;
+  service.downloadLink = async context => {
+    submitted = context;
+  };
+  try {
+    await service.downloadLauncher({
+      launcher: {
+        source: { spec: "https://objects.githubusercontent.com/signed/file.zip" },
+        channel: {
+          originalURI: {
+            spec: "https://github.com/owner/repo/releases/download/v1/file.zip",
+          },
+          loadInfo: {},
+        },
+        suggestedFileName: "file.zip",
+        MIMEInfo: { MIMEType: "application/zip" },
+      },
+      manager: "test",
+    });
+  } finally {
+    preferenceValues.clear();
+  }
+  assert.equal(
+    submitted.url,
+    "https://github.com/owner/repo/releases/download/v1/file.zip",
+  );
+
+  await service.downloadLauncher({
+    launcher: {
+      source: { spec: "https://objects.githubusercontent.com/signed/final.zip" },
+      channel: {
+        originalURI: { spec: "https://github.com/owner/repo/releases/tag/v1" },
+        loadInfo: {},
+      },
+      suggestedFileName: "final.zip",
+      MIMEInfo: { MIMEType: "application/zip" },
+    },
+    manager: "test",
+  });
+  assert.equal(
+    submitted.url,
+    "https://objects.githubusercontent.com/signed/final.zip",
+  );
 });
 
 test("automatic capture file updates are serialized without losing rules", async () => {
@@ -629,6 +759,88 @@ test("built-in protocol settings use a UI view while persisting through provider
   assert.equal(snapshot.customDownloaders.downloaders.length, 0);
   service.flashGotManagers = ["External"];
   assert.equal(service.readSettings().detectedManagerCount, 1);
+});
+
+test("developer mode is hidden by default, persists activation, and honors locks", () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+
+  try {
+    assert.equal(service.readSettings().developerMode, false);
+    assert.equal(service.activateDeveloperMode(), true);
+    assert.equal(preferenceValues.get("downloadit.developerMode"), true);
+    assert.equal(service.readSettings().developerMode, true);
+
+    preferenceValues.delete("downloadit.developerMode");
+    preferenceLocks.add("downloadit.developerMode");
+    assert.equal(service.activateDeveloperMode(), false);
+    assert.equal(preferenceValues.has("downloadit.developerMode"), false);
+  } finally {
+    preferenceValues.clear();
+    preferenceLocks.clear();
+  }
+});
+
+test("mirror settings persist normalized values, fall back safely, and honor locks", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+  const defaults = service.readSettings();
+
+  assert.deepEqual(defaults.mirrorSettings, {
+    version: 1,
+    adapters: {
+      github: { enabled: false, endpoint: "https://gh-proxy.com/" },
+    },
+  });
+  assert.equal(defaults.mirrorSettingsLocked, false);
+
+  const snapshot = await service.applySettings({
+    mirrorSettings: {
+      version: 1,
+      adapters: {
+        github: { enabled: true, endpoint: "https://mirror.example/base" },
+      },
+    },
+  });
+  assert.deepEqual(snapshot.mirrorSettings.adapters.github, {
+    enabled: true,
+    endpoint: "https://mirror.example/base/",
+  });
+  assert.deepEqual(
+    JSON.parse(preferenceValues.get("downloadit.mirrors")),
+    snapshot.mirrorSettings,
+  );
+
+  const invalidPreference = '{"version":2,"adapters":{}}';
+  preferenceValues.set("downloadit.mirrors", invalidPreference);
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    assert.deepEqual(service.readSettings().mirrorSettings, defaults.mirrorSettings);
+    await service.applySettings({});
+    assert.equal(preferenceValues.get("downloadit.mirrors"), invalidPreference);
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  preferenceValues.set("downloadit.mirrors", JSON.stringify(snapshot.mirrorSettings));
+  preferenceLocks.add("downloadit.mirrors");
+  assert.equal(service.readSettings().mirrorSettingsLocked, true);
+  await assert.rejects(
+    service.applySettings({
+      mirrorSettings: {
+        version: 1,
+        adapters: {
+          github: { enabled: false, endpoint: "https://gh-proxy.com/" },
+        },
+      },
+    }),
+    /mirror preference is locked/i,
+  );
+  preferenceValues.clear();
+  preferenceLocks.clear();
 });
 
 test("JDownloader legacy settings migrate to enabled until explicitly disabled", () => {

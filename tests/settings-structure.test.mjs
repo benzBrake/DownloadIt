@@ -61,7 +61,7 @@ test("settings dialog contains the current capability controls", () => {
   assert.doesNotMatch(markup, /chrome:\/\/global\/skin\/menulist\.css/);
   assert.match(
     markup,
-    /<img class="brand-mark" src="chrome:\/\/downloadit\/content\/icons\/downloadit\.svg" alt="" aria-hidden="true" \/>/,
+    /<img id="developer-mode-trigger" class="brand-mark" src="chrome:\/\/downloadit\/content\/icons\/downloadit\.svg" alt="" aria-hidden="true" draggable="false" \/>/,
   );
   assert.doesNotMatch(markup, /class="brand-mark"[^>]*>DI<\/div>/);
   assert.match(markup, /xmlns:xul="http:\/\/www\.mozilla\.org\/keymaster\/gatekeeper\/there\.is\.only\.xul"/);
@@ -110,6 +110,12 @@ test("settings dialog contains the current capability controls", () => {
     "link-group-name",
     "link-group-key",
     "link-group-extensions",
+    "developer-mode-trigger",
+    "section-mirrors",
+    "mirror-settings-lock",
+    "mirror-adapter-list",
+    "mirror-validation",
+    "mirror-validation-message",
     "section-privacy",
     "send-cookies",
     "idm-bridge",
@@ -137,7 +143,7 @@ test("automatic capture controls live in a dedicated settings tab", () => {
     markup,
     /aria-controls="section-auto-capture" data-section="auto-capture"/,
   );
-  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 5);
+  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 6);
   assert.ok(managerPanel);
   assert.ok(autoCapturePanel);
   assert.doesNotMatch(managerPanel, /id="auto-allow-list"/);
@@ -151,6 +157,10 @@ test("automatic capture controls live in a dedicated settings tab", () => {
   assert.match(autoCapturePanel, /id="reset-auto-capture-rules"/);
   assert.match(script, /"auto-capture": \[/);
   assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(
+    styles,
+    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(6, minmax\(0, 1fr\)\)/,
+  );
 });
 
 test("settings refresh keeps default-manager persistence staged", () => {
@@ -169,6 +179,7 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /await state\.service\.applySettings\(payload\)/);
   assert.match(script, /autoCaptureRules/);
   assert.match(script, /linkGroups/);
+  assert.match(script, /mirrorSettings/);
   assert.match(script, /validateLinkGroupSettings/);
   assert.match(script, /idmBridgeEnabled/);
   assert.match(script, /data-remove-auto-rule/);
@@ -478,5 +489,49 @@ test("IDM bridge is staged, policy-aware, packaged, and documented", () => {
   for (const source of [packPowerShell, packShell]) {
     assert.match(source, /DownloadItIDMBridge\.sys\.mjs/);
     assert.match(source, /DownloadItIDMProtocol\.sys\.mjs/);
+  }
+});
+
+test("mirror adapters are validated, policy-aware, packaged, and documented", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const mirrors = read("addon/chrome/content/DownloadItMirrors.sys.mjs");
+  const github = read("addon/chrome/content/DownloadItGitHubMirror.sys.mjs");
+  const options = read("addon/chrome/content/options.js");
+  const styles = read("addon/chrome/content/options.css");
+  const packPowerShell = read("pack.ps1");
+  const packShell = read("pack.sh");
+  const englishReadme = read("README.md");
+  const chineseReadme = read("README-zh_CN.md");
+
+  assert.match(service, /PREF_MIRRORS = "downloadit\.mirrors"/);
+  assert.match(service, /PREF_DEVELOPER_MODE = "downloadit\.developerMode"/);
+  assert.match(service, /activateDeveloperMode\(\)/);
+  assert.match(service, /dispatchDownload/);
+  assert.match(service, /mirrorSettingsLocked/);
+  assert.match(service, /channel\?\.originalURI/);
+  assert.match(mirrors, /class MirrorAdapterRegistry/);
+  assert.match(mirrors, /MIRROR_SETTINGS_VERSION = 1/);
+  assert.match(github, /GITHUB_MIRROR_DEFAULT_ENDPOINT = "https:\/\/gh-proxy\.com\/"/);
+  assert.match(options, /validateMirrorSettings/);
+  assert.match(options, /dataset\.mirrorEndpoint/);
+  assert.match(options, /DEVELOPER_MODE_DOUBLE_CLICKS = 6/);
+  assert.match(options, /addEventListener\([\s\S]*?"dblclick"/);
+  assert.match(options, /state\.section = "mirrors"/);
+  assert.match(
+    markup,
+    /id="developer-mode-trigger"[\s\S]*?data-section="mirrors" hidden="hidden"/,
+  );
+  assert.match(styles, /\.mirror-group \{[\s\S]*?padding: 19px 22px 14px/);
+  assert.match(styles, /body\[data-active-section="mirrors"\] \.content-scroll/);
+  for (const source of [packPowerShell, packShell]) {
+    assert.match(source, /DownloadItGitHubMirror\.sys\.mjs/);
+    assert.match(source, /DownloadItMirrors\.sys\.mjs/);
+  }
+  for (const source of [englishReadme, chineseReadme]) {
+    assert.match(source, /downloadit\.mirrors/);
+    assert.doesNotMatch(source, /developer[.\s-]?mode|开发者模式/i);
+    assert.match(source, /https:\/\/gh-proxy\.com\//);
+    assert.match(source, /raw\.githubusercontent\.com/);
   }
 });

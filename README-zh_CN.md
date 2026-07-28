@@ -25,6 +25,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 向外部下载工具传递 URL、文件名、Referer、Cookie 和 User-Agent；Firefox 内建下载器使用原生浏览与 Cookie 上下文。
 - 在 Firefox 设置对话框中管理默认下载工具、任务启动行为和 Cookie 转发策略。
 - 提供独立的“自动接管”设置标签页，用于编辑黑白名单并查看内置保护规则。
+- 提供可选的 GitHub 镜像适配器和可配置端点，并通过注册表结构支持以后增加 Hugging Face 等站点。
 - 界面和右键菜单支持简体中文与英文。
 - 使用 Firefox 内置的 Fluent 资源存储界面消息。
 - 构建时校验并在运行时校验随扩展发布的 `FlashGot.exe`。
@@ -141,6 +142,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.idmBridgeEnabled` | 布尔值 | 接管兼容的 IDM 本地 HTTP 请求并发送到当前默认下载器；默认值为 `false`。 |
 | `downloadit.detectedManagers` | 字符串 | FlashGot 下载管理器检测缓存，由扩展自动维护。 |
 | `downloadit.linkGroups` | 字符串 | 内置及自定义批量链接后缀分组的版本化 JSON 配置。 |
+| `downloadit.mirrors` | 字符串 | 内建镜像适配器的版本化 JSON 配置。GitHub 适配器默认关闭，并预填 `https://gh-proxy.com/`。 |
 
 当偏好被 Firefox 策略锁定时，设置页面会显示锁定状态并禁止修改。
 
@@ -167,6 +169,14 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 首次保存规则时才会创建该文件，并通过原子写入更新。JSON 无效、匹配项重复、ID 无效或版本不受支持时会保留原文件且禁止覆盖，同时停用自动接管，直到用户从设置页重新加载或明确重置。用户黑白名单规则可以在“自动接管”标签页添加、逐项移除或分别清空。
 
 自动接管按黑名单优先判定：内置和用户黑名单优先，用户白名单中的类型会被接管，未出现在两张名单中的类型继续进入 Firefox 原生下载提示。下载目标会先于用户规则分类：普通 `http`、`https`、`ftp` 和 `magnet` 目标可以转交；`blob:` 和 `data:` 资源的数据属于创建它的浏览器上下文，因此始终留在 Firefox 原生流程；其他不支持的协议则会被过滤。`.xpi` 是不可修改的内置黑名单条目。HTTP 和 HTTPS 目标的解码路径以 `.xpi` 结尾或包含独立 `xpinstall` 路径标记时，所有 DownloadIt 入口都会拒绝转交；URL 含糊时还会结合 Firefox 提供的文件名、主扩展名和 MIME 元数据执行相同保护。查询参数、fragment 或主机名中的普通 `xpinstall` 文本不会触发路径规则。这些目标限制由代码维护，当前扩展名规则和未来域名规则都不能覆盖；Referer 和来源页面 URL 会单独校验，不会被误当成下载目标。空扩展名同样保持原生处理；`.exe` 等可执行文件扩展名可以明确加入白名单。当 Firefox 内建下载器是默认项时，hook 会保留现有原生 launcher，不会再次请求同一地址。
+
+### 镜像适配器
+
+实验性的“镜像加速”设置标签页展示由代码提供的站点适配器和用户可配置端点。适配器是通过 `MirrorAdapterRegistry` 注册的扩展特权模块；DownloadIt 不会从 profile 加载任意 JavaScript。站点 URL 语义因此保持隔离，以后增加 Hugging Face 等适配器时无需修改下载器分发流程。
+
+内建 GitHub 适配器默认关闭，并预填 `https://gh-proxy.com/`。启用后，它按 `<端点><原始绝对 URL>` 格式为识别出的 HTTPS 文件链接添加前缀。支持 Release 资产、`/archive/`、`/zipball/`、`/tarball/`、仓库 `/raw/` 路由、`codeload.github.com` 和 `raw.githubusercontent.com`。普通 GitHub 页面、API URL 和临时 `objects.githubusercontent.com` URL 不会被猜测或改写。Firefox 保留匹配的原始 channel URI 时，原生下载弹窗会使用它；否则已重定向的对象 URL 保持不变。
+
+镜像改写在每次 provider 分发前统一执行一次，覆盖右键菜单、批量下载、下载弹窗、自动接管、Firefox 原生下载和 IDM bridge。POST 下载任务不会改写。镜像链接会清除源站 Cookie 和 Cookie 记录；批量任务只要包含镜像链接，也会清除页面级 Cookie。公共端点必须使用 HTTPS，且不得包含认证信息、查询参数或 fragment；只有回环地址允许使用 HTTP。DownloadIt 不探测镜像健康状态，外部下载器接受镜像任务后也不会自动用原链接重试。外部提供的无效配置会回退为全部适配器关闭，且不会覆盖原偏好值。
 
 ### JDownloader provider
 
@@ -234,6 +244,8 @@ addon/
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItDownloadDialog.sys.mjs # Firefox 原生下载弹窗集成
     ├── DownloadItDownloaders.sys.mjs    # provider 引用、JDownloader/aria2 协议、自定义 schema 与模板
+    ├── DownloadItMirrors.sys.mjs        # 镜像适配器注册表、设置校验与任务改写
+    ├── DownloadItGitHubMirror.sys.mjs   # GitHub 文件 URL 适配器
     ├── DownloadItIDMBridge.sys.mjs      # Firefox 请求 hook 和回环响应桥
     ├── DownloadItIDMProtocol.sys.mjs    # IDM 本地端点和字节级消息解析
     ├── DownloadItXUL.sys.mjs             # 共享的 Firefox XUL 元素构造工具

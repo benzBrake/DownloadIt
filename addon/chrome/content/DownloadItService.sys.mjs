@@ -31,6 +31,8 @@ import {
   createDefaultLinkGroupSettings,
   validateLinkGroupSettings,
 } from "./DownloadItLinks.sys.mjs";
+import { githubMirrorAdapter } from "./DownloadItGitHubMirror.sys.mjs";
+import { MirrorAdapterRegistry } from "./DownloadItMirrors.sys.mjs";
 import {
   BINARY_SIZE,
   BINARY_SHA256,
@@ -129,6 +131,8 @@ const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
 const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 const PREF_LINK_GROUPS = "downloadit.linkGroups";
+const PREF_MIRRORS = "downloadit.mirrors";
+const PREF_DEVELOPER_MODE = "downloadit.developerMode";
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
 const PREF_JDOWNLOADER_ENABLED = "downloadit.jdownloader.enabled";
 const PREF_JDOWNLOADER_ENDPOINT = "downloadit.jdownloader.endpoint";
@@ -265,6 +269,7 @@ export class DownloadItService {
     this.jDownloaderProbePromise = null;
     this.jDownloaderProbeEndpoint = "";
     this.jDownloaderStartupPromise = null;
+    this.mirrorRegistry = this.createMirrorRegistry();
     this.providers = this.createProviderRegistry();
     this.idmBridge = new DownloadItIDMBridge(this);
   }
@@ -349,6 +354,10 @@ export class DownloadItService {
           this.downloadViaNative(id, task, runtimeContext),
       },
     ]);
+  }
+
+  createMirrorRegistry() {
+    return new MirrorAdapterRegistry([githubMirrorAdapter]);
   }
 
   createNativeDownloaderDescriptor() {
@@ -1049,6 +1058,38 @@ export class DownloadItService {
     return Services.prefs.prefIsLocked(PREF_LINK_GROUPS);
   }
 
+  get mirrorSettings() {
+    const fallback = this.mirrorRegistry.createDefaultSettings();
+    try {
+      const raw = Services.prefs.getStringPref(PREF_MIRRORS, "");
+      return raw
+        ? this.mirrorRegistry.validateSettings(JSON.parse(raw))
+        : fallback;
+    } catch (error) {
+      console.error("DownloadIt: invalid mirror preference", error);
+      return fallback;
+    }
+  }
+
+  get mirrorSettingsLocked() {
+    return Services.prefs.prefIsLocked(PREF_MIRRORS);
+  }
+
+  validateMirrorSettings(value) {
+    return this.mirrorRegistry.validateSettings(value);
+  }
+
+  get developerMode() {
+    return Services.prefs.getBoolPref(PREF_DEVELOPER_MODE, false);
+  }
+
+  activateDeveloperMode() {
+    if (!Services.prefs.prefIsLocked(PREF_DEVELOPER_MODE)) {
+      Services.prefs.setBoolPref(PREF_DEVELOPER_MODE, true);
+    }
+    return this.developerMode;
+  }
+
   hasAutoExtension(value) {
     return this.getAutoCaptureDisposition(value) === "allow";
   }
@@ -1124,11 +1165,19 @@ export class DownloadItService {
           }
         : null,
       linkGroups: this.linkGroups,
+      mirrorAdapters: this.mirrorRegistry.adapters.map(adapter => ({
+        id: adapter.id,
+        nameL10nId: adapter.nameL10nId,
+        descriptionL10nId: adapter.descriptionL10nId,
+      })),
+      mirrorSettings: this.mirrorSettings,
+      developerMode: this.developerMode,
       defaultManagerLocked: Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER),
       omitCookiesLocked: Services.prefs.prefIsLocked(PREF_OMIT_COOKIES),
       autoStartTasksLocked: Services.prefs.prefIsLocked(PREF_AUTO_START_TASKS),
       idmBridgeLocked: Services.prefs.prefIsLocked(PREF_IDM_BRIDGE),
       linkGroupsLocked: this.linkGroupsLocked,
+      mirrorSettingsLocked: this.mirrorSettingsLocked,
       binaryPath: this.binaryPath,
       serviceReady: Boolean(this.binaryPath),
       platformSupported: Services.appinfo.OS === "WINNT",
@@ -1144,6 +1193,7 @@ export class DownloadItService {
     idmBridgeEnabled = null,
     autoCaptureRules = null,
     linkGroups = null,
+    mirrorSettings = null,
     customDownloaders = null,
   } = {}) {
     const defaultManagerRequested = defaultManager !== null &&
@@ -1157,6 +1207,10 @@ export class DownloadItService {
     const requestedLinkGroups = linkGroups == null
       ? currentLinkGroups
       : validateLinkGroupSettings(linkGroups);
+    const currentMirrorSettings = this.mirrorSettings;
+    const requestedMirrorSettings = mirrorSettings == null
+      ? currentMirrorSettings
+      : this.validateMirrorSettings(mirrorSettings);
     const configuredDefaultRef = this.configuredDefaultRef;
     const configuredDefaultKey = configuredDefaultRef
       ? downloaderRefKey(configuredDefaultRef)
@@ -1282,6 +1336,13 @@ export class DownloadItService {
     ) {
       throw new Error("The link group preference is locked");
     }
+    if (
+      this.mirrorSettingsLocked &&
+      JSON.stringify(requestedMirrorSettings) !==
+        JSON.stringify(currentMirrorSettings)
+    ) {
+      throw new Error("The mirror preference is locked");
+    }
 
     if (customDownloadersChanged) {
       await this.writeCustomDownloaders(requestedCustomDownloaders);
@@ -1380,6 +1441,15 @@ export class DownloadItService {
     }
     if (JSON.stringify(requestedLinkGroups) !== JSON.stringify(currentLinkGroups)) {
       Services.prefs.setStringPref(PREF_LINK_GROUPS, JSON.stringify(requestedLinkGroups));
+    }
+    if (
+      JSON.stringify(requestedMirrorSettings) !==
+        JSON.stringify(currentMirrorSettings)
+    ) {
+      Services.prefs.setStringPref(
+        PREF_MIRRORS,
+        JSON.stringify(requestedMirrorSettings),
+      );
     }
     return this.readSettings();
   }
@@ -1948,6 +2018,16 @@ export class DownloadItService {
     };
   }
 
+  async dispatchDownload(downloader, job, runtimeContexts = []) {
+    const prepared = this.mirrorRegistry.rewriteJob(job, this.mirrorSettings);
+    return this.providers.download(
+      downloader.ref,
+      prepared.job,
+      runtimeContexts,
+      this.getProviderDownloadOptions(downloader),
+    );
+  }
+
   async downloadLauncher({
     launcher,
     context = null,
@@ -1970,6 +2050,13 @@ export class DownloadItService {
       throw new DownloadItError("unsupported-url");
     }
 
+    const originalSource = launcher?.channel?.originalURI?.spec || "";
+    const mirrorSource = originalSource && this.mirrorRegistry.resolve(
+      originalSource,
+      this.mirrorSettings,
+    )
+      ? originalSource
+      : source.spec;
     const sourceWindow = this.getLauncherSourceWindow(context);
     const browser = sourceWindow?.docShell?.chromeEventHandler ||
       this.getBrowserWindow(dialogWindow)?.gBrowser?.selectedBrowser ||
@@ -1981,8 +2068,8 @@ export class DownloadItService {
       sourceWindow?.location?.href || "";
     const referer = source.referrerInfo?.originalReferrer?.spec || "";
     return this.downloadLink({
-      url: source.spec,
-      description: launcher.suggestedFileName || source.spec,
+      url: mirrorSource,
+      description: launcher.suggestedFileName || mirrorSource,
       filename: filename || launcher.suggestedFileName || "",
       browser,
       referer,
@@ -2091,11 +2178,10 @@ export class DownloadItService {
     for (let index = 0; index < job.links.length; index++) {
       job.links[index].cookieRecords = links[index].cookieRecords;
     }
-    await this.providers.download(
-      downloader.ref,
+    await this.dispatchDownload(
+      downloader,
       job,
       runtimeContexts,
-      this.getProviderDownloadOptions(downloader),
     );
   }
 
@@ -2311,8 +2397,8 @@ export class DownloadItService {
       userAgent: String(task.userAgent || ""),
     });
     job.links[0].cookieRecords = [];
-    await this.providers.download(
-      downloader.ref,
+    await this.dispatchDownload(
+      downloader,
       job,
       [{
         referer: isNativeDownloadURL(task.referer)
@@ -2320,7 +2406,6 @@ export class DownloadItService {
           : isNativeDownloadURL(task.sourcePage) ? task.sourcePage : "",
         isPrivate: false,
       }],
-      this.getProviderDownloadOptions(downloader),
     );
   }
 

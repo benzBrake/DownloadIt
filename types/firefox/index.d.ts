@@ -157,6 +157,7 @@ interface nsILoadInfo extends nsISupports {
 
 interface nsIChannel extends nsISupports {
   readonly URI: nsIURI;
+  readonly originalURI: nsIURI;
   readonly loadInfo: nsILoadInfo;
   open(): nsIInputStream;
 }
