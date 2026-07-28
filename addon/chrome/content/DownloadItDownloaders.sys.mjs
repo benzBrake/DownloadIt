@@ -51,6 +51,7 @@ const FLASHGOT_CAPABILITIES = Object.freeze({
   "Free Download Manager 3": { post: false, cookies: true, batch: true },
   FreshDownload: { post: false, cookies: true, batch: true },
   GetGo: { post: false, cookies: false, batch: true },
+  GetRight: { post: false, cookies: true, batch: true },
   GigaGet: { post: false, cookies: true, batch: true },
   InstantGet: { post: false, cookies: true, batch: true },
   "Internet Download Accelerator": { post: false, cookies: true, batch: true },

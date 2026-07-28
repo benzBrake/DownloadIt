@@ -59,6 +59,10 @@ test("FlashGot capability metadata is conservative for unknown managers", () => 
     { post: true, cookies: true, batch: true, directory: false, taskStart: false },
   );
   assert.deepEqual(
+    getFlashGotDownloaderCapabilities("GetRight"),
+    { post: false, cookies: true, batch: true, directory: false, taskStart: false },
+  );
+  assert.deepEqual(
     getFlashGotDownloaderCapabilities("Future Download Manager"),
     { post: null, cookies: null, batch: null, directory: false, taskStart: false },
   );
