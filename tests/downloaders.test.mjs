@@ -37,6 +37,7 @@ import {
   stringifyCustomDownloaderDocument,
   tokenizeArguments,
   validateCustomDownloaderDocument,
+  validateJDownloaderLaunchPath,
 } from "../addon/chrome/content/DownloadItDownloaders.sys.mjs";
 
 test("downloader capabilities are normalized as tri-state metadata", () => {
@@ -178,6 +179,38 @@ test("JDownloader protocol validates loopback endpoints and discovery output", (
       javaArguments: ["-Xmx512m"],
     },
   );
+  assert.deepEqual(
+    parseJDownloaderDiscoveryResponse(
+      "/opt/JDownloader With Space/JDownloader.jar\n" +
+      "java -Xms64m -Xmx1G -jar /opt/JDownloader With Space/JDownloader.jar\n",
+    ),
+    {
+      path: "/opt/JDownloader With Space/JDownloader.jar",
+      javaArguments: ["-Xms64m", "-Xmx1G"],
+    },
+  );
+  assert.deepEqual(
+    parseJDownloaderDiscoveryResponse(
+      '"/opt/JDownloader/JDownloader.jar"\n' +
+      'java -jar "/opt/JDownloader/JDownloader.jar"\n',
+    ),
+    {
+      path: "/opt/JDownloader/JDownloader.jar",
+      javaArguments: [],
+    },
+  );
+  assert.equal(
+    validateJDownloaderLaunchPath("/opt/JDownloader/JDownloader", "linux"),
+    "/opt/JDownloader/JDownloader",
+  );
+  assert.equal(
+    validateJDownloaderLaunchPath("/opt/JDownloader/JDownloader", "windows"),
+    "/opt/JDownloader/JDownloader",
+  );
+  assert.throws(
+    () => validateJDownloaderLaunchPath("C:\\JD\\JDownloader", "windows"),
+    error => error.code === "jdownloader-launch-path-invalid",
+  );
   assert.deepEqual(normalizeJDownloaderJavaArguments(["-Xmx512m"]), ["-Xmx512m"]);
   assert.deepEqual(normalizeJDownloaderJavaArguments(["-Xms64m", "-Xmx1G"]), [
     "-Xms64m",
@@ -191,6 +224,8 @@ test("JDownloader protocol validates loopback endpoints and discovery output", (
     '"C:\\JDownloader.jar\njava -Xmx512m -jar C:\\JDownloader.jar',
     "C:\\JDownloader.jar\njava -javaagent:evil.jar -jar C:\\JDownloader.jar",
     "C:\\JDownloader.jar\njava -agentlib:jdwp -jar C:\\JDownloader.jar",
+    "/opt/JDownloader.jar\njava -jar /opt/Other.jar",
+    "/opt/JDownloader.exe\njava -jar /opt/JDownloader.exe",
   ]) {
     assert.throws(
       () => parseJDownloaderDiscoveryResponse(response),

@@ -212,8 +212,8 @@ export function parseJDownloaderDiscoveryResponse(value) {
   }
   const path = quotedPath ? pathLine.slice(1, -1) : pathLine;
   if (
-    !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(path) ||
-    !/\.(?:exe|jar)$/i.test(path)
+    !/^(?:(?:[A-Za-z]:[\\/])|(?:\\\\)|(?:\/))/.test(path) ||
+    !/\.jar$/i.test(path)
   ) {
     throw new JDownloaderConfigError("jdownloader-discovery-invalid");
   }
@@ -237,14 +237,21 @@ export function parseJDownloaderDiscoveryResponse(value) {
     : [];
   normalizeJDownloaderJavaArguments(javaArguments);
   return {
-    path: path.replace(/\//g, "\\"),
+    path: /^(?:[A-Za-z]:[\\/]|\\\\)/.test(path)
+      ? path.replace(/\//g, "\\")
+      : path,
     javaArguments,
   };
 }
 
-export function validateJDownloaderLaunchPath(value) {
+export function validateJDownloaderLaunchPath(value, platform = "windows") {
   const path = String(value || "").trim();
-  if (path && !/\.(?:exe|jar)$/i.test(path)) {
+  if (
+    path &&
+    platform !== "linux" &&
+    !path.startsWith("/") &&
+    !/\.(?:exe|jar)$/i.test(path)
+  ) {
     throw new JDownloaderConfigError("jdownloader-launch-path-invalid");
   }
   return path;

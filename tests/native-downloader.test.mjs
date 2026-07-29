@@ -15,6 +15,8 @@ const preferenceLocks = new Set();
 const environmentValues = new Map();
 const createdStreams = [];
 let xmlHttpRequestFactory = () => ({});
+let localFileFactory = () => ({});
+let processFactory = () => ({});
 let uuidCounter = 0;
 const downloadsMock = { ALL: Symbol("Downloads.ALL") };
 const downloadPathsMock = {};
@@ -39,6 +41,10 @@ const interfacesMock = {
 };
 const servicesMock = {
   appinfo: { name: "Firefox", OS: "WINNT" },
+  obs: {
+    addObserver() {},
+    removeObserver() {},
+  },
   dirsvc: {
     get: () => ({ path: "C:\\Windows\\System32" }),
   },
@@ -55,6 +61,12 @@ const servicesMock = {
     setBoolPref: (name, value) => preferenceValues.set(name, value),
     setStringPref: (name, value) => preferenceValues.set(name, value),
   },
+  wm: {
+    getEnumerator: () => ({
+      hasMoreElements: () => false,
+      getNext: () => null,
+    }),
+  },
   uuid: {
     generateUUID: () => {
       uuidCounter += 1;
@@ -66,6 +78,12 @@ const servicesMock = {
 globalThis.Components = {
   classes: new Proxy({}, {
     get(_target, contract) {
+      if (contract === "@mozilla.org/file/local;1") {
+        return { createInstance: () => localFileFactory() };
+      }
+      if (contract === "@mozilla.org/process/util;1") {
+        return { createInstance: () => processFactory() };
+      }
       if (contract === "@mozilla.org/io/string-input-stream;1") {
         return {
           createInstance() {
@@ -104,11 +122,21 @@ globalThis.Services = servicesMock;
 globalThis.IOUtils = ioUtilsMock;
 globalThis.PathUtils = {
   profileDir: "C:\\Profile",
-  isAbsolute: value => /^(?:[A-Za-z]:[\\/]|\\\\)/.test(value),
-  join: (...parts) => parts.join("\\"),
+  isAbsolute: value => /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(value),
+  join: (...parts) => {
+    const separator = String(parts[0] || "").startsWith("/") ? "/" : "\\";
+    return parts.map((part, index) => {
+      const value = String(part);
+      return index === 0
+        ? value.replace(/[\\/]+$/, "")
+        : value.replace(/^[\\/]+|[\\/]+$/g, "");
+    }).join(separator);
+  },
 };
 globalThis.ChromeUtils = {
   generateQI: () => function () { return this; },
+  registerWindowActor() {},
+  unregisterWindowActor() {},
   importESModule(spec) {
     if (spec.endsWith("/Downloads.sys.mjs")) {
       return { Downloads: downloadsMock };
@@ -154,13 +182,33 @@ try {
 }
 const { DownloadItError, DownloadItService } = serviceModule;
 
-function createService() {
-  return Object.create(DownloadItService.prototype);
+const WINDOWS_PLATFORM = Object.freeze({
+  id: "windows",
+  flashGotSupported: true,
+  processWindowHidingSupported: true,
+});
+const LINUX_PLATFORM = Object.freeze({
+  id: "linux",
+  flashGotSupported: false,
+  processWindowHidingSupported: false,
+});
+
+function createService(platform = "windows") {
+  const service = Object.create(DownloadItService.prototype);
+  service.platformDefinition = platform === "linux"
+    ? LINUX_PLATFORM
+    : platform === "windows"
+      ? WINDOWS_PLATFORM
+      : null;
+  service.serviceReady = false;
+  return service;
 }
 
-function createSettingsService() {
-  const service = createService();
-  service.binaryPath = "C:\\Profile\\DownloadIt\\FlashGot.exe";
+function createSettingsService(platform = "windows") {
+  const service = createService(platform);
+  service.binaryPath = platform === "windows"
+    ? "C:\\Profile\\DownloadIt\\FlashGot.exe"
+    : "";
   service.profileDirectory = "C:\\Profile\\DownloadIt";
   service.customDownloadersPath =
     "C:\\Profile\\DownloadIt\\custom-downloaders.json";
@@ -179,9 +227,158 @@ function createSettingsService() {
   service.mirrorRegistry = service.createMirrorRegistry();
   service.idmBridge = { running: false };
   service.isLocalFile = value => value === "C:\\JD\\JDownloader.exe";
+  service.isLocalExecutable = service.isLocalFile;
   service.providers = service.createProviderRegistry();
   return service;
 }
+
+function prepareStartupService(service) {
+  service.reloadCustomDownloaders = async () => service.readSettings();
+  service.reloadAutoCaptureRules = async () => service.readSettings();
+  service.registerToolbarWidget = () => {};
+  service.unregisterToolbarWidget = () => {};
+  service.refreshManagers = async () => service.managers.map(downloader => downloader.name);
+  service.syncIDMBridge = () => {};
+  service.listCustomDownloaders = () => [];
+}
+
+test("platform capabilities initialize Windows and Linux services independently", async () => {
+  preferenceValues.clear();
+  for (const [os, expected] of [
+    ["WINNT", WINDOWS_PLATFORM],
+    ["Linux", LINUX_PLATFORM],
+  ]) {
+    servicesMock.appinfo.OS = os;
+    const service = new DownloadItService({ version: "test" });
+    prepareStartupService(service);
+    let deployCalls = 0;
+    service.deployBinary = async () => {
+      deployCalls++;
+      return "C:\\Profile\\DownloadIt\\FlashGot.exe";
+    };
+
+    assert.equal(service.platformDefinition.id, expected.id);
+    assert.equal(service.serviceReady, false);
+    await service.startup();
+    assert.equal(service.serviceReady, true);
+    assert.equal(deployCalls, os === "WINNT" ? 1 : 0);
+    assert.equal(
+      service.binaryPath,
+      os === "WINNT" ? "C:\\Profile\\DownloadIt\\FlashGot.exe" : "",
+    );
+    const snapshot = service.readSettings();
+    assert.equal(snapshot.platform, expected.id);
+    assert.equal(snapshot.platformSupported, true);
+    assert.equal(snapshot.flashGotSupported, expected.flashGotSupported);
+    assert.equal(
+      snapshot.processWindowHidingSupported,
+      expected.processWindowHidingSupported,
+    );
+    await service.shutdown();
+    assert.equal(service.serviceReady, false);
+  }
+
+  servicesMock.appinfo.OS = "Darwin";
+  const unsupported = new DownloadItService({ version: "test" });
+  await assert.rejects(
+    unsupported.startup(),
+    /supports Windows and Linux only/,
+  );
+  servicesMock.appinfo.OS = "WINNT";
+});
+
+test("Linux hides FlashGot cache and falls back to Firefox without deleting preferences", async () => {
+  preferenceValues.clear();
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "flashgot", id: "Windows Manager" }),
+  );
+  preferenceValues.set(
+    "downloadit.detectedManagers",
+    JSON.stringify(["Windows Manager"]),
+  );
+  const service = createSettingsService("linux");
+  service.flashGotManagers = service.loadManagerCache();
+  service.providers = service.createProviderRegistry();
+  const refreshes = [];
+  const originalRefresh = service.providers.refresh.bind(service.providers);
+  service.providers.refresh = async (provider, options) => {
+    refreshes.push(provider);
+    return originalRefresh(provider, options);
+  };
+
+  assert.deepEqual(service.listFlashGotDownloaders(), []);
+  assert.equal(service.flashGotManagers[0], "Windows Manager");
+  assert.equal(
+    service.resolveCustomFilePath("C:\\Tools\\curl.exe"),
+    "C:\\Tools\\curl.exe",
+  );
+  assert.equal(
+    service.normalizeCustomFilePathForStorage("C:\\Tools\\curl.exe"),
+    "C:\\Tools\\curl.exe",
+  );
+  assert.equal(
+    service.normalizeJDownloaderSettings({
+      endpoint: "http://127.0.0.1:9666/flashgot",
+      launchPath: "C:\\JD\\JDownloader.exe",
+      autoLaunch: true,
+    }).launchPath,
+    "C:\\JD\\JDownloader.exe",
+  );
+  const foreignJDownloader = service.createJDownloaderDescriptor({
+    enabled: true,
+    endpoint: "http://127.0.0.1:9666/flashgot",
+    launchPath: "C:\\JD\\JDownloader.exe",
+    autoLaunch: true,
+  });
+  assert.equal(foreignJDownloader.available, false);
+  assert.equal(foreignJDownloader.unavailableReason, "platform-path");
+  assert.deepEqual(service.defaultDownloader.ref, {
+    provider: "native",
+    id: "firefox",
+  });
+  assert.deepEqual(
+    await service.refreshManagers({ persistDefault: false }),
+    ["Firefox"],
+  );
+  assert.deepEqual(refreshes, []);
+  const snapshot = service.readSettings();
+  assert.equal(snapshot.detectedManagerCount, 0);
+  assert.equal(snapshot.availableManagerCount, 1);
+  preferenceValues.set(
+    "downloadit.jdownloader.detectedPath",
+    "C:\\JD\\JDownloader.jar",
+  );
+  preferenceValues.set(
+    "downloadit.jdownloader.detectedJavaArgs",
+    '["-Xmx512m"]',
+  );
+  assert.equal(service.resolveJDownloaderLaunch({
+    launchPath: "",
+    detectedPath: "C:\\JD\\JDownloader.jar",
+    detectedJavaArgs: ["-Xmx512m"],
+  }), null);
+  assert.equal(
+    preferenceValues.get("downloadit.jdownloader.detectedPath"),
+    "C:\\JD\\JDownloader.jar",
+  );
+  await assert.rejects(
+    service.downloadLinks(
+      [],
+      JSON.stringify({ provider: "flashgot", id: "Windows Manager" }),
+    ),
+    error => error.code === "flashgot-unsupported-platform",
+  );
+  assert.equal(
+    preferenceValues.get("downloadit.detectedManagers"),
+    JSON.stringify(["Windows Manager"]),
+  );
+  assert.equal(
+    preferenceValues.get("downloadit.defaultDM"),
+    JSON.stringify({ provider: "flashgot", id: "Windows Manager" }),
+  );
+  preferenceValues.clear();
+});
 
 test("download targets and context URLs use separate policies", async () => {
   const service = createService();
@@ -960,7 +1157,7 @@ test("manager refresh skips disabled built-in protocols", async () => {
 
   assert.deepEqual(
     await service.refreshManagers({ persistDefault: false }),
-    ["External"],
+    ["JDownloader", "External", "Custom", "Firefox"],
   );
   assert.deepEqual(refreshes, ["flashgot"]);
 });
@@ -1034,6 +1231,8 @@ test("JDownloader launch resolution prioritizes manual paths and safe Java candi
   service.existingLocalPath = value => value === "C:\\JD\\JDownloader.jar"
     ? value
     : "";
+  service.existingExecutablePath = value =>
+    value === "C:\\JD\\JDownloader2.exe" ? value : "";
   service.readRegisteredJavaHomes = () => ["C:\\RegisteredJava"];
 
   assert.deepEqual(service.resolveJDownloaderLaunch({
@@ -1047,11 +1246,8 @@ test("JDownloader launch resolution prioritizes manual paths and safe Java candi
 
   siblingFiles.clear();
   const candidates = [];
-  service.existingLocalPath = value => {
+  service.existingExecutablePath = value => {
     candidates.push(value);
-    if (value === "C:\\JD\\JDownloader.jar") {
-      return value;
-    }
     return value === "C:\\Java\\bin\\javaw.exe" ? value : "";
   };
   assert.deepEqual(service.resolveJDownloaderLaunch({
@@ -1067,7 +1263,7 @@ test("JDownloader launch resolution prioritizes manual paths and safe Java candi
       candidates.indexOf("C:\\Java\\bin\\javaw.exe"),
   );
 
-  service.existingLocalPath = () => "";
+  service.existingExecutablePath = () => "";
   assert.throws(
     () => service.resolveJDownloaderLaunch({
       launchPath: "C:\\Missing\\JDownloader.exe",
@@ -1076,6 +1272,207 @@ test("JDownloader launch resolution prioritizes manual paths and safe Java candi
     }),
     error => error.code === "jdownloader-launch-path-invalid",
   );
+});
+
+test("Linux resolves JDownloader launchers and Java in documented priority order", () => {
+  environmentValues.clear();
+  environmentValues.set("JAVA_HOME", "/opt/java");
+  environmentValues.set("PATH", "/home/test/bin:/custom/java/bin");
+  const service = createService("linux");
+  service.getLocalFile = jarPath => ({
+    path: jarPath,
+    leafName: "JDownloader.jar",
+    parent: {
+      path: "/opt/JDownloader With Space",
+      clone() {
+        return {
+          path: this.path,
+          append(name) {
+            this.path += `/${name}`;
+          },
+        };
+      },
+    },
+  });
+  service.existingLocalPath = value =>
+    value === "/opt/JDownloader With Space/JDownloader.jar" ? value : "";
+
+  service.existingExecutablePath = value =>
+    value === "/opt/JDownloader With Space/JDownloader2" ? value : "";
+  assert.deepEqual(service.resolveJDownloaderLaunch({
+    launchPath: "/opt/JDownloader With Space/JDownloader.jar",
+    detectedPath: "",
+    detectedJavaArgs: ["-Xms64m", "-Xmx1G"],
+  }), {
+    executablePath: "/opt/JDownloader With Space/JDownloader2",
+    argumentsList: [],
+  });
+
+  const bundledCandidates = [];
+  service.existingExecutablePath = value => {
+    bundledCandidates.push(value);
+    return value === "/opt/JDownloader With Space/runtime/bin/java" ? value : "";
+  };
+  assert.deepEqual(service.resolveJDownloaderLaunch({
+    launchPath: "/opt/JDownloader With Space/JDownloader.jar",
+    detectedPath: "",
+    detectedJavaArgs: ["-Xmx1G"],
+  }), {
+    executablePath: "/opt/JDownloader With Space/runtime/bin/java",
+    argumentsList: [
+      "-Xmx1G",
+      "-jar",
+      "/opt/JDownloader With Space/JDownloader.jar",
+    ],
+  });
+  assert.ok(
+    bundledCandidates.indexOf("/opt/JDownloader With Space/jre/bin/java") <
+      bundledCandidates.indexOf("/opt/JDownloader With Space/runtime/bin/java"),
+  );
+  assert.equal(bundledCandidates.includes("/opt/java/bin/java"), false);
+
+  const javaCandidates = [];
+  service.existingExecutablePath = value => {
+    javaCandidates.push(value);
+    return value === "/opt/java/bin/java" ? value : "";
+  };
+  assert.equal(
+    service.resolveJDownloaderLaunch({
+      launchPath: "/opt/JDownloader With Space/JDownloader.jar",
+      detectedPath: "",
+      detectedJavaArgs: [],
+    }).executablePath,
+    "/opt/java/bin/java",
+  );
+  assert.equal(javaCandidates.includes("/home/test/bin/java"), false);
+
+  environmentValues.delete("JAVA_HOME");
+  const pathCandidates = [];
+  service.existingExecutablePath = value => {
+    pathCandidates.push(value);
+    return value === "/custom/java/bin/java" ? value : "";
+  };
+  assert.equal(
+    service.resolveJDownloaderLaunch({
+      launchPath: "/opt/JDownloader With Space/JDownloader.jar",
+      detectedPath: "",
+      detectedJavaArgs: [],
+    }).executablePath,
+    "/custom/java/bin/java",
+  );
+  assert.equal(pathCandidates.includes("/usr/bin/java"), false);
+  assert.equal(pathCandidates.includes("/usr/local/bin/java"), false);
+
+  service.existingExecutablePath = value =>
+    value === "/opt/JDownloader With Space/JDownloader" ? value : "";
+  assert.deepEqual(service.resolveJDownloaderLaunch({
+    launchPath: "/opt/JDownloader With Space/JDownloader",
+    detectedPath: "",
+    detectedJavaArgs: [],
+  }), {
+    executablePath: "/opt/JDownloader With Space/JDownloader",
+    argumentsList: [],
+  });
+  environmentValues.clear();
+});
+
+test("Linux requires execute permission and does not assign startHidden", () => {
+  let executable = false;
+  let hiddenAssignments = 0;
+  localFileFactory = () => ({
+    initWithPath(path) {
+      this.path = path;
+    },
+    exists: () => true,
+    isFile: () => true,
+    isExecutable: () => executable,
+  });
+  processFactory = () => ({
+    init() {},
+    set startHidden(value) {
+      hiddenAssignments++;
+      this.hidden = value;
+    },
+    runwAsync() {},
+  });
+
+  try {
+    const linux = createService("linux");
+    assert.equal(linux.isLocalExecutable("/usr/bin/curl"), false);
+    assert.throws(
+      () => linux.startDetachedProcess("/usr/bin/curl", []),
+      /Executable not found/,
+    );
+    executable = true;
+    assert.equal(linux.isLocalExecutable("/usr/bin/curl"), true);
+    linux.startDetachedProcess("/usr/bin/curl", ["--version"], null, true);
+    assert.equal(hiddenAssignments, 0);
+
+    const windows = createService("windows");
+    executable = false;
+    assert.equal(windows.isLocalExecutable("C:\\Tools\\curl.exe"), true);
+    windows.startDetachedProcess("C:\\Tools\\curl.exe", [], null, false);
+    assert.equal(hiddenAssignments, 1);
+  } finally {
+    localFileFactory = () => ({});
+    processFactory = () => ({});
+  }
+});
+
+test("temporary command files follow platform line endings while headers use CRLF", async () => {
+  const writes = [];
+  ioUtilsMock.writeUTF8 = async (path, value) => writes.push({ path, value });
+  downloadsMock.getPreferredDownloadsDirectory = async () => "/downloads";
+  const job = {
+    referer: "https://example.com/page",
+    useragent: "Firefox Test",
+    links: [
+      { url: "https://example.com/a", filename: "a", desc: "", cookies: "" },
+      { url: "https://example.com/b", filename: "b", desc: "", cookies: "" },
+    ],
+  };
+
+  try {
+    for (const [platform, expected] of [
+      ["windows", "https://example.com/a\r\nhttps://example.com/b\r\n"],
+      ["linux", "https://example.com/a\nhttps://example.com/b\n"],
+    ]) {
+      writes.length = 0;
+      const service = createService(platform);
+      service.createTemporaryPath = prefix => `/tmp/${prefix}.txt`;
+      service.launchCustomProcesses = async () => {};
+      await service.downloadViaCommand({
+        command: {
+          executablePath: platform === "linux" ? "/usr/bin/curl" : "C:\\curl.exe",
+          argumentsTemplate: "[UFILE]",
+        },
+        startHidden: true,
+      }, job);
+      assert.equal(writes[0].value, expected);
+
+      const cookieFile = service.buildNetscapeCookieFile([{
+        cookieRecords: [{
+          host: ".example.com",
+          path: "/",
+          name: "session",
+          value: "test",
+          isDomain: true,
+          isSecure: true,
+          isHttpOnly: false,
+          expires: 123,
+        }],
+      }]);
+      assert.equal(cookieFile.includes("\r\n"), platform === "windows");
+      assert.equal(cookieFile.endsWith(platform === "linux" ? "\n" : "\r\n"), true);
+      assert.equal(
+        service.buildHeaderBlock({ cookies: "a=b" }, job),
+        "User-Agent: Firefox Test\r\nReferer: https://example.com/page\r\nCookie: a=b",
+      );
+    }
+  } finally {
+    delete ioUtilsMock.writeUTF8;
+    delete downloadsMock.getPreferredDownloadsDirectory;
+  }
 });
 
 test("JDownloader startup is shared, retries six times, and reports timeout", async () => {

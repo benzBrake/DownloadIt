@@ -6,14 +6,14 @@
 
 DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。它通过定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) 加载 bootstrapped XPI，并把网页链接交给外部下载管理器处理。
 
-当前版本处于迁移阶段，目标平台为 Windows，Firefox 最低版本为 136.0。
+当前版本处于迁移阶段，支持 Windows 和 Linux，Firefox 最低版本为 136.0。
 
 ## 当前功能
 
 - 在网页链接的右键菜单中提供 DownloadIt 菜单。
 - 在有选区且选区包含链接时，在其下方提供“使用 DownloadIt 下载选中链接”。
 - 提供“使用 DownloadIt 批量下载”链接选择器，可收集、筛选并批量下载当前文档及其 frame 中的显式页面链接。
-- 自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
+- 在 Windows 上自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
 - 显示每个下载器对 POST、Cookie、批量提交、下载目录和任务启动控制的支持情况。
 - 提供始终可用且不经过 `FlashGot.exe` 的 Firefox 内建下载器。
 - 通过 JDownloader 的本地 FlashGot 端点直接集成，不经过 `FlashGot.exe`。
@@ -28,7 +28,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 提供可选的 GitHub 镜像适配器和可配置端点，并通过注册表结构支持以后增加 Hugging Face 等站点。
 - 界面和右键菜单支持简体中文与英文。
 - 使用 Firefox 内置的 Fluent 资源存储界面消息。
-- 构建时校验并在运行时校验随扩展发布的 `FlashGot.exe`。
+- 构建时校验随扩展发布的 `FlashGot.exe`，并在 Windows 运行时再次校验。
 
 当前尚未实现：
 
@@ -46,22 +46,41 @@ Firefox 右键菜单、原生下载弹窗、已记住扩展名的 hook，
 DownloadIt 后台服务
         │
         ├── native provider ── Firefox Downloads API
-        ├── flashgot provider ── 临时任务 JSON ── FlashGot.exe
+        ├── flashgot provider（Windows）── 临时任务 JSON ── FlashGot.exe
         ├── jdownloader provider ── 回环 HTTP `/flashgot`
         ├── 自定义命令 provider ── Firefox 原生进程 API
         └── 自定义 aria2 provider ── JSON-RPC
 ```
 
-扩展启动时会把 XPI 中的 `FlashGot.exe` 部署到 Firefox profile 下的 `DownloadIt\FlashGot.exe`，然后使用以下命令行接口与它通信：
+在 Windows 上，扩展启动时会把 XPI 中的 `FlashGot.exe` 部署到 Firefox profile 下的 `DownloadIt\FlashGot.exe`，然后使用以下命令行接口与它通信：
 
 - `--list-json`：检测可用下载管理器；
 - `--job-json`：提交单链接或多链接下载任务。
 
+Linux 会跳过部署，且不会运行 XPI 中的 Windows helper。服务的其余部分仍会正常初始化，包括 Firefox 原生下载、自定义命令、aria2、JDownloader、工具栏与右键菜单、原生下载弹窗、自动接管和协议服务。
+
+## 平台支持
+
+Windows 和 Linux 发布同一个通用 XPI。该文件包含 Windows helper，以保证同一构建产物功能完整；Linux 运行时会忽略它。
+
+macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
+
+| 集成 | Windows | Linux |
+| --- | --- | --- |
+| Firefox 原生下载 | 支持 | 支持 |
+| 自定义命令 | 支持 | 支持 |
+| aria2 JSON-RPC 与可选本地启动 | 支持 | 支持 |
+| JDownloader 端点与可选本地启动 | 支持 | 支持 |
+| FlashGot 下载器发现与任务提交 | 支持 | 不使用 |
+| 部署包内 `FlashGot.exe` | 启用 | 跳过 |
+
 ## 使用前提
 
-- Windows；
+- Windows，或使用发行版原生包/Mozilla tarball 的 Linux；
 - Firefox 136.0 或更高版本；
 - 已安装并正常配置的定制 `userChrome.js-Loader`。建议使用该 Loader 20250219 之后的版本（兼容 Firefox 135+）；
+- Linux 上为自定义命令、aria2 自动启动或 JDownloader 自动启动选择的文件必须具有 Unix 可执行权限，例如 `chmod +x /path/to/launcher`；
+- Linux 首版不支持 Snap 和 Flatpak Firefox，因为其 Loader 安装、宿主文件访问和进程沙箱边界与非沙箱 Firefox 不同；
 - Firefox 内建下载器始终可用，因此外部下载管理器不是必需项；
 - 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会下载 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 最新成功构建的 nightly artifact。存在 `GITHUB_TOKEN` 或 `GH_TOKEN` 时通过 GitHub Actions API 下载，否则通过 nightly.link 下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
 - 开发和测试需要 Node.js 18 或更高版本；
@@ -84,14 +103,14 @@ Linux：
 ./pack.sh
 ```
 
-脚本会把 `addon/` 打包为根目录下的 `addon.xpi`，并检查 XPI 至少包含：
+两套脚本都会把 `addon/` 打包为相同的通用 `addon.xpi` 格式，并检查 XPI 至少包含：
 
 - `bootstrap.js`；
 - `install.rdf`；
 - `chrome.manifest`；
 - `FlashGot.exe`。
 
-`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时，两套脚本都会优先使用 `GITHUB_TOKEN`，其次使用 `GH_TOKEN`，通过 GitHub Actions API 获取最新成功构建的 nightly artifact。两个 token 都未设置时，则通过 nightly.link 下载同一 artifact。
+`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时，两套脚本都会优先使用 `GITHUB_TOKEN`，其次使用 `GH_TOKEN`，通过 GitHub Actions API 获取最新成功构建的 nightly artifact。两个 token 都未设置时，则通过 nightly.link 下载同一 artifact。Nightly 仍只发布一个通用 XPI，不拆分平台构建产物。
 
 ## 测试
 
@@ -114,11 +133,13 @@ DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中�
 3. 在 Firefox 打开 `about:addons`，选择齿轮菜单中的“从文件安装附加组件”，选中 `addon.xpi`。
 4. 重启 Firefox，使扩展和浏览器窗口中的右键菜单完成初始化。
 
+Linux 上请使用发行版原生包或 Mozilla tarball 版 Firefox 完成以上步骤，并确认 Loader 能访问目标 profile，所有已配置的本地启动器也具有可执行权限。Snap 和 Flatpak 不属于当前支持的安装方式。
+
 升级时使用新构建的 `addon.xpi` 覆盖安装即可。若扩展未启动，请先确认 Loader 版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
 
 ## 配置
 
-DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 DownloadIt 批量下载”可为当前标签页打开批量链接选择器；选择可用工具可立即切换默认下载工具；“刷新下载工具”会刷新 FlashGot 检测结果，同时在后台并发探测已启用的内建协议，内建 HTTP 超时不会延迟或导致 FlashGot 检测失败；面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
+DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 DownloadIt 批量下载”可为当前标签页打开批量链接选择器；选择可用工具可立即切换默认下载工具；“刷新下载工具”会刷新当前集成，同时在后台并发探测已启用的内建协议；Windows 上的内建 HTTP 超时不会延迟或导致 FlashGot 检测失败，Linux 则不会执行 FlashGot 扫描。面板底部还可以进入 DownloadIt 设置。按钮首次启用时会加入导航栏，也可以通过 Firefox 的“定制工具栏”界面移动或移除。
 
 对于受支持的链接，直接选择 DownloadIt 右键子菜单中的下载工具只会使用该工具发送当前链接，不会更改已配置的默认下载工具。需要同时持久化所选工具时，使用独立的“设为默认并下载”子菜单。Firefox 策略可以禁用默认工具修改操作，而不会影响单次下载。
 
@@ -135,7 +156,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前仅 JDownloader 使用。 |
 | `downloadit.jdownloader.enabled` | 布尔值 | 控制是否已配置并显示 JDownloader 内建协议集成。新安装默认为 `false`；已有 JDownloader 偏好或将 JDownloader 设为默认工具的旧配置会迁移为启用状态，直到用户明确移除。 |
 | `downloadit.jdownloader.endpoint` | 字符串 | JDownloader FlashGot 端点；默认值为 `http://127.0.0.1:9666/flashgot`。 |
-| `downloadit.jdownloader.launchPath` | 字符串 | 可选的 JDownloader `.exe` 或 `.jar` 绝对路径；手动值优先于检测结果。 |
+| `downloadit.jdownloader.launchPath` | 字符串 | 可选的 JDownloader Windows `.exe`、Linux 可执行启动器或 `.jar` 绝对路径；手动值优先于检测结果。 |
 | `downloadit.jdownloader.autoLaunch` | 布尔值 | 端点不可用时启动 JDownloader；默认值为 `true`。 |
 | `downloadit.jdownloader.detectedPath` | 字符串 | 成功 GET 探测返回的安装路径，由扩展自动维护。 |
 | `downloadit.jdownloader.detectedJavaArgs` | 字符串 | 成功 GET 探测返回并经过验证的 JVM 参数 JSON 数组，由扩展自动维护。 |
@@ -180,11 +201,11 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 ### JDownloader provider
 
-`jdownloader:jdownloader` provider 直接连接 JDownloader 的 FlashGot 兼容端点。只有用户明确添加该集成，或从已有配置迁移时，下载工具列表才会显示它的单例条目；可以从该条目进入配置或将其移除。有效且已启用的配置会立即进入可选下载器列表。扩展启动和手动刷新下载工具时，DownloadIt 会在后台并发探测已启用的内建协议，从而更新 JDownloader 在线状态和安装缓存，同时不延迟 FlashGot 检测。不同 provider 的失败彼此隔离，同一已配置端点的并发探测会共享请求；请求结束时只有 JDownloader 仍处于启用状态且端点没有变化，结果才会保存。草稿连接测试和实际提交任务也可以探测端点。端点位于编辑器的高级设置中，必须是 `localhost`、`127.0.0.0/8` 或 `::1` 上无认证信息的 HTTP 地址，不允许查询参数或 fragment，路径统一规范化为 `/flashgot`。请求禁止重定向，探测 GET 也会绕过 HTTP 缓存。
+`jdownloader:jdownloader` provider 直接连接 JDownloader 的 FlashGot 兼容端点。只有用户明确添加该集成，或从已有配置迁移时，下载工具列表才会显示它的单例条目；可以从该条目进入配置或将其移除。有效且已启用的配置会立即进入可选下载器列表。扩展启动和手动刷新下载工具时，DownloadIt 会在后台并发探测已启用的内建协议，从而更新 JDownloader 在线状态和安装缓存；Windows 上这不会延迟 FlashGot 检测。不同 provider 的失败彼此隔离，同一已配置端点的并发探测会共享请求；请求结束时只有 JDownloader 仍处于启用状态且端点没有变化，结果才会保存。草稿连接测试和实际提交任务也可以探测端点。端点位于编辑器的高级设置中，必须是 `localhost`、`127.0.0.0/8` 或 `::1` 上无认证信息的 HTTP 地址，不允许查询参数或 fragment，路径统一规范化为 `/flashgot`。请求禁止重定向，探测 GET 也会绕过 HTTP 缓存。
 
-成功的 GET 响应必须恰好包含两个非空行：第一行是存在的绝对 `.jar` 或 `.exe` 路径，第二行是以同一路径结尾的 `java ... -jar` 命令。DownloadIt 不执行也不保存返回的命令，只保留经过验证的 `-Xms` 和 `-Xmx` 参数。手动启动路径优先于检测缓存；手动路径失效时会明确报错，不会退回缓存。修改端点会清除旧检测缓存。设置页的连接测试只探测当前草稿端点，不保存草稿、不改变在线状态，也不启动进程。
+成功的 GET 响应必须恰好包含两个非空行：第一行是绝对 `.jar` 路径，第二行是以同一路径结尾的 `java ... -jar` 命令。Windows drive/UNC 路径和 POSIX 绝对路径均可接受，并保留原始分隔符风格。DownloadIt 不执行也不保存返回的命令，只保留经过验证的 `-Xms` 和 `-Xmx` 参数。手动启动路径优先于检测缓存；手动路径失效时会明确报错，不会退回缓存。修改端点会清除旧检测缓存。设置页的连接测试只探测当前草稿端点，不保存草稿、不改变在线状态，也不启动进程。
 
-提交时若端点离线且已启用自动启动，`.exe` 会通过 Firefox 原生进程 API 可见启动。对于 `.jar`，DownloadIt 依次检查同名可执行文件、`JDownloader2.exe`、`JDownloader 2.exe` 和 `JDownloader.exe`，随后依次查找安装目录内的 `jre`/`runtime`、`JAVA_HOME`、JavaSoft 注册表路径和 Windows System32，每处优先 `javaw.exe`，其次 `java.exe`。Java 只接收已验证的 JVM 参数和 `-jar <路径>`，不会经过命令 shell。并发提交共享一次启动等待；DownloadIt 每 8 秒探测一次，最多 6 次，就绪后每个提交只 POST 一次，避免重试造成重复任务。
+提交时若端点离线且已启用自动启动，手动选择的本地启动器会由 Firefox 进程 API 直接运行。Windows 上启动 JAR 时，DownloadIt 会依次检查同名 `.exe`、`JDownloader2.exe`、`JDownloader 2.exe` 和 `JDownloader.exe`，然后查找包内 `jre`/`runtime`、`JAVA_HOME`、JavaSoft 注册表路径和 Windows System32，每处优先 `javaw.exe`，其次 `java.exe`。Linux 上会先检查同目录且具有执行权限的 `JDownloader2` 和 `JDownloader`，再依次查找包内 `jre`/`runtime`、`JAVA_HOME/bin/java` 以及 `PATH` 各目录中的可执行 `java`。Java 只接收已验证的 JVM 参数和 `-jar <路径>`，不会经过命令 shell。并发提交共享一次启动等待；DownloadIt 每 8 秒探测一次，最多 6 次，就绪后每个提交只 POST 一次，避免重试造成重复任务。
 
 UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发送 `package=DownloadIt`、任务 Referer（缺失时使用下载页面 URL）以及可读取时的 Firefox 首选下载目录。`autostart` 取自 `downloadit.autoStartTasks`；关闭该偏好不会改变不具备任务启动能力的其他 provider。批量任务只有在所有链接 Cookie 完全相同时才发送 Cookie，否则整批省略。POST 数据全部为空时省略，全部相同时发送；混合或部分不同的 POST 正文会在探测或启动 JDownloader 之前拒绝该批次。下载密码和压缩包密码（`dpass`、`apass`）尚未实现。
 
@@ -219,11 +240,11 @@ DownloadIt 不会绑定 `1001` 端口、替换 IDM 的原生监听器，也不�
 }
 ```
 
-Firefox 的 chrome 配置目录（`UChrm`，通常为 `<profile>/chrome`）内的可执行文件和 aria2 配置文件会以该目录为基准，使用正斜杠保存相对路径，例如 `UserTools/aria2/aria2c.exe` 和 `UserTools/aria2/aria2.conf`。相对路径始终基于 `UChrm` 解析；目录外的文件继续保存绝对路径。
+Firefox 的 chrome 配置目录（`UChrm`，通常为 `<profile>/chrome`）内的可执行文件和 aria2 配置文件会以该目录为基准，使用正斜杠保存相对路径，例如 `UserTools/aria2/aria2c.exe`、`UserTools/aria2/aria2c` 和 `UserTools/aria2/aria2.conf`。相对路径始终基于 `UChrm` 解析；目录外的文件继续保存绝对路径。在另一操作系统保存的绝对路径会继续保留，但在当前平台显示为不可用。
 
-自定义下载器默认隐藏进程窗口。取消“隐藏运行”后，命令行进程或自动启动的 aria2c 进程会在前台显示，便于调试。旧 JSON 没有 `startHidden` 字段时仍按隐藏运行处理。
+Windows 上的自定义下载器默认隐藏进程窗口。取消“隐藏运行”后，命令行进程或自动启动的 aria2c 进程会在前台显示，便于调试。Firefox 的 `nsIProcess.startHidden` 在 Linux 不生效，因此 Linux 会隐藏此控件，同时保留 `startHidden` JSON 字段以维持 schema 和跨平台配置兼容性。旧 JSON 没有该字段时继续使用当前默认值。
 
-命令行下载器需要选择可执行文件并填写参数模板，编辑器提供 `aria2c`、`wget` 和 `curl` 快捷模板。DownloadIt 使用 Firefox 原生进程 API 直接启动程序，不会把模板交给命令 shell。支持的 FlashGot 兼容占位符包括 `URL`、`FNAME`、`COMMENT`、`REFERER`、`COOKIE`、`CFILE`、`FOLDER`、`POST`、`RAWPOST`、`HEADERS`、`ULIST`、`UFILE`、`USERPASS` 和 `UA`。模板包含 `ULIST` 或 `UFILE` 时整批只启动一个进程，否则每个链接分别启动一个进程。
+命令行下载器需要选择可执行文件并填写参数模板；Linux 上所选文件必须具有执行权限。编辑器提供 `aria2c`、`wget` 和 `curl` 快捷模板。DownloadIt 使用 Firefox 原生进程 API 直接启动程序，不会把模板交给命令 shell。支持的 FlashGot 兼容占位符包括 `URL`、`FNAME`、`COMMENT`、`REFERER`、`COOKIE`、`CFILE`、`FOLDER`、`POST`、`RAWPOST`、`HEADERS`、`ULIST`、`UFILE`、`USERPASS` 和 `UA`。模板包含 `ULIST` 或 `UFILE` 时整批只启动一个进程，否则每个链接分别启动一个进程。URL 列表和 Netscape Cookie 临时文件在 Windows 使用 CRLF，在 Linux 使用 LF；HTTP header 块在两个平台仍使用协议要求的 CRLF。
 
 aria2 定义通过 HTTP 或 HTTPS JSON-RPC 连接，支持可选密钥和服务端下载目录；多链接使用 `system.multicall` 提交。本地启动配置可选填写 `executablePath` 和 `configurationPath`：只有启用自动启动时可执行文件才是必填项，配置文件可以始终留空；填写配置文件后，DownloadIt 会把解析后的路径作为 `--conf-path` 传给 aria2c。可选的 aria2c 自动启动仅适用于 HTTP 回环地址，DownloadIt 会管理配置文件路径、RPC 开关、监听地址、端口和密钥参数，等待最多五秒后重试一次请求。RPC 密钥以明文保存在 JSON 文件中，但不会写入 DownloadIt 日志。
 

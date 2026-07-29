@@ -135,11 +135,11 @@ downloadit-auto-capture-reloaded = Automatic-capture rules reloaded
 downloadit-auto-capture-reset = Automatic-capture rules reset
 downloadit-refresh-done =
     { $count ->
-        [one] One FlashGot download manager detected.
-       *[other] { $count } FlashGot download managers detected.
+        [one] One download tool is available.
+       *[other] { $count } download tools are available.
     }
     Configured built-in protocols refresh in the background.
-downloadit-scan-failed = Could not detect FlashGot download managers: { $error }
+downloadit-scan-failed = Could not refresh download tools: { $error }
 downloadit-unsupported = This link type cannot be sent to DownloadIt.
 downloadit-panel-selection-error = Could not change the default download manager: { $error }
 
@@ -154,7 +154,7 @@ downloadit-nav-privacy = Request & privacy
 downloadit-nav-about = About / diagnostics
 downloadit-manager-kicker = 01 / runtime
 downloadit-manager-title = Download manager
-downloadit-manager-description = Choose the default download manager, manage configured integrations, and inspect FlashGot detection results.
+downloadit-manager-description = Choose the default download manager, manage configured integrations, and inspect their availability.
 downloadit-auto-capture-kicker = 02 / interception rules
 downloadit-auto-capture-title = Auto-capture
 downloadit-auto-capture-description = Decide which file types DownloadIt captures automatically and which always remain in Firefox.
@@ -169,25 +169,25 @@ downloadit-privacy-title = Request & privacy
 downloadit-privacy-description = Choose which browser request details are forwarded to external download tools.
 downloadit-about-kicker = 06 / service details
 downloadit-about-title = About / diagnostics
-downloadit-about-description = A compact view of the bridge service and its deployed component.
+downloadit-about-description = A compact view of the service, platform, and FlashGot component status.
 downloadit-service-starting = Service starting
 downloadit-service-ready = Service connected
 downloadit-service-unavailable = Service unavailable
 downloadit-manager-count = { NUMBER($count) }
 downloadit-manager-count-label =
     { $count ->
-        [one] FlashGot tool detected
-       *[other] FlashGot tools detected
+        [one] available download tool
+       *[other] available download tools
     }
-downloadit-detection-idle = Current FlashGot detection cache
-downloadit-detection-loading = Detecting FlashGot managers; configured built-in protocols refresh in the background...
+downloadit-detection-idle = Current download-tool availability
+downloadit-detection-loading = Refreshing download tools; configured built-in protocols refresh in the background...
 downloadit-detection-success =
     { $count ->
-        [one] FlashGot detection complete: one tool
-       *[other] FlashGot detection complete: { $count } tools
+        [one] Refresh complete: one tool available
+       *[other] Refresh complete: { $count } tools available
     }
-downloadit-detection-error = FlashGot detection failed: { $error }
-downloadit-no-managers = No FlashGot download manager was detected
+downloadit-detection-error = Download-tool refresh failed: { $error }
+downloadit-no-managers = No download tool is available
 downloadit-default-manager-eyebrow = default route
 downloadit-default-manager-title = Default download manager
 downloadit-default-manager-label = Default download manager
@@ -202,7 +202,7 @@ downloadit-jdownloader-endpoint-label = FlashGot endpoint
 downloadit-jdownloader-endpoint-help = Only an HTTP loopback address using the /flashgot path is accepted.
 downloadit-jdownloader-auto-launch-title = Start JDownloader when it is unavailable
 downloadit-jdownloader-auto-launch-help = DownloadIt starts the selected or detected installation, then waits for the local endpoint.
-downloadit-jdownloader-path-label = JDownloader executable or JAR (optional override)
+downloadit-jdownloader-path-label = JDownloader launcher or JAR (optional override)
 downloadit-jdownloader-detected-path = Detected installation: { $path }
 downloadit-jdownloader-not-detected = No installation path has been detected yet.
 downloadit-jdownloader-test = Test connection
@@ -291,9 +291,11 @@ downloadit-about-eyebrow = runtime details
 downloadit-version-label = Extension version
 downloadit-platform-label = Platform support
 downloadit-service-label = Background service
-downloadit-binary-label = Component path
+downloadit-binary-label = FlashGot component
 downloadit-windows = Windows
-downloadit-unsupported-platform = Windows only
+downloadit-linux = Linux
+downloadit-unsupported-platform = Windows and Linux only
+downloadit-component-not-used = Not used on this platform
 downloadit-ready = Ready
 downloadit-starting = Starting
 downloadit-unavailable = Unavailable
@@ -464,8 +466,9 @@ downloadit-confirm-remove-built-in = Remove the built-in downloader “{ $name }
 downloadit-custom-reloaded = Custom downloaders reloaded
 downloadit-custom-reset = Custom downloader configuration reset
 downloadit-browse-executable-title = Select downloader executable
-downloadit-browse-jdownloader-title = Select JDownloader executable or JAR
+downloadit-browse-jdownloader-title = Select JDownloader launcher or JAR
 downloadit-jdownloader-file-filter = JDownloader files (*.exe, *.jar)
+downloadit-jdownloader-jar-file-filter = JDownloader JAR files (*.jar)
 downloadit-browse-aria2-configuration-title = Select aria2 configuration file
 downloadit-aria2-configuration-filter = aria2 configuration (*.conf)
 downloadit-error-custom-file-root = The custom-downloader file has an invalid structure.
@@ -522,8 +525,9 @@ downloadit-error-jdownloader-endpoint = Enter an HTTP loopback URL using the /fl
 downloadit-error-jdownloader-unavailable = The JDownloader FlashGot endpoint is unavailable.
 downloadit-error-jdownloader-discovery = JDownloader returned invalid installation information.
 downloadit-error-jdownloader-http = JDownloader returned HTTP status { $status }.
-downloadit-error-jdownloader-path = Select an existing JDownloader .exe or .jar file.
+downloadit-error-jdownloader-path = Select an existing JDownloader launcher or JAR file.
 downloadit-error-jdownloader-launch = JDownloader could not be started.
 downloadit-error-jdownloader-start-timeout = JDownloader started, but its FlashGot endpoint did not become ready in time.
 downloadit-error-jdownloader-submit = The task could not be submitted to JDownloader.
 downloadit-error-jdownloader-mixed-post = JDownloader cannot safely accept a batch containing different POST request bodies.
+downloadit-error-flashgot-platform = FlashGot-backed download managers are not supported on this platform.

@@ -56,6 +56,55 @@ test("packaging scripts select the authenticated API or nightly.link", () => {
   assert.doesNotMatch(packShell, /releases\/expanded_assets|releases\/download|FlashGot-v/);
 });
 
+test("Windows and Linux share one runtime capability matrix and universal XPI", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const script = read("addon/chrome/content/options.js");
+  const markup = read("addon/chrome/content/options.xhtml");
+  const workflow = read(".github/workflows/test.yml");
+
+  assert.match(
+    service,
+    /PLATFORM_DEFINITIONS = Object\.freeze\(\{[\s\S]*?WINNT:[\s\S]*?id: "windows"[\s\S]*?Linux:[\s\S]*?id: "linux"/,
+  );
+  assert.match(service, /platformSupported: Boolean\(this\.platformDefinition\)/);
+  assert.match(service, /flashGotSupported: Boolean\(this\.platformDefinition\?\.flashGotSupported\)/);
+  assert.match(service, /processWindowHidingSupported: Boolean\(/);
+  assert.match(service, /serviceReady: this\.serviceReady/);
+  assert.match(service, /availableManagerCount: managers\.length/);
+  assert.match(service, /this\.platformDefinition\.flashGotSupported[\s\S]*?this\.deployBinary\(\)/);
+  assert.match(service, /if \(!this\.platformDefinition\?\.flashGotSupported\) \{\s*return \[\];/);
+  assert.match(service, /this\.platformDefinition\?\.id === "linux"[\s\S]*?file\.isExecutable\(\)/);
+  assert.match(service, /if \(this\.platformDefinition\?\.processWindowHidingSupported\)/);
+  assert.match(markup, /id="custom-start-hidden-row"/);
+  assert.match(script, /custom-start-hidden-row"\)\.hidden =\s*!state\.snapshot\?\.processWindowHidingSupported/);
+  assert.match(script, /service\.platform === "linux"[\s\S]*?"downloadit-linux"/);
+  assert.match(script, /"downloadit-component-not-used"/);
+  assert.match(script, /application: linux/);
+
+  for (const locale of ["en-US", "zh-CN"]) {
+    const fluent = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    for (const id of [
+      "downloadit-linux",
+      "downloadit-component-not-used",
+      "downloadit-jdownloader-jar-file-filter",
+      "downloadit-error-flashgot-platform",
+    ]) {
+      assert.match(fluent, new RegExp(`^${id}\\s*=`, "m"));
+    }
+  }
+  for (const readme of ["README.md", "README-zh_CN.md"]) {
+    const source = read(readme);
+    for (const text of ["Windows", "Linux", "Snap", "Flatpak", "FlashGot.exe"] ) {
+      assert.match(source, new RegExp(text.replaceAll(".", "\\.")));
+    }
+  }
+
+  assert.match(workflow, /ubuntu-24\.04/);
+  assert.match(workflow, /windows-latest/);
+  assert.match(workflow, /run: node --test/);
+  assert.match(workflow, /run: bash -n pack\.sh/);
+});
+
 test("settings dialog contains the current capability controls", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   assert.doesNotMatch(markup, /chrome:\/\/global\/skin\/menulist\.css/);
@@ -251,7 +300,10 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
   assert.match(service, /refreshConfiguredBuiltInProtocols/);
   assert.match(service, /Promise\.allSettled\(probes\)/);
   assert.match(script, /watchBuiltInRefresh/);
-  assert.match(script, /filter: "\*\.exe;\*\.jar"/);
+  assert.match(script, /filter: linux \? "\*\.jar" : "\*\.exe;\*\.jar"/);
+  assert.match(script, /application: linux/);
+  assert.match(script, /picker\.appendFilters\(Ci\.nsIFilePicker\.filterApps\)/);
+  assert.match(script, /picker\.appendFilter\(await document\.l10n\.formatValue\(filterId\), filter\)/);
   assert.match(script, /includeAllFiles: false/);
   assert.match(markup, /id="jdownloader-launch-path"[^>]+readonly="readonly"/);
 
@@ -415,7 +467,7 @@ test("custom executable paths are portable within the Firefox configuration dire
   const chineseReadme = read("README-zh_CN.md");
 
   assert.match(service, /Services\.dirsvc\.get\("UChrm", Ci\.nsIFile\)/);
-  assert.match(service, /PathUtils\.isAbsolute\(path\)/);
+  assert.match(service, /getAbsolutePathPlatform\(path\)/);
   assert.match(service, /setRelativePath\(configurationDirectory,/);
   assert.match(service, /configurationDirectory\.contains\(file\)/);
   assert.match(service, /file\.getRelativePath\(configurationDirectory\)/);

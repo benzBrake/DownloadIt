@@ -6,14 +6,14 @@
 
 DownloadIt is a port of FlashGot's download-bridge extension for modern Firefox. It uses a customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) to load a bootstrapped XPI and forward web links to an external download manager.
 
-The project is currently being migrated. Its target platform is Windows, and the minimum supported Firefox version is 136.0.
+The project is currently being migrated. It supports Windows and Linux, and the minimum supported Firefox version is 136.0.
 
 ## Current features
 
 - Adds a DownloadIt item to the context menu for web links.
 - Adds a Downloadit Selection item below it when selected page content contains links.
 - Adds a DownloadIt Links selector for collecting, filtering, and batch-downloading explicit page links from the current document and its frames.
-- Detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
+- On Windows, detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
 - Shows POST, cookie, batch, download-directory, and task-start capabilities for each downloader.
 - Provides an always-available Firefox downloader without routing requests through `FlashGot.exe`.
 - Supports JDownloader directly through its loopback FlashGot endpoint without routing requests through `FlashGot.exe`.
@@ -28,7 +28,7 @@ The project is currently being migrated. Its target platform is Windows, and the
 - Provides an optional GitHub mirror adapter with a configurable endpoint and a registry designed for additional sites such as Hugging Face.
 - Supports Simplified Chinese and English in the UI and context menu.
 - Stores UI messages in Firefox's built-in Fluent resources.
-- Verifies the bundled `FlashGot.exe` during the build and at runtime.
+- Verifies the bundled `FlashGot.exe` during the build and at Windows runtime.
 
 The following features are not implemented yet:
 
@@ -46,22 +46,41 @@ or an enabled IDM local protocol hook
 DownloadIt background service
         │
         ├── native provider ── Firefox Downloads API
-        ├── flashgot provider ── temporary job JSON ── FlashGot.exe
+        ├── flashgot provider (Windows) ── temporary job JSON ── FlashGot.exe
         ├── jdownloader provider ── loopback HTTP `/flashgot`
         ├── custom command provider ── native Firefox process API
         └── custom aria2 provider ── JSON-RPC
 ```
 
-When the extension starts, it deploys `FlashGot.exe` from the XPI to `DownloadIt\FlashGot.exe` under the Firefox profile, then communicates with it through these command-line interfaces:
+On Windows, extension startup deploys `FlashGot.exe` from the XPI to `DownloadIt\FlashGot.exe` under the Firefox profile, then communicates with it through these command-line interfaces:
 
 - `--list-json`: detects available download managers;
 - `--job-json`: submits a single- or multi-link download task.
 
+Linux skips deployment and never runs the packaged Windows helper. The rest of the service, including Firefox native downloads, custom commands, aria2, JDownloader, toolbar and context-menu UI, the native download prompt, automatic capture, and protocol services, initializes normally.
+
+## Platform support
+
+One universal XPI is published for both supported platforms. It contains the Windows helper so the same artifact remains complete, but Linux ignores that file at runtime.
+
+macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
+
+| Integration | Windows | Linux |
+| --- | --- | --- |
+| Firefox native downloads | Supported | Supported |
+| Custom commands | Supported | Supported |
+| aria2 JSON-RPC and optional local startup | Supported | Supported |
+| JDownloader endpoint and optional local startup | Supported | Supported |
+| FlashGot manager discovery and task submission | Supported | Not used |
+| Packaged `FlashGot.exe` deployment | Enabled | Skipped |
+
 ## Prerequisites
 
-- Windows;
+- Windows, or Linux using a distribution-native Firefox package or Mozilla tarball;
 - Firefox 136.0 or later;
 - A configured custom `userChrome.js-Loader` that is active in the target profile. The version released after 20250219 is recommended because it supports Firefox 135+;
+- Linux executables selected for custom commands, aria2 startup, or JDownloader startup must have Unix execute permission, for example `chmod +x /path/to/launcher`;
+- Snap and Flatpak Firefox packages are not supported in the first Linux release because their Loader installation, host-file access, and process sandbox boundaries differ from non-sandboxed Firefox;
 - External download managers are optional because the Firefox downloader is always available;
 - If `addon/FlashGot.exe` is missing during the build, both packaging scripts download the latest successful [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly artifact. They use the GitHub Actions API when `GITHUB_TOKEN` or `GH_TOKEN` is available and otherwise download through nightly.link. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
 - Node.js 18 or later for development and testing;
@@ -84,14 +103,14 @@ Linux:
 ./pack.sh
 ```
 
-The script packages `addon/` into `addon.xpi` in the repository root and verifies that the XPI contains at least:
+Both scripts package `addon/` into the same universal `addon.xpi` format in the repository root and verify that the XPI contains at least:
 
 - `bootstrap.js`;
 - `install.rdf`;
 - `chrome.manifest`;
 - `FlashGot.exe`.
 
-`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control. When it is missing, both scripts use `GITHUB_TOKEN` first and then `GH_TOKEN` to access the latest successful nightly artifact through the GitHub Actions API. With neither token set, they download the same artifact through nightly.link.
+`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control. When it is missing, both scripts use `GITHUB_TOKEN` first and then `GH_TOKEN` to access the latest successful nightly artifact through the GitHub Actions API. With neither token set, they download the same artifact through nightly.link. Nightly builds still publish one universal XPI rather than separate platform artifacts.
 
 ## Testing
 
@@ -114,11 +133,13 @@ The **Link groups** settings tab can enable or disable each built-in suffix grou
 3. In Firefox, open `about:addons`, choose “Install Add-on From File…” from the gear menu, and select `addon.xpi`.
 4. Restart Firefox so that the extension and context menus can finish initializing.
 
+On Linux, perform these steps with a distribution-native or Mozilla tarball Firefox build. Confirm that the Loader can access the profile and that every configured local launcher is executable. Snap and Flatpak packages are outside the supported installation path.
+
 To upgrade, install the newly built `addon.xpi` over the existing installation. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
 
 ## Configuration
 
-The DownloadIt toolbar button opens a native Firefox panel. Use “DownloadIt Links” to open the batch-link selector for the active tab, select an available tool to change the default download manager immediately, use “Refresh download managers” to refresh FlashGot-backed detection results while enabled built-in protocols are probed concurrently in the background, or open DownloadIt settings from the panel footer. Built-in HTTP timeouts do not delay or fail the FlashGot result. The button is added to the navigation bar initially and can be moved or removed through Firefox's Customize Toolbar interface.
+The DownloadIt toolbar button opens a native Firefox panel. Use “DownloadIt Links” to open the batch-link selector for the active tab, select an available tool to change the default download manager immediately, use “Refresh download managers” to refresh current integrations while enabled built-in protocols are probed concurrently in the background, or open DownloadIt settings from the panel footer. On Windows, built-in HTTP timeouts do not delay or fail FlashGot detection; on Linux, no FlashGot scan is attempted. The button is added to the navigation bar initially and can be moved or removed through Firefox's Customize Toolbar interface.
 
 For a supported link, choosing a downloader directly from the DownloadIt context submenu sends only that link through the selected downloader and leaves the configured default unchanged. Use the separate **Set as default and download** submenu when the selected downloader should also become the new default. Firefox policy can disable the default-changing submenu without disabling one-time downloads.
 
@@ -135,7 +156,7 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.autoStartTasks` | Boolean | Requests automatic start for providers with the task-start capability. The default is `true`; currently only JDownloader consumes it. |
 | `downloadit.jdownloader.enabled` | Boolean | Controls whether the JDownloader built-in-protocol integration is configured and shown. New installations default to `false`; existing JDownloader preferences or a JDownloader default selection are treated as an enabled legacy configuration until explicitly removed. |
 | `downloadit.jdownloader.endpoint` | String | JDownloader FlashGot endpoint. The default is `http://127.0.0.1:9666/flashgot`. |
-| `downloadit.jdownloader.launchPath` | String | Optional absolute path to a JDownloader `.exe` or `.jar`; a manual value overrides detected installation data. |
+| `downloadit.jdownloader.launchPath` | String | Optional absolute path to a JDownloader Windows `.exe`, Linux executable launcher, or `.jar`; a manual value overrides detected installation data. |
 | `downloadit.jdownloader.autoLaunch` | Boolean | Starts JDownloader when its endpoint is unavailable. The default is `true`. |
 | `downloadit.jdownloader.detectedPath` | String | Installation path reported by a successful GET probe and maintained automatically. |
 | `downloadit.jdownloader.detectedJavaArgs` | String | JSON array of validated JVM arguments reported by a successful GET probe and maintained automatically. |
@@ -180,11 +201,11 @@ Mirroring is applied once immediately before every provider dispatch, including 
 
 ### JDownloader provider
 
-The `jdownloader:jdownloader` provider talks directly to JDownloader's FlashGot-compatible endpoint. Its singleton row appears only after the integration is explicitly added or migrated from an existing configuration, and it can be configured or removed from that row. A valid enabled configuration is selectable immediately. At startup and during a manual manager refresh, DownloadIt probes enabled built-in protocols concurrently in the background so JDownloader's online state and installation cache can be refreshed without delaying FlashGot detection. Provider failures are isolated, concurrent probes of the same configured endpoint are shared, and a result is persisted only if JDownloader is still enabled with the same endpoint when the request finishes. Draft connection tests and task submissions can also probe the endpoint. The endpoint is kept under the editor's advanced settings and must be unauthenticated HTTP on `localhost`, `127.0.0.0/8`, or `::1`, with no query or fragment; its path is normalized to `/flashgot`. Redirects are disabled, and probe requests bypass the HTTP cache.
+The `jdownloader:jdownloader` provider talks directly to JDownloader's FlashGot-compatible endpoint. Its singleton row appears only after the integration is explicitly added or migrated from an existing configuration, and it can be configured or removed from that row. A valid enabled configuration is selectable immediately. At startup and during a manual manager refresh, DownloadIt probes enabled built-in protocols concurrently in the background so JDownloader's online state and installation cache can be refreshed; on Windows this does not delay FlashGot detection. Provider failures are isolated, concurrent probes of the same configured endpoint are shared, and a result is persisted only if JDownloader is still enabled with the same endpoint when the request finishes. Draft connection tests and task submissions can also probe the endpoint. The endpoint is kept under the editor's advanced settings and must be unauthenticated HTTP on `localhost`, `127.0.0.0/8`, or `::1`, with no query or fragment; its path is normalized to `/flashgot`. Redirects are disabled, and probe requests bypass the HTTP cache.
 
-A successful GET response must contain exactly two non-empty lines: an existing absolute `.jar` or `.exe` path, followed by a `java ... -jar` command ending in that same path. DownloadIt never executes or stores the returned command. It retains only validated `-Xms` and `-Xmx` arguments. A manual launch path takes precedence over the detected cache, and an invalid manual path is reported instead of falling back. Changing the endpoint clears the old discovery cache. The connection-test button probes the draft endpoint without saving it, changing online state, or starting a process.
+A successful GET response must contain exactly two non-empty lines: an absolute `.jar` path, followed by a `java ... -jar` command ending in that same path. Windows drive and UNC paths and POSIX absolute paths are accepted; their original separator style is preserved. DownloadIt never executes or stores the returned command. It retains only validated `-Xms` and `-Xmx` arguments. A manual launch path takes precedence over the detected cache, and an invalid manual path is reported instead of falling back. Changing the endpoint clears the old discovery cache. The connection-test button probes the draft endpoint without saving it, changing online state, or starting a process.
 
-When a submission finds the endpoint offline and automatic startup is enabled, `.exe` files are launched visibly through Firefox's native process API. For a `.jar`, DownloadIt first checks a same-named executable, `JDownloader2.exe`, `JDownloader 2.exe`, and `JDownloader.exe`. It then searches bundled `jre`/`runtime` directories, `JAVA_HOME`, JavaSoft registry homes, and Windows System32, preferring `javaw.exe` to `java.exe`. Java receives only the validated JVM arguments plus `-jar <path>`; no command shell is involved. Concurrent submissions share one startup wait. DownloadIt probes every eight seconds up to six times, then performs each submission POST only once after readiness so a retry cannot duplicate a task.
+When a submission finds the endpoint offline and automatic startup is enabled, a selected native launcher is run directly through Firefox's process API. On Windows, JAR startup checks the same-named `.exe`, `JDownloader2.exe`, `JDownloader 2.exe`, and `JDownloader.exe`, then bundled `jre`/`runtime` directories, `JAVA_HOME`, JavaSoft registry homes, and Windows System32, preferring `javaw.exe` to `java.exe`. On Linux, it first checks executable sibling launchers named `JDownloader2` and `JDownloader`, then bundled `jre`/`runtime`, `JAVA_HOME/bin/java`, and each directory in `PATH` for an executable `java`. Java receives only the validated JVM arguments plus `-jar <path>`; no command shell is involved. Concurrent submissions share one startup wait. DownloadIt probes every eight seconds up to six times, then performs each submission POST only once after readiness so a retry cannot duplicate a task.
 
 The UTF-8 form sends newline-aligned `urls`, `descriptions`, and `fnames`, plus `package=DownloadIt`, the task referrer (or download-page URL), and Firefox's preferred download directory when readable. `autostart` follows `downloadit.autoStartTasks`; disabling it does not change any provider without the task-start capability. A batch sends cookies only when every link has the same cookie string, otherwise cookies are omitted for the whole batch. POST data is omitted when all links are empty and sent when all links are identical; mixed or partially different POST bodies reject the batch before probing or launching JDownloader. Download and archive passwords (`dpass` and `apass`) are not implemented.
 
@@ -219,11 +240,11 @@ The file is created when custom definitions are first applied and uses stable, n
 }
 ```
 
-Executable and aria2 configuration paths inside Firefox's chrome configuration directory (`UChrm`, normally `<profile>/chrome`) are stored with forward slashes relative to that directory, for example `UserTools/aria2/aria2c.exe` and `UserTools/aria2/aria2.conf`. Relative paths are always resolved from `UChrm`; files outside it keep their absolute paths.
+Executable and aria2 configuration paths inside Firefox's chrome configuration directory (`UChrm`, normally `<profile>/chrome`) are stored with forward slashes relative to that directory, for example `UserTools/aria2/aria2c.exe`, `UserTools/aria2/aria2c`, and `UserTools/aria2/aria2.conf`. Relative paths are always resolved from `UChrm`; files outside it keep their absolute paths. An absolute path saved on another operating system remains in the configuration but is shown as unavailable on the current platform.
 
-Custom downloaders hide process windows by default. Clear **Hide process window** to run command-line processes, or an automatically started aria2c process, in the foreground for debugging. Existing JSON files without `startHidden` retain hidden execution.
+On Windows, custom downloaders hide process windows by default. Clear **Hide process window** to run command-line processes, or an automatically started aria2c process, in the foreground for debugging. Firefox's `nsIProcess.startHidden` option has no Linux effect, so Linux hides this setting while preserving the `startHidden` JSON field for schema and cross-platform compatibility. Existing JSON files without the field retain the current default.
 
-Command-line downloaders select an executable and an arguments template. The editor provides quick templates for `aria2c`, `wget`, and `curl`. DownloadIt invokes the executable directly with Firefox's native process API and never passes the template through a command shell. Supported FlashGot-compatible placeholders are `URL`, `FNAME`, `COMMENT`, `REFERER`, `COOKIE`, `CFILE`, `FOLDER`, `POST`, `RAWPOST`, `HEADERS`, `ULIST`, `UFILE`, `USERPASS`, and `UA`. A template containing `ULIST` or `UFILE` starts one process for the batch; otherwise one process is started per link.
+Command-line downloaders select an executable and an arguments template. On Linux the selected file must have execute permission. The editor provides quick templates for `aria2c`, `wget`, and `curl`. DownloadIt invokes the executable directly with Firefox's native process API and never passes the template through a command shell. Supported FlashGot-compatible placeholders are `URL`, `FNAME`, `COMMENT`, `REFERER`, `COOKIE`, `CFILE`, `FOLDER`, `POST`, `RAWPOST`, `HEADERS`, `ULIST`, `UFILE`, `USERPASS`, and `UA`. A template containing `ULIST` or `UFILE` starts one process for the batch; otherwise one process is started per link. URL-list and Netscape-cookie temporary files use CRLF on Windows and LF on Linux; HTTP header blocks retain protocol-required CRLF on both platforms.
 
 aria2 definitions connect to an HTTP or HTTPS JSON-RPC endpoint and support an optional secret and server-side download directory. Multiple links are submitted with `system.multicall`. The optional local-startup settings include `executablePath` and `configurationPath`; the executable becomes required only when automatic startup is enabled, while the configuration file may remain empty. When supplied, DownloadIt passes the resolved configuration file as `--conf-path`. Optional aria2c startup is restricted to HTTP loopback endpoints; DownloadIt controls the configuration path, RPC enablement, listen address, port, and secret arguments, waits up to five seconds for readiness, and retries the request once. RPC secrets are stored as plain text in the JSON file and are never written to DownloadIt logs.
 

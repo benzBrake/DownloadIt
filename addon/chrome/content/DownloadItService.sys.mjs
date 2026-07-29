@@ -125,6 +125,26 @@ const BINARY_NAME = "FlashGot.exe";
 const PROFILE_DIRECTORY = "DownloadIt";
 const CUSTOM_DOWNLOADERS_FILE = "custom-downloaders.json";
 const AUTO_CAPTURE_RULES_FILE = "auto-capture-rules.json";
+const PLATFORM_DEFINITIONS = Object.freeze({
+  WINNT: Object.freeze({
+    id: "windows",
+    flashGotSupported: true,
+    processWindowHidingSupported: true,
+  }),
+  Linux: Object.freeze({
+    id: "linux",
+    flashGotSupported: false,
+    processWindowHidingSupported: false,
+  }),
+});
+
+function getAbsolutePathPlatform(value) {
+  const path = String(value || "").trim();
+  if (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(path)) {
+    return "windows";
+  }
+  return path.startsWith("/") ? "linux" : "";
+}
 
 const PREF_DEFAULT_MANAGER = "downloadit.defaultDM";
 const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
@@ -241,6 +261,8 @@ export function openSettingsWindow(parentWindow = null) {
 export class DownloadItService {
   constructor(addonData) {
     this.addonData = addonData;
+    this.platformDefinition = PLATFORM_DEFINITIONS[Services.appinfo.OS] || null;
+    this.serviceReady = false;
     this.binaryPath = "";
     this.profileDirectory = PathUtils.join(PathUtils.profileDir, PROFILE_DIRECTORY);
     this.customDownloadersPath = PathUtils.join(
@@ -404,7 +426,15 @@ export class DownloadItService {
       const normalized = this.normalizeJDownloaderSettings(settings, {
         requireExistingPath: false,
       });
-      available = normalized.enabled;
+      const launchPathPlatform = getAbsolutePathPlatform(normalized.launchPath);
+      if (
+        launchPathPlatform &&
+        launchPathPlatform !== this.platformDefinition?.id
+      ) {
+        unavailableReason = "platform-path";
+      } else {
+        available = normalized.enabled;
+      }
     } catch (error) {
       unavailableReason = error?.code || "unavailable";
     }
@@ -429,6 +459,9 @@ export class DownloadItService {
   }
 
   listFlashGotDownloaders() {
+    if (!this.platformDefinition?.flashGotSupported) {
+      return [];
+    }
     return this.flashGotManagers.map(name => this.createDownloaderDescriptor({
       ref: createDownloaderRef(FLASHGOT_PROVIDER, name),
       name,
@@ -457,13 +490,13 @@ export class DownloadItService {
         }
       }
       if (!unavailableReason && configuration.type === "command") {
-        if (!this.isLocalFile(configuration.command.executablePath)) {
+        if (!this.isLocalExecutable(configuration.command.executablePath)) {
           unavailableReason = "executable-not-found";
         }
       } else if (!unavailableReason && configuration.type === "aria2") {
         if (
           configuration.aria2.autoStart &&
-          !this.isLocalFile(configuration.aria2.executablePath)
+          !this.isLocalExecutable(configuration.aria2.executablePath)
         ) {
           unavailableReason = "executable-not-found";
         } else if (
@@ -536,7 +569,7 @@ export class DownloadItService {
 
   resolveCustomFilePath(value) {
     const path = String(value || "").trim();
-    if (!path || PathUtils.isAbsolute(path)) {
+    if (!path || getAbsolutePathPlatform(path)) {
       return path;
     }
     const configurationDirectory = this.getConfigurationDirectoryFile();
@@ -558,7 +591,12 @@ export class DownloadItService {
     }
     const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
     if (typeof value === "string") {
-      file.initWithPath(this.resolveCustomFilePath(value));
+      const path = this.resolveCustomFilePath(value);
+      const pathPlatform = getAbsolutePathPlatform(path);
+      if (pathPlatform && pathPlatform !== this.platformDefinition?.id) {
+        return path;
+      }
+      file.initWithPath(path);
     } else {
       file.initWithFile(value.QueryInterface(Ci.nsIFile));
     }
@@ -647,6 +685,21 @@ export class DownloadItService {
       );
     } finally {
       await IOUtils.remove(temporaryPath, { ignoreAbsent: true });
+    }
+  }
+
+  isLocalExecutable(path) {
+    try {
+      const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+      file.initWithPath(this.resolveExecutablePath(path));
+      if (!file.exists() || !file.isFile()) {
+        return false;
+      }
+      return this.platformDefinition?.id === "linux"
+        ? file.isExecutable()
+        : true;
+    } catch {
+      return false;
     }
   }
 
@@ -783,12 +836,24 @@ export class DownloadItService {
 
   normalizeJDownloaderSettings(value = {}, { requireExistingPath = true } = {}) {
     const endpoint = normalizeJDownloaderEndpoint(value.endpoint);
-    const launchPath = validateJDownloaderLaunchPath(value.launchPath);
+    const launchPath = validateJDownloaderLaunchPath(
+      value.launchPath,
+      this.platformDefinition?.id || "windows",
+    );
+    const launchPathPlatform = getAbsolutePathPlatform(launchPath);
     if (
       launchPath &&
       (
-        !PathUtils.isAbsolute(launchPath) ||
-        (requireExistingPath && !this.isLocalFile(launchPath))
+        !launchPathPlatform ||
+        (
+          requireExistingPath &&
+          launchPathPlatform === this.platformDefinition?.id &&
+          (
+            /\.jar$/i.test(launchPath)
+              ? !this.isLocalFile(launchPath)
+              : !this.isLocalExecutable(launchPath)
+          )
+        )
       )
     ) {
       throw new DownloadItError("jdownloader-launch-path-invalid");
@@ -914,12 +979,14 @@ export class DownloadItService {
   resolveJDownloaderJarLaunch(jarPath, javaArguments = []) {
     const jar = this.getLocalFile(jarPath);
     const directory = jar.parent;
-    const executableNames = [
-      jar.leafName.replace(/\.jar$/i, ".exe"),
-      "JDownloader2.exe",
-      "JDownloader 2.exe",
-      "JDownloader.exe",
-    ];
+    const executableNames = this.platformDefinition?.id === "linux"
+      ? ["JDownloader2", "JDownloader"]
+      : [
+          jar.leafName.replace(/\.jar$/i, ".exe"),
+          "JDownloader2.exe",
+          "JDownloader 2.exe",
+          "JDownloader.exe",
+        ];
     const seen = new Set();
     for (const name of executableNames) {
       const normalizedName = name.toLowerCase();
@@ -929,8 +996,9 @@ export class DownloadItService {
       seen.add(normalizedName);
       const candidate = directory.clone();
       candidate.append(name);
-      if (candidate.exists() && candidate.isFile()) {
-        return { executablePath: candidate.path, argumentsList: [] };
+      const executablePath = this.existingExecutablePath(candidate.path);
+      if (executablePath) {
+        return { executablePath, argumentsList: [] };
       }
     }
 
@@ -943,16 +1011,23 @@ export class DownloadItService {
     if (javaHome) {
       javaDirectories.push(PathUtils.join(javaHome, "bin"));
     }
-    javaDirectories.push(...this.readRegisteredJavaHomes().map(home =>
-      PathUtils.join(home, "bin")
-    ));
-    try {
-      javaDirectories.push(Services.dirsvc.get("SysD", Ci.nsIFile).path);
-    } catch {}
+    if (this.platformDefinition?.id === "windows") {
+      javaDirectories.push(...this.readRegisteredJavaHomes().map(home =>
+        PathUtils.join(home, "bin")
+      ));
+      try {
+        javaDirectories.push(Services.dirsvc.get("SysD", Ci.nsIFile).path);
+      } catch {}
+    } else if (this.platformDefinition?.id === "linux") {
+      javaDirectories.push(...Services.env.get("PATH").split(":").filter(Boolean));
+    }
 
     for (const javaDirectory of javaDirectories) {
-      for (const name of ["javaw.exe", "java.exe"]) {
-        const executablePath = this.existingLocalPath(
+      const executableNames = this.platformDefinition?.id === "linux"
+        ? ["java"]
+        : ["javaw.exe", "java.exe"];
+      for (const name of executableNames) {
+        const executablePath = this.existingExecutablePath(
           PathUtils.join(javaDirectory, name),
         );
         if (executablePath) {
@@ -974,13 +1049,23 @@ export class DownloadItService {
     settings = this.getJDownloaderSettings(),
     { clearInvalidCache = true } = {},
   ) {
-    const manualPath = validateJDownloaderLaunchPath(settings.launchPath);
-    let path = manualPath || validateJDownloaderLaunchPath(settings.detectedPath);
+    const platform = this.platformDefinition?.id || "windows";
+    const manualPath = validateJDownloaderLaunchPath(settings.launchPath, platform);
+    let path = manualPath || validateJDownloaderLaunchPath(settings.detectedPath, platform);
     if (!path) {
       return null;
     }
-    const existingPath = PathUtils.isAbsolute(path)
-      ? this.existingLocalPath(path)
+    const pathPlatform = getAbsolutePathPlatform(path);
+    if (pathPlatform && pathPlatform !== platform) {
+      if (manualPath) {
+        throw new DownloadItError("jdownloader-launch-path-invalid");
+      }
+      return null;
+    }
+    const existingPath = pathPlatform
+      ? /\.jar$/i.test(path)
+        ? this.existingLocalPath(path)
+        : this.existingExecutablePath(path)
       : "";
     if (!existingPath) {
       if (manualPath) {
@@ -991,7 +1076,7 @@ export class DownloadItService {
       }
       return null;
     }
-    if (/\.exe$/i.test(existingPath)) {
+    if (!/\.jar$/i.test(existingPath)) {
       return { executablePath: existingPath, argumentsList: [] };
     }
     return this.resolveJDownloaderJarLaunch(
@@ -1041,6 +1126,21 @@ export class DownloadItService {
     return normalizeAutoCaptureDocument(
       this.autoCaptureRuleDocument || createEmptyAutoCaptureDocument(),
     );
+  }
+
+  existingExecutablePath(path) {
+    try {
+      const file = this.getLocalFile(path);
+      if (!file.exists() || !file.isFile()) {
+        return "";
+      }
+      if (this.platformDefinition?.id === "linux" && !file.isExecutable()) {
+        return "";
+      }
+      return file.path;
+    } catch {
+      return "";
+    }
   }
 
   get linkGroups() {
@@ -1129,6 +1229,7 @@ export class DownloadItService {
         downloader.ref.provider === FLASHGOT_PROVIDER &&
         downloader.available
       ).length,
+      availableManagerCount: managers.length,
       customDownloaders: cloneCustomDownloaderDocument(
         this.customDownloaderDocument,
       ),
@@ -1179,8 +1280,13 @@ export class DownloadItService {
       linkGroupsLocked: this.linkGroupsLocked,
       mirrorSettingsLocked: this.mirrorSettingsLocked,
       binaryPath: this.binaryPath,
-      serviceReady: Boolean(this.binaryPath),
-      platformSupported: Services.appinfo.OS === "WINNT",
+      serviceReady: this.serviceReady,
+      platformSupported: Boolean(this.platformDefinition),
+      platform: this.platformDefinition?.id || "unsupported",
+      flashGotSupported: Boolean(this.platformDefinition?.flashGotSupported),
+      processWindowHidingSupported: Boolean(
+        this.platformDefinition?.processWindowHidingSupported,
+      ),
     };
   }
 
@@ -1455,11 +1561,14 @@ export class DownloadItService {
   }
 
   async startup() {
-    if (Services.appinfo.OS !== "WINNT") {
-      throw new Error("DownloadIt currently supports Windows only");
+    this.serviceReady = false;
+    if (!this.platformDefinition) {
+      throw new Error("DownloadIt supports Windows and Linux only");
     }
 
-    this.binaryPath = await this.deployBinary();
+    this.binaryPath = this.platformDefinition.flashGotSupported
+      ? await this.deployBinary()
+      : "";
     await this.reloadCustomDownloaders();
     await this.reloadAutoCaptureRules();
     registerLinkCollectorActor();
@@ -1506,9 +1615,11 @@ export class DownloadItService {
         });
       }
     }
+    this.serviceReady = true;
   }
 
   async shutdown() {
+    this.serviceReady = false;
     this.idmBridge.stop();
     unregisterDownloadItHelperAppHook(this);
     try {
@@ -1738,9 +1849,11 @@ export class DownloadItService {
 
   async refreshManagers({ persistDefault = true } = {}) {
     this.refreshConfiguredBuiltInProtocols();
-    await this.providers.refresh(FLASHGOT_PROVIDER, {
-      persistDefault: false,
-    });
+    if (this.platformDefinition?.flashGotSupported) {
+      await this.providers.refresh(FLASHGOT_PROVIDER, {
+        persistDefault: false,
+      });
+    }
     if (
       persistDefault &&
       !this.configuredDefaultRef &&
@@ -1754,12 +1867,7 @@ export class DownloadItService {
         );
       }
     }
-    return this.downloaders
-      .filter(downloader =>
-        downloader.ref.provider === FLASHGOT_PROVIDER &&
-        downloader.available
-      )
-      .map(downloader => downloader.name);
+    return this.managers.map(downloader => downloader.name);
   }
 
   refreshConfiguredBuiltInProtocols() {
@@ -1794,6 +1902,9 @@ export class DownloadItService {
   }
 
   async refreshFlashGotManagers({ persistDefault = true } = {}) {
+    if (!this.platformDefinition?.flashGotSupported) {
+      return [];
+    }
     if (this.refreshPromise) {
       return this.refreshPromise;
     }
@@ -2105,6 +2216,15 @@ export class DownloadItService {
   }
 
   async downloadLinks(contexts, manager) {
+    const requestedRef = typeof manager === "object"
+      ? manager?.ref || manager
+      : parseDownloaderRef(manager);
+    if (
+      requestedRef?.provider === FLASHGOT_PROVIDER &&
+      !this.platformDefinition?.flashGotSupported
+    ) {
+      throw new DownloadItError("flashgot-unsupported-platform");
+    }
     const downloader = this.resolveDownloader(manager);
     if (!downloader?.available) {
       throw new Error(`Unsupported download manager: ${manager}`);
@@ -2410,6 +2530,9 @@ export class DownloadItService {
   }
 
   async downloadViaFlashGot(managerName, job) {
+    if (!this.platformDefinition?.flashGotSupported) {
+      throw new DownloadItError("flashgot-unsupported-platform");
+    }
     const inputPath = this.createTemporaryPath("job", ".json");
     try {
       await IOUtils.writeUTF8(inputPath, JSON.stringify({
@@ -2447,7 +2570,8 @@ export class DownloadItService {
       if (/\[[^\]]*\bUFILE\b[^\]]*\]/.test(template)) {
         urlFile = this.createTemporaryPath("urls", ".txt");
         temporaryPaths.push(urlFile);
-        await IOUtils.writeUTF8(urlFile, `${urls.join("\r\n")}\r\n`);
+        const lineBreak = this.platformDefinition?.id === "linux" ? "\n" : "\r\n";
+        await IOUtils.writeUTF8(urlFile, `${urls.join(lineBreak)}${lineBreak}`);
       }
       if (/\[[^\]]*\bCFILE\b[^\]]*\]/.test(template)) {
         cookieFile = this.createTemporaryPath("cookies", ".txt");
@@ -2539,7 +2663,8 @@ export class DownloadItService {
         ].join("\t"));
       }
     }
-    return `${lines.join("\r\n")}\r\n`;
+    const lineBreak = this.platformDefinition?.id === "linux" ? "\n" : "\r\n";
+    return `${lines.join(lineBreak)}${lineBreak}`;
   }
 
   async launchCustomProcesses(
@@ -2593,12 +2718,18 @@ export class DownloadItService {
   ) {
     const executable = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
     executable.initWithPath(this.resolveExecutablePath(executablePath));
-    if (!executable.exists() || !executable.isFile()) {
+    if (
+      !executable.exists() ||
+      !executable.isFile() ||
+      (this.platformDefinition?.id === "linux" && !executable.isExecutable())
+    ) {
       throw new Error(`Executable not found: ${executablePath}`);
     }
     const process = Cc["@mozilla.org/process/util;1"].createInstance(Ci.nsIProcess);
     process.init(executable);
-    process.startHidden = Boolean(startHidden);
+    if (this.platformDefinition?.processWindowHidingSupported) {
+      process.startHidden = Boolean(startHidden);
+    }
     process.runwAsync(argumentsList, argumentsList.length, {
       observe(subject, topic) {
         if (topic !== "process-finished" || process.exitValue !== 0) {
@@ -2919,6 +3050,9 @@ export class DownloadItService {
   }
 
   async runFlashGotProcess(argumentsList) {
+    if (!this.platformDefinition?.flashGotSupported) {
+      throw new DownloadItError("flashgot-unsupported-platform");
+    }
     const executable = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
     executable.initWithPath(this.binaryPath);
     if (!executable.exists() || !executable.isFile()) {

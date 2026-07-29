@@ -131,6 +131,7 @@ const CUSTOM_ERROR_MESSAGES = {
   "jdownloader-start-timeout": "downloadit-error-jdownloader-start-timeout",
   "jdownloader-submit-failed": "downloadit-error-jdownloader-submit",
   "jdownloader-mixed-post-data": "downloadit-error-jdownloader-mixed-post",
+  "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
 };
 
 const MIRROR_ERROR_MESSAGES = {
@@ -636,7 +637,11 @@ function renderServiceState() {
   }
   setLocalized(
     platformStatus,
-    service.platformSupported ? "downloadit-windows" : "downloadit-unsupported-platform",
+    service.platform === "windows"
+      ? "downloadit-windows"
+      : service.platform === "linux"
+        ? "downloadit-linux"
+        : "downloadit-unsupported-platform",
   );
 }
 
@@ -715,11 +720,10 @@ function renderManagers() {
   const customErrorMessage = document.getElementById("custom-config-error-message");
   const customBlocked = Boolean(snapshot?.customDownloadersError);
 
-  setLocalized(count, "downloadit-manager-count", {
-    count: snapshot?.detectedManagerCount || 0,
-  });
+  const availableCount = available.length;
+  setLocalized(count, "downloadit-manager-count", { count: availableCount });
   setLocalized(countLabel, "downloadit-manager-count-label", {
-    count: snapshot?.detectedManagerCount || 0,
+    count: availableCount,
   });
 
   const keys = available.map(downloader => downloader.key);
@@ -783,10 +787,10 @@ function renderManagers() {
     managerState.classList.add("is-error");
   } else if (state.scanState === "success") {
     setLocalized(managerState, "downloadit-detection-success", {
-      count: snapshot?.detectedManagerCount || 0,
+      count: availableCount,
     });
     managerState.classList.add("is-success");
-  } else if (!(snapshot?.detectedManagerCount || 0)) {
+  } else if (!availableCount) {
     setLocalized(managerState, "downloadit-no-managers");
   } else {
     setLocalized(managerState, "downloadit-detection-idle");
@@ -1386,7 +1390,14 @@ function renderMirrors() {
 
 function renderAbout() {
   const snapshot = state.snapshot;
-  document.getElementById("binary-path").textContent = snapshot?.binaryPath || "--";
+  const binaryPath = document.getElementById("binary-path");
+  if (snapshot && !snapshot.flashGotSupported) {
+    setLocalized(binaryPath, "downloadit-component-not-used");
+  } else {
+    binaryPath.removeAttribute("data-l10n-id");
+    binaryPath.removeAttribute("data-l10n-args");
+    binaryPath.textContent = snapshot?.binaryPath || "--";
+  }
 }
 
 function errorText(error) {
@@ -1823,6 +1834,8 @@ function renderDownloadToolEditor() {
     state.editor.kind !== "builtin";
   document.getElementById("tool-editor-custom").hidden =
     state.editor.kind !== "custom";
+  document.getElementById("custom-start-hidden-row").hidden =
+    !state.snapshot?.processWindowHidingSupported;
 
   const protocolSelect = document.getElementById("built-in-protocol");
   protocolSelect.value = state.editor.builtInProtocol;
@@ -2143,10 +2156,14 @@ async function browseExecutable(inputId) {
 }
 
 async function browseJDownloaderPath() {
+  const linux = state.snapshot?.platform === "linux";
   const path = await browseLocalFile("jdownloader-launch-path", {
     titleId: "downloadit-browse-jdownloader-title",
-    filterId: "downloadit-jdownloader-file-filter",
-    filter: "*.exe;*.jar",
+    filterId: linux
+      ? "downloadit-jdownloader-jar-file-filter"
+      : "downloadit-jdownloader-file-filter",
+    filter: linux ? "*.jar" : "*.exe;*.jar",
+    application: linux,
     absolute: true,
     includeAllFiles: false,
   });
@@ -2193,7 +2210,8 @@ async function browseLocalFile(inputId, {
   picker.init(pickerParent, title, Ci.nsIFilePicker.modeOpen);
   if (application) {
     picker.appendFilters(Ci.nsIFilePicker.filterApps);
-  } else if (filterId && filter) {
+  }
+  if (filterId && filter) {
     picker.appendFilter(await document.l10n.formatValue(filterId), filter);
   }
   if (includeAllFiles) {
