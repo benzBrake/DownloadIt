@@ -8,6 +8,14 @@ Implementation must use Firefox's internal functions only. Do not use utility fu
 
 Documentation must be maintained bilingually: keep the English version in `README.md` and the Simplified Chinese version in `README-zh_CN.md`. When updating either README, update the corresponding content in the other language as well.
 
+## Versioning
+
+DownloadIt has its own version line starting at `2.0.0`. The inherited FlashGot version line ended at `1.5.6.14.2` and must not be continued for DownloadIt releases.
+
+Use exactly three numeric components in `MAJOR.MINOR.PATCH` form. Increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments. Versions must increase monotonically and must never be reset below a previously published version.
+
+Treat the version in `addon/install.rdf` as the single source of truth for the DownloadIt XPI. Runtime UI must obtain the version from the add-on startup data and must not hardcode it. The bundled `FlashGot.exe` is an independently built helper; never append its version or build number to the DownloadIt version.
+
 ## Solved-error lessons
 
 `LESSONS.md` is the shared internal record of solved and verified project errors. Before diagnosing an error, search it by the error signature, affected module, and relevant API, then confirm that any matching guidance still agrees with the current code and tests.

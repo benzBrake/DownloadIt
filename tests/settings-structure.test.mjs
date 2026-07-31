@@ -12,12 +12,29 @@ const read = relativePath => fs.readFileSync(
 
 test("manifest exposes the Firefox settings dialog", () => {
   const manifest = read("addon/install.rdf");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const script = read("addon/chrome/content/options.js");
+  const markup = read("addon/chrome/content/options.xhtml");
+  const version = manifest.match(/<em:version>([^<]+)<\/em:version>/)?.[1];
+
+  assert.match(version || "", /^\d+\.\d+\.\d+$/);
+  assert.ok(Number(version.split(".")[0]) >= 2);
   assert.match(manifest, /<em:iconURL>chrome:\/\/downloadit\/content\/icons\/downloadit\.svg<\/em:iconURL>/);
   assert.match(manifest, /<em:optionsURL>chrome:\/\/downloadit\/content\/options\.xhtml<\/em:optionsURL>/);
   assert.match(manifest, /<em:optionsType>1<\/em:optionsType>/);
   assert.match(manifest, /<em:optionsResizable>true<\/em:optionsResizable>/);
   assert.match(manifest, /<em:optionsWidth>1080<\/em:optionsWidth>/);
   assert.match(manifest, /<em:optionsHeight>720<\/em:optionsHeight>/);
+  assert.match(service, /addonVersion: String\(this\.addonData\?\.version \|\| ""\)/);
+  assert.match(markup, /<dd id="addon-version">--<\/dd>/);
+  assert.match(
+    script,
+    /getElementById\("addon-version"\)\.textContent =\s*snapshot\?\.addonVersion \|\| "--"/,
+  );
+  assert.doesNotMatch(
+    markup,
+    /<dd id="addon-version">\d+(?:\.\d+)+<\/dd>/,
+  );
 });
 
 test("DownloadIt icon is packaged and used by branded Firefox UI", () => {

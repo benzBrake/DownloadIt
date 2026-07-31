@@ -112,6 +112,12 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 
 `addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control. When it is missing, both scripts use `GITHUB_TOKEN` first and then `GH_TOKEN` to access the latest successful nightly artifact through the GitHub Actions API. With neither token set, they download the same artifact through nightly.link. Nightly builds still publish one universal XPI rather than separate platform artifacts.
 
+## Versioning
+
+DownloadIt has its own version line starting at `2.0.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+
+The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
+
 ## Testing
 
 Tests use Node.js's built-in test runner:

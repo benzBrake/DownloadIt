@@ -1218,6 +1218,7 @@ export class DownloadItService {
     const configuredDefaultManager = this.configuredDefaultRef;
     const managers = this.managers.map(downloader => ({ ...downloader }));
     return {
+      addonVersion: String(this.addonData?.version || ""),
       downloaders: this.downloaders.map(downloader => ({ ...downloader })),
       managers,
       configuredDefaultManager,

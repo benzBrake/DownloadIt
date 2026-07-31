@@ -1390,6 +1390,8 @@ function renderMirrors() {
 
 function renderAbout() {
   const snapshot = state.snapshot;
+  document.getElementById("addon-version").textContent =
+    snapshot?.addonVersion || "--";
   const binaryPath = document.getElementById("binary-path");
   if (snapshot && !snapshot.flashGotSupported) {
     setLocalized(binaryPath, "downloadit-component-not-used");

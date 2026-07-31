@@ -112,6 +112,12 @@ Linux：
 
 `addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时，两套脚本都会优先使用 `GITHUB_TOKEN`，其次使用 `GH_TOKEN`，通过 GitHub Actions API 获取最新成功构建的 nightly artifact。两个 token 都未设置时，则通过 nightly.link 下载同一 artifact。Nightly 仍只发布一个通用 XPI，不拆分平台构建产物。
 
+## 版本规则
+
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+
+`addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
+
 ## 测试
 
 测试使用 Node.js 内置测试运行器：
