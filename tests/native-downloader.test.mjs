@@ -220,6 +220,10 @@ function createSettingsService(platform = "windows") {
   service.autoCaptureRuleDocument = { version: 1, rules: [] };
   service.autoCaptureRulesLoadError = null;
   service.autoCaptureRulesWritePromise = Promise.resolve();
+  service.abdmOnline = false;
+  service.abdmProbePromise = null;
+  service.abdmProbeEndpoint = "";
+  service.abdmProbeApiKey = "";
   service.jDownloaderOnline = false;
   service.jDownloaderProbePromise = null;
   service.jDownloaderProbeEndpoint = "";
@@ -289,6 +293,7 @@ test("platform capabilities initialize Windows and Linux services independently"
 
 test("Linux hides FlashGot cache and falls back to Firefox without deleting preferences", async () => {
   preferenceValues.clear();
+  preferenceValues.set("downloadit.abdm.enabled", false);
   preferenceValues.set(
     "downloadit.defaultDM",
     JSON.stringify({ provider: "flashgot", id: "Windows Manager" }),
@@ -927,8 +932,13 @@ test("built-in protocol settings use a UI view while persisting through provider
     id: "jdownloader",
     ref: { provider: "jdownloader", id: "jdownloader" },
     singleton: true,
+  }, {
+    id: "abdm",
+    ref: { provider: "abdm", id: "abdm" },
+    singleton: true,
   }]);
   assert.equal(initial.builtInProtocols[0].settings.enabled, false);
+  assert.equal(initial.builtInProtocols[1].settings.enabled, true);
   assert.equal(service.listJDownloaderDownloaders().length, 0);
 
   const snapshot = await service.applySettings({
@@ -1119,6 +1129,7 @@ test("removing JDownloader clears its configuration and replaces its default", a
 
 test("manager refresh skips disabled built-in protocols", async () => {
   preferenceValues.clear();
+  preferenceValues.set("downloadit.abdm.enabled", false);
   const service = createService();
   const refreshes = [];
   service.providers = {
@@ -1164,6 +1175,7 @@ test("manager refresh skips disabled built-in protocols", async () => {
 
 test("manager refresh probes enabled built-ins without waiting or failing FlashGot", async () => {
   preferenceValues.clear();
+  preferenceValues.set("downloadit.abdm.enabled", false);
   preferenceValues.set("downloadit.jdownloader.enabled", true);
   const service = createService();
   const refreshes = [];
@@ -1723,4 +1735,316 @@ test("JDownloader draft tests and stale or disabled probes have no persistent si
   assert.equal(storedDiscovery, null);
   assert.equal(service.jDownloaderOnline, false);
   assert.equal(service.jDownloaderProbePromise, null);
+});
+
+test("ABDM probes are shared, validate JSON queues, and ignore stale configuration", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.abdm.enabled", true);
+  preferenceValues.set("downloadit.abdm.endpoint", "http://127.0.0.1:15151/");
+  preferenceValues.set("downloadit.abdm.apiKey", "secret");
+  const service = createService();
+  let requestCount = 0;
+  let finishRequest;
+  service.sendABDMRequest = (...args) => {
+    requestCount++;
+    assert.deepEqual(args, [
+      "GET",
+      "http://127.0.0.1:15151/queues",
+      null,
+      "secret",
+      3000,
+    ]);
+    return new Promise(resolve => {
+      finishRequest = resolve;
+    });
+  };
+
+  const first = service.probeABDM();
+  const second = service.probeABDM();
+  assert.equal(requestCount, 1);
+  finishRequest({ status: 200, text: "[]" });
+  assert.deepEqual(await first, []);
+  assert.deepEqual(await second, []);
+  assert.equal(service.abdmOnline, true);
+  assert.equal(service.abdmProbePromise, null);
+
+  requestCount = 0;
+  service.abdmOnline = false;
+  const stale = service.probeABDM();
+  preferenceValues.set("downloadit.abdm.endpoint", "http://127.0.0.1:15152/");
+  finishRequest({ status: 200, text: "[]" });
+  await stale;
+  assert.equal(service.abdmOnline, false);
+  assert.equal(service.abdmProbePromise, null);
+
+  service.sendABDMRequest = async () => ({ status: 503, text: "offline" });
+  await assert.rejects(
+    service.probeABDM({ endpoint: "http://127.0.0.1:15152/", apiKey: "secret" }),
+    error => error instanceof DownloadItError &&
+      error.code === "abdm-http-error" && error.args.status === 503,
+  );
+  service.sendABDMRequest = async () => ({ status: 200, text: "{}" });
+  await assert.rejects(
+    service.probeABDM({ endpoint: "http://127.0.0.1:15152/", apiKey: "secret" }),
+    error => error.code === "abdm-response-invalid",
+  );
+});
+
+test("ABDM submission uses API key, task headers, and silentStart", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.abdm.enabled", true);
+  preferenceValues.set("downloadit.abdm.endpoint", "http://127.0.0.1:15151/");
+  preferenceValues.set("downloadit.abdm.apiKey", "secret");
+  preferenceValues.set("downloadit.autoStartTasks", false);
+  const service = createService();
+  let probeOptions;
+  service.probeABDM = async options => {
+    probeOptions = options;
+    return [];
+  };
+  let request;
+  service.sendABDMRequest = async (...args) => {
+    request = args;
+    return { status: 201, text: "" };
+  };
+  const result = await service.downloadViaABDM("abdm", {
+    referer: "https://example.com/page",
+    dlpageReferer: "https://example.com",
+    useragent: "Firefox Test",
+    links: [{
+      url: "https://example.com/file.zip",
+      filename: "file.zip",
+      cookies: "session=1",
+      postdata: "",
+    }],
+  }, { autoStartTask: false });
+  assert.deepEqual(result, { succeeded: 1, failed: 0 });
+  assert.deepEqual(probeOptions, {
+    endpoint: "http://127.0.0.1:15151/",
+    apiKey: "secret",
+  });
+  assert.equal(request[0], "POST");
+  assert.equal(request[1], "http://127.0.0.1:15151/add");
+  assert.equal(request[3], "secret");
+  assert.deepEqual(JSON.parse(request[2]), {
+    items: [{
+      link: "https://example.com/file.zip",
+      headers: {
+        Cookie: "session=1",
+        Referer: "https://example.com/page",
+        "User-Agent": "Firefox Test",
+      },
+      downloadPage: "https://example.com",
+      suggestedName: "file.zip",
+    }],
+    options: { silentAdd: true, silentStart: false },
+  });
+  await assert.rejects(
+    service.downloadViaABDM("abdm", {
+      links: [{ url: "https://example.com/file.zip", postdata: "a=1" }],
+    }),
+    error => error.code === "abdm-post-unsupported",
+  );
+});
+
+test("ABDM XHR bypasses cache, disables redirects, and sends X-Api-Key", async () => {
+  const listeners = new Map();
+  const headers = new Map();
+  const channel = {
+    loadFlags: 0,
+    loadInfo: { allowDeprecatedSystemRequests: false, httpsOnlyStatus: 0 },
+    redirectionLimit: 1,
+    allowSTS: true,
+    QueryInterface(interfaceId) {
+      assert.equal(interfaceId, interfacesMock.nsIHttpChannel);
+      return this;
+    },
+    setTRRMode(mode) {
+      this.trrMode = mode;
+    },
+  };
+  xmlHttpRequestFactory = () => ({
+    channel,
+    responseText: "[]",
+    status: 200,
+    open(method, endpoint, asynchronous) {
+      assert.equal(method, "POST");
+      assert.equal(endpoint, "http://127.0.0.1:15151/add");
+      assert.equal(asynchronous, true);
+    },
+    setRequestHeader(name, value) {
+      headers.set(name, value);
+    },
+    addEventListener(name, listener) {
+      listeners.set(name, listener);
+    },
+    send(body) {
+      assert.equal(body, "{}");
+      listeners.get("load")();
+    },
+  });
+  try {
+    const service = createService();
+    assert.deepEqual(
+      await service.sendABDMRequest(
+        "POST",
+        "http://127.0.0.1:15151/add",
+        "{}",
+        "secret",
+      ),
+      { status: 200, text: "[]" },
+    );
+    assert.equal(channel.loadFlags, 15);
+    assert.equal(channel.trrMode, interfacesMock.nsIRequest.TRR_DISABLED_MODE);
+    assert.equal(channel.redirectionLimit, 0);
+    assert.equal(channel.allowSTS, false);
+    assert.equal(headers.get("Content-Type"), "application/json; charset=UTF-8");
+    assert.equal(headers.get("X-Api-Key"), "secret");
+  } finally {
+    xmlHttpRequestFactory = () => ({});
+  }
+});
+
+test("ABDM native provider hides and migrates the FlashGot fallback safely", () => {
+  preferenceValues.clear();
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "flashgot", id: "AB Download Manager" }),
+  );
+  const service = createSettingsService();
+  service.flashGotManagers = ["AB Download Manager", "External"];
+  service.abdmOnline = false;
+  assert.deepEqual(service.listFlashGotDownloaders().map(item => item.name), [
+    "AB Download Manager",
+    "External",
+  ]);
+  service.abdmOnline = true;
+  assert.deepEqual(service.listFlashGotDownloaders().map(item => item.name), [
+    "External",
+  ]);
+  service.migrateABDMDefaultManagerPreference();
+  assert.deepEqual(JSON.parse(preferenceValues.get("downloadit.defaultDM")), {
+    provider: "abdm",
+    id: "abdm",
+  });
+
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "flashgot", id: "AB Download Manager" }),
+  );
+  preferenceLocks.add("downloadit.defaultDM");
+  service.migrateABDMDefaultManagerPreference();
+  assert.deepEqual(JSON.parse(preferenceValues.get("downloadit.defaultDM")), {
+    provider: "flashgot",
+    id: "AB Download Manager",
+  });
+  preferenceLocks.clear();
+});
+
+test("ABDM preferences normalize, honor locks, and clear on disable", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+  await service.applySettings({
+    abdm: {
+      enabled: true,
+      endpoint: "http://localhost:15151",
+      apiKey: "secret",
+    },
+  });
+  assert.equal(
+    preferenceValues.get("downloadit.abdm.endpoint"),
+    "http://localhost:15151/",
+  );
+  assert.equal(preferenceValues.get("downloadit.abdm.apiKey"), "secret");
+  assert.equal(service.readSettings().abdm.apiKey, "secret");
+
+  preferenceLocks.add("downloadit.abdm.apiKey");
+  await assert.rejects(
+    service.applySettings({
+      abdm: {
+        enabled: true,
+        endpoint: "http://localhost:15151/",
+        apiKey: "changed",
+      },
+    }),
+    /AB Download Manager apiKey preference is locked/i,
+  );
+  preferenceLocks.clear();
+
+  const snapshot = await service.applySettings({ abdm: { enabled: false } });
+  assert.equal(preferenceValues.get("downloadit.abdm.enabled"), false);
+  assert.equal(preferenceValues.has("downloadit.abdm.endpoint"), false);
+  assert.equal(preferenceValues.has("downloadit.abdm.apiKey"), false);
+  assert.equal(snapshot.abdm.enabled, false);
+});
+
+test("saving ABDM settings starts a probe for the manager list", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService("linux");
+  service.sendABDMRequest = async (...args) => {
+    assert.deepEqual(args, [
+      "GET",
+      "http://127.0.0.1:15151/queues",
+      null,
+      "secret",
+      3000,
+    ]);
+    return { status: 200, text: "[]" };
+  };
+
+  const snapshot = await service.applySettings({
+    abdm: {
+      enabled: true,
+      endpoint: "http://127.0.0.1:15151/",
+      apiKey: "secret",
+    },
+  });
+  assert.equal(snapshot.abdm.online, false);
+  const refresh = service.builtInRefreshPromise;
+  assert.ok(refresh);
+  await refresh;
+  assert.equal(service.createABDMDescriptor().available, true);
+  assert.deepEqual(service.managers.map(downloader => downloader.name), [
+    "AB Download Manager",
+    "Firefox",
+  ]);
+});
+
+test("saving ABDM settings replaces a stale built-in refresh", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  preferenceValues.set("downloadit.abdm.enabled", true);
+  preferenceValues.set("downloadit.abdm.endpoint", "http://127.0.0.1:15151/");
+  preferenceValues.set("downloadit.abdm.apiKey", "old-key");
+  const service = createSettingsService("linux");
+  let finishOldProbe;
+  service.sendABDMRequest = (_method, endpoint) => {
+    if (endpoint === "http://127.0.0.1:15151/queues") {
+      return new Promise(resolve => {
+        finishOldProbe = resolve;
+      });
+    }
+    assert.equal(endpoint, "http://127.0.0.1:15152/queues");
+    return Promise.resolve({ status: 200, text: "[]" });
+  };
+
+  const oldRefresh = service.refreshConfiguredBuiltInProtocols();
+  await service.applySettings({
+    abdm: {
+      enabled: true,
+      endpoint: "http://127.0.0.1:15152/",
+      apiKey: "new-key",
+    },
+  });
+  const newRefresh = service.builtInRefreshPromise;
+  assert.ok(newRefresh);
+  assert.notEqual(newRefresh, oldRefresh);
+  await newRefresh;
+  assert.equal(service.createABDMDescriptor().available, true);
+
+  finishOldProbe({ status: 200, text: "[]" });
+  await oldRefresh;
+  assert.equal(service.createABDMDescriptor().available, true);
 });

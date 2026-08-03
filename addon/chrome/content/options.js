@@ -12,6 +12,7 @@ const { createXULElement } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItXUL.sys.mjs",
 );
 const {
+  ABDM_PROVIDER,
   BUILT_IN_PROTOCOLS,
   COMMAND_PLACEHOLDERS,
   COMMAND_TEMPLATE_PRESETS,
@@ -131,7 +132,19 @@ const CUSTOM_ERROR_MESSAGES = {
   "jdownloader-start-timeout": "downloadit-error-jdownloader-start-timeout",
   "jdownloader-submit-failed": "downloadit-error-jdownloader-submit",
   "jdownloader-mixed-post-data": "downloadit-error-jdownloader-mixed-post",
+  "abdm-endpoint-invalid": "downloadit-error-abdm-endpoint",
+  "abdm-api-key-invalid": "downloadit-error-abdm-api-key",
+  "abdm-unavailable": "downloadit-error-abdm-unavailable",
+  "abdm-http-error": "downloadit-error-abdm-http",
+  "abdm-response-invalid": "downloadit-error-abdm-response",
+  "abdm-submit-failed": "downloadit-error-abdm-submit",
+  "abdm-post-unsupported": "downloadit-error-abdm-post",
   "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
+};
+
+const BUILT_IN_PROTOCOL_MESSAGE_IDS = {
+  jdownloader: "downloadit-jdownloader-title",
+  abdm: "downloadit-abdm-title",
 };
 
 const MIRROR_ERROR_MESSAGES = {
@@ -416,6 +429,22 @@ function bindEvents() {
     "click",
     testJDownloader,
   );
+  document.getElementById("abdm-endpoint").addEventListener(
+    "input",
+    renderABDMEditorState,
+  );
+  document.getElementById("abdm-api-key").addEventListener(
+    "input",
+    renderABDMEditorState,
+  );
+  document.getElementById("abdm-enabled").addEventListener(
+    "change",
+    renderABDMEditorState,
+  );
+  document.getElementById("test-abdm").addEventListener(
+    "click",
+    testABDM,
+  );
   document.getElementById("custom-aria2-autostart").addEventListener(
     "change",
     renderEditorType,
@@ -649,7 +678,8 @@ function draftDownloaders() {
   const detected = (state.snapshot?.downloaders || [])
     .filter(downloader =>
       !downloader.custom &&
-      downloader.ref?.provider !== JDOWNLOADER_PROVIDER
+      downloader.ref?.provider !== JDOWNLOADER_PROVIDER &&
+      downloader.ref?.provider !== ABDM_PROVIDER
     );
   const jDownloaderDraft =
     state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER];
@@ -659,6 +689,14 @@ function draftDownloaders() {
       downloader => downloader.ref?.provider === "native",
     );
     detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, jDownloader);
+  }
+  const abdmDraft = state.draft?.builtInProtocols?.[ABDM_PROVIDER];
+  if (abdmDraft?.enabled) {
+    const abdm = state.service.createABDMDescriptor(abdmDraft);
+    const nativeIndex = detected.findIndex(
+      downloader => downloader.ref?.provider === "native",
+    );
+    detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, abdm);
   }
   const snapshotCustom = new Map(
     (state.snapshot?.downloaders || [])
@@ -845,7 +883,8 @@ function renderManagers() {
     identity.append(name, createManagerCapabilities(downloader.capabilities));
     row.append(dot, identity);
 
-    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER) {
+    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER ||
+        downloader.ref?.provider === ABDM_PROVIDER) {
       const builtInBadge = document.createElement("span");
       builtInBadge.className = "manager-badge is-built-in";
       setLocalized(builtInBadge, "downloadit-manager-built-in");
@@ -870,7 +909,8 @@ function renderManagers() {
         : "downloadit-manager-disabled");
       row.append(status);
     }
-    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER) {
+    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER ||
+        downloader.ref?.provider === ABDM_PROVIDER) {
       const actions = document.createElement("span");
       actions.className = "manager-actions";
       const configure = customActionButton(
@@ -1755,6 +1795,11 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   document.getElementById("jdownloader-launch-path").value =
     jDownloader.launchPath;
   document.getElementById("jdownloader-test-state").textContent = "";
+  const abdm = state.draft.builtInProtocols[ABDM_PROVIDER];
+  document.getElementById("abdm-enabled").checked = Boolean(abdm?.enabled);
+  document.getElementById("abdm-endpoint").value = abdm?.endpoint || "";
+  document.getElementById("abdm-api-key").value = abdm?.apiKey || "";
+  document.getElementById("abdm-test-state").textContent = "";
   document.getElementById("custom-name").value = downloader.name;
   document.getElementById("custom-enabled").checked = downloader.enabled;
   document.getElementById("custom-start-hidden").checked =
@@ -1783,7 +1828,9 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   document.getElementById("app").inert = true;
   renderDownloadToolEditor();
   const initialFocus = kind === "builtin"
-    ? document.getElementById("test-jdownloader")
+    ? builtInProtocol === ABDM_PROVIDER
+      ? document.getElementById("test-abdm")
+      : document.getElementById("test-jdownloader")
     : document.getElementById("custom-name");
   initialFocus.focus();
 }
@@ -1876,6 +1923,7 @@ function renderDownloadToolEditor() {
     );
   renderEditorType();
   renderJDownloaderEditorState();
+  renderABDMEditorState();
 }
 
 function renderJDownloaderEditorState() {
@@ -2018,14 +2066,29 @@ function saveDownloadToolEditor() {
   try {
     if (state.editor.kind === "builtin") {
       const protocol = state.editor.builtInProtocol;
-      if (protocol !== JDOWNLOADER_PROVIDER) {
+      let settings;
+      if (protocol === JDOWNLOADER_PROVIDER) {
+        settings = state.service.normalizeJDownloaderSettings({
+          endpoint: document.getElementById("jdownloader-endpoint").value,
+          launchPath: document.getElementById("jdownloader-launch-path").value,
+          autoLaunch: document.getElementById("jdownloader-auto-launch").checked,
+        });
+      } else if (protocol === ABDM_PROVIDER) {
+        const enabled = document.getElementById("abdm-enabled").checked;
+        settings = enabled
+          ? state.service.normalizeABDMSettings({
+              enabled: true,
+              endpoint: document.getElementById("abdm-endpoint").value,
+              apiKey: document.getElementById("abdm-api-key").value,
+            })
+          : {
+              enabled: false,
+              endpoint: state.draft.builtInProtocols[ABDM_PROVIDER].endpoint,
+              apiKey: state.draft.builtInProtocols[ABDM_PROVIDER].apiKey,
+            };
+      } else {
         throw new Error(`Unsupported built-in protocol: ${protocol}`);
       }
-      const settings = state.service.normalizeJDownloaderSettings({
-        endpoint: document.getElementById("jdownloader-endpoint").value,
-        launchPath: document.getElementById("jdownloader-launch-path").value,
-        autoLaunch: document.getElementById("jdownloader-auto-launch").checked,
-      });
       state.draft.builtInProtocols[protocol] = {
         ...state.draft.builtInProtocols[protocol],
         ...settings,
@@ -2082,6 +2145,46 @@ async function removeCustomDownloader(id) {
   render();
 }
 
+function renderABDMEditorState() {
+  if (!state.editor) {
+    return;
+  }
+  const protocol = getBuiltInProtocolSnapshot(ABDM_PROVIDER);
+  const locks = protocol?.locks || {};
+  const endpoint = document.getElementById("abdm-endpoint");
+  const apiKey = document.getElementById("abdm-api-key");
+  const enabled = document.getElementById("abdm-enabled");
+  const test = document.getElementById("test-abdm");
+  const lock = document.getElementById("abdm-lock");
+  const status = document.getElementById("abdm-status");
+  const statusDot = document.getElementById("abdm-status-dot");
+
+  enabled.disabled = Boolean(locks.enabled);
+  endpoint.disabled = Boolean(locks.endpoint);
+  apiKey.disabled = Boolean(locks.apiKey);
+  test.disabled = !state.service || !endpoint.value || !enabled.checked;
+  lock.hidden = !Object.values(locks).some(Boolean);
+
+  let available = false;
+  try {
+    available = state.service.createABDMDescriptor({
+      ...state.draft.builtInProtocols[ABDM_PROVIDER],
+      enabled: enabled.checked,
+      endpoint: endpoint.value,
+      apiKey: apiKey.value,
+    }).available;
+  } catch {}
+  statusDot.className = `manager-dot ${available ? "is-ready" : "is-error"}`;
+  setLocalized(
+    status,
+    available
+      ? "downloadit-abdm-status-ready"
+      : enabled.checked
+        ? "downloadit-abdm-status-unavailable"
+        : "downloadit-abdm-status-disabled",
+  );
+}
+
 async function removeBuiltInDownloader(id) {
   const protocol = BUILT_IN_PROTOCOLS.find(entry => entry.id === id);
   const settings = state.draft?.builtInProtocols?.[id];
@@ -2095,7 +2198,9 @@ async function removeBuiltInDownloader(id) {
   if (!window.confirm(message)) {
     return;
   }
-  const removedKey = state.service.createJDownloaderDescriptor(settings).key;
+  const removedKey = id === ABDM_PROVIDER
+    ? state.service.createABDMDescriptor(settings).key
+    : state.service.createJDownloaderDescriptor(settings).key;
   settings.enabled = false;
   if (state.draft.defaultManager === removedKey) {
     const fallback = draftDownloaders().find(downloader => downloader.available);
@@ -2308,6 +2413,29 @@ async function testJDownloader() {
   }
 }
 
+async function testABDM() {
+  const button = document.getElementById("test-abdm");
+  const output = document.getElementById("abdm-test-state");
+  button.disabled = true;
+  output.className = "";
+  setLocalized(output, "downloadit-abdm-testing");
+  try {
+    await state.service.testABDMConfiguration({
+      endpoint: document.getElementById("abdm-endpoint").value,
+      apiKey: document.getElementById("abdm-api-key").value,
+    });
+    output.className = "is-success";
+    setLocalized(output, "downloadit-abdm-test-success");
+  } catch (error) {
+    output.className = "is-error";
+    setLocalized(output, "downloadit-abdm-test-failed", {
+      error: await formatLocalizedError(error),
+    });
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function applySettings() {
   if (state.busy || !state.service || !state.draft) {
     return;
@@ -2328,6 +2456,7 @@ async function applySettings() {
     }
     const nextSnapshot = await state.service.applySettings(payload);
     state.snapshot = nextSnapshot;
+    watchBuiltInRefresh();
     state.initial = createSettingsState(nextSnapshot);
     state.draft = createSettingsState(nextSnapshot);
     state.defaultManagerTouched = false;
@@ -2363,9 +2492,10 @@ async function init() {
     for (const protocol of BUILT_IN_PROTOCOLS) {
       const option = document.createElement("option");
       option.value = protocol.id;
-      option.textContent = protocol.name;
+      setLocalized(option, BUILT_IN_PROTOCOL_MESSAGE_IDS[protocol.id]);
       builtInSelect.append(option);
     }
+    await document.l10n.translateFragment(builtInSelect);
     bindEvents();
     state.service = getActiveService();
     if (state.service) {

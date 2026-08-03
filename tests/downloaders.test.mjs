@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  ABDM_DEFAULT_ENDPOINT,
+  ABDM_DOWNLOADER_ID,
+  ABDM_PROVIDER,
+  ABDMConfigError,
   buildAria2Request,
+  buildABDMRequest,
   buildAria2StartupArguments,
   buildJDownloaderRequest,
   BUILT_IN_PROTOCOLS,
@@ -15,6 +20,7 @@ import {
   DownloaderProviderRegistry,
   expandCommandTemplate,
   getCustomDownloaderCapabilities,
+  getABDMCapabilities,
   getFlashGotDownloaderCapabilities,
   getJDownloaderCapabilities,
   getJDownloaderReferer,
@@ -28,6 +34,7 @@ import {
   JDOWNLOADER_PROVIDER,
   NATIVE_DOWNLOADER_ID,
   normalizeCustomDownloaderDocument,
+  normalizeABDMEndpoint,
   normalizeDownloaderCapabilities,
   normalizeJDownloaderEndpoint,
   normalizeJDownloaderJavaArguments,
@@ -234,6 +241,83 @@ test("JDownloader protocol validates loopback endpoints and discovery output", (
   }
 });
 
+test("AB Download Manager uses an independent loopback JSON protocol", () => {
+  assert.equal(ABDM_PROVIDER, "abdm");
+  assert.equal(ABDM_DOWNLOADER_ID, "abdm");
+  assert.equal(ABDM_DEFAULT_ENDPOINT, "http://127.0.0.1:15151/");
+  assert.deepEqual(getABDMCapabilities(), {
+    post: false,
+    cookies: true,
+    batch: true,
+    directory: false,
+    taskStart: true,
+  });
+  assert.equal(
+    normalizeABDMEndpoint("http://localhost:15151"),
+    "http://localhost:15151/",
+  );
+  assert.equal(
+    normalizeABDMEndpoint("http://[::1]:15151/"),
+    "http://[::1]:15151/",
+  );
+  for (const endpoint of [
+    "https://127.0.0.1:15151/",
+    "http://example.com:15151/",
+    "http://127.0.0.1:15151/api",
+    "http://127.0.0.1:15151/?token=secret",
+    "http://user@127.0.0.1:15151/",
+  ]) {
+    assert.throws(
+      () => normalizeABDMEndpoint(endpoint),
+      error => error instanceof ABDMConfigError &&
+        error.code === "abdm-endpoint-invalid",
+    );
+  }
+
+  const request = buildABDMRequest({
+    referer: "https://example.com/page",
+    dlpageReferer: "https://example.com",
+    useragent: "Firefox Test",
+    links: [{
+      url: "https://example.com/file.zip",
+      cookies: "session=1",
+      filename: "file.zip",
+      postdata: "",
+    }, {
+      url: "https://example.com/second.zip",
+      cookies: "session=2",
+      desc: "Second file",
+      postdata: "",
+    }],
+  }, { autoStartTask: false });
+  assert.deepEqual(request, {
+    items: [{
+      link: "https://example.com/file.zip",
+      headers: {
+        Cookie: "session=1",
+        Referer: "https://example.com/page",
+        "User-Agent": "Firefox Test",
+      },
+      downloadPage: "https://example.com",
+      suggestedName: "file.zip",
+    }, {
+      link: "https://example.com/second.zip",
+      headers: {
+        Cookie: "session=2",
+        Referer: "https://example.com/page",
+        "User-Agent": "Firefox Test",
+      },
+      downloadPage: "https://example.com",
+      suggestedName: "Second file",
+    }],
+    options: { silentAdd: true, silentStart: false },
+  });
+  assert.throws(
+    () => buildABDMRequest({ links: [{ url: "https://example.com/a", postdata: "x=1" }] }),
+    error => error.code === "abdm-post-unsupported",
+  );
+});
+
 test("built-in protocol catalog keeps singleton provider identity in code", () => {
   assert.deepEqual(BUILT_IN_PROTOCOLS, [{
     id: "jdownloader",
@@ -241,9 +325,16 @@ test("built-in protocol catalog keeps singleton provider identity in code", () =
     downloaderId: "jdownloader",
     name: "JDownloader",
     singleton: true,
+  }, {
+    id: "abdm",
+    provider: "abdm",
+    downloaderId: "abdm",
+    name: "AB Download Manager",
+    singleton: true,
   }]);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS), true);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[0]), true);
+  assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[1]), true);
 });
 
 test("JDownloader request bodies preserve aligned fields and task-start policy", () => {

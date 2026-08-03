@@ -5,6 +5,9 @@ export const JDOWNLOADER_PROVIDER = "jdownloader";
 export const JDOWNLOADER_DOWNLOADER_ID = "jdownloader";
 export const JDOWNLOADER_DEFAULT_ENDPOINT =
   "http://127.0.0.1:9666/flashgot";
+export const ABDM_PROVIDER = "abdm";
+export const ABDM_DOWNLOADER_ID = "abdm";
+export const ABDM_DEFAULT_ENDPOINT = "http://127.0.0.1:15151/";
 export const NATIVE_PROVIDER = "native";
 export const NATIVE_DOWNLOADER_ID = "firefox";
 
@@ -14,6 +17,13 @@ export const BUILT_IN_PROTOCOLS = Object.freeze([
     provider: JDOWNLOADER_PROVIDER,
     downloaderId: JDOWNLOADER_DOWNLOADER_ID,
     name: "JDownloader",
+    singleton: true,
+  }),
+  Object.freeze({
+    id: ABDM_PROVIDER,
+    provider: ABDM_PROVIDER,
+    downloaderId: ABDM_DOWNLOADER_ID,
+    name: "AB Download Manager",
     singleton: true,
   }),
 ]);
@@ -144,6 +154,98 @@ export function getJDownloaderCapabilities() {
     directory: true,
     taskStart: true,
   });
+}
+
+export class ABDMConfigError extends Error {
+  constructor(code, args = {}) {
+    super(code);
+    this.name = "ABDMConfigError";
+    this.code = code;
+    this.args = args;
+  }
+}
+
+export function getABDMCapabilities() {
+  return normalizeDownloaderCapabilities({
+    post: false,
+    cookies: true,
+    batch: true,
+    directory: false,
+    taskStart: true,
+  });
+}
+
+export function normalizeABDMEndpoint(value = ABDM_DEFAULT_ENDPOINT) {
+  const input = String(value).trim();
+  let url;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new ABDMConfigError("abdm-endpoint-invalid");
+  }
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const ipv4 = hostname.split(".");
+  const loopbackIPv4 = ipv4.length === 4 && ipv4[0] === "127" &&
+    ipv4.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+  const loopback = hostname === "localhost" || loopbackIPv4 || hostname === "::1";
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  if (
+    url.protocol !== "http:" ||
+    !loopback ||
+    input.includes("@") ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    path !== "/"
+  ) {
+    throw new ABDMConfigError("abdm-endpoint-invalid");
+  }
+  url.pathname = "/";
+  return url.href;
+}
+
+function abdmHeaderValue(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
+}
+
+export function buildABDMRequest(job, { autoStartTask = true } = {}) {
+  const links = Array.isArray(job?.links) ? job.links : [];
+  if (!links.length) {
+    throw new ABDMConfigError("abdm-submit-failed");
+  }
+  if (links.some(link => String(link.postdata || ""))) {
+    throw new ABDMConfigError("abdm-post-unsupported");
+  }
+
+  const downloadPage = abdmHeaderValue(job.dlpageReferer || job.referer);
+  return {
+    items: links.map(link => {
+      const headers = {};
+      const cookie = abdmHeaderValue(link.cookies);
+      const referer = abdmHeaderValue(job.referer);
+      const userAgent = abdmHeaderValue(job.useragent);
+      if (cookie) {
+        headers.Cookie = cookie;
+      }
+      if (referer) {
+        headers.Referer = referer;
+      }
+      if (userAgent) {
+        headers["User-Agent"] = userAgent;
+      }
+      return {
+        link: String(link.url || ""),
+        headers,
+        downloadPage: downloadPage || "",
+        suggestedName: abdmHeaderValue(link.filename || link.desc) || "",
+      };
+    }),
+    options: {
+      silentAdd: true,
+      silentStart: Boolean(autoStartTask),
+    },
+  };
 }
 
 export function normalizeJDownloaderEndpoint(

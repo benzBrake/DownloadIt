@@ -440,6 +440,47 @@
                 <span id="jdownloader-test-state" role="status"></span>
               </div>
             </div>
+
+            <div data-built-in-protocol-fields="abdm">
+              <div class="protocol-status-line">
+                <span id="abdm-status-dot" class="manager-dot is-error" aria-hidden="true"></span>
+                <span class="protocol-status-copy">
+                  <strong data-l10n-id="downloadit-abdm-title"></strong>
+                  <span id="abdm-status" data-l10n-id="downloadit-abdm-status-unavailable"></span>
+                </span>
+                <span id="abdm-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
+              </div>
+
+              <label class="toggle-row compact-toggle" for="abdm-enabled">
+                <input id="abdm-enabled" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-l10n-id="downloadit-abdm-enabled-title"></strong>
+                  <small data-l10n-id="downloadit-abdm-enabled-help"></small>
+                </span>
+              </label>
+
+              <details class="advanced-settings">
+                <summary data-l10n-id="downloadit-advanced-settings"></summary>
+                <div class="advanced-settings-body">
+                  <div class="editor-field">
+                    <label for="abdm-endpoint" data-l10n-id="downloadit-abdm-endpoint-label"></label>
+                    <input id="abdm-endpoint" type="url" spellcheck="false" />
+                    <p class="field-help" data-l10n-id="downloadit-abdm-endpoint-help"></p>
+                  </div>
+                  <div class="editor-field">
+                    <label for="abdm-api-key" data-l10n-id="downloadit-abdm-api-key-label"></label>
+                    <input id="abdm-api-key" type="password" autocomplete="off" spellcheck="false" />
+                    <p class="field-help" data-l10n-id="downloadit-abdm-api-key-help"></p>
+                  </div>
+                </div>
+              </details>
+
+              <div class="connection-row">
+                <button id="test-abdm" class="secondary-button" type="button" data-l10n-id="downloadit-abdm-test"></button>
+                <span id="abdm-test-state" role="status"></span>
+              </div>
+            </div>
           </section>
 
           <section id="tool-editor-custom" class="tool-editor-panel" role="tabpanel" aria-labelledby="tool-kind-custom" hidden="hidden">

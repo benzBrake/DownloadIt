@@ -155,6 +155,13 @@ test("settings dialog contains the current capability controls", () => {
     "jdownloader-detected-path",
     "test-jdownloader",
     "jdownloader-test-state",
+    "abdm-enabled",
+    "abdm-endpoint",
+    "abdm-api-key",
+    "abdm-status",
+    "abdm-lock",
+    "test-abdm",
+    "abdm-test-state",
     "refresh-managers",
     "section-auto-capture",
     "auto-capture-config-error",
@@ -275,6 +282,9 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
 
   for (const preference of [
     "downloadit.autoStartTasks",
+    "downloadit.abdm.enabled",
+    "downloadit.abdm.endpoint",
+    "downloadit.abdm.apiKey",
     "downloadit.jdownloader.enabled",
     "downloadit.jdownloader.endpoint",
     "downloadit.jdownloader.launchPath",
@@ -285,6 +295,12 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
     assert.match(service, new RegExp(preference.replaceAll(".", "\\.")));
   }
   assert.match(service, /provider: JDOWNLOADER_PROVIDER/);
+  assert.match(service, /provider: ABDM_PROVIDER/);
+  assert.match(service, /downloadViaABDM/);
+  assert.match(service, /GET/);
+  assert.match(service, /queues/);
+  assert.match(service, /add/);
+  assert.match(service, /X-Api-Key/);
   assert.match(service, /downloadViaJDownloader/);
   assert.match(service, /JDOWNLOADER_RETRY_DELAY_MS = 8000/);
   assert.match(service, /JDOWNLOADER_MAX_STARTUP_PROBES = 6/);
@@ -334,6 +350,13 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
     "jdownloader-start-timeout",
     "jdownloader-submit-failed",
     "jdownloader-mixed-post-data",
+    "abdm-endpoint-invalid",
+    "abdm-api-key-invalid",
+    "abdm-unavailable",
+    "abdm-http-error",
+    "abdm-response-invalid",
+    "abdm-submit-failed",
+    "abdm-post-unsupported",
   ];
   for (const relativePath of [
     "addon/chrome/content/options.js",
@@ -352,6 +375,10 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
     for (const text of [
       "jdownloader:jdownloader",
       "downloadit.autoStartTasks",
+      "abdm:abdm",
+      "downloadit.abdm.enabled",
+      "downloadit.abdm.endpoint",
+      "downloadit.abdm.apiKey",
       "downloadit.jdownloader.enabled",
       "downloadit.jdownloader.endpoint",
       "downloadit.jdownloader.launchPath",

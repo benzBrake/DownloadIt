@@ -43,8 +43,12 @@ import {
   getManagerOutputEncoding,
 } from "./DownloadItUtils.sys.mjs";
 import {
+  ABDM_DEFAULT_ENDPOINT,
+  ABDM_DOWNLOADER_ID,
+  ABDM_PROVIDER,
   buildAria2Request,
   buildAria2StartupArguments,
+  buildABDMRequest,
   buildJDownloaderRequest,
   BUILT_IN_PROTOCOLS,
   cloneCustomDownloaderDocument,
@@ -57,6 +61,7 @@ import {
   expandCommandTemplate,
   FLASHGOT_PROVIDER,
   getCustomDownloaderCapabilities,
+  getABDMCapabilities,
   getFlashGotDownloaderCapabilities,
   getJDownloaderCapabilities,
   getJDownloaderReferer,
@@ -65,6 +70,7 @@ import {
   inspectAria2Response,
   isLoopbackAria2URL,
   isNativeDownloadURL,
+  normalizeABDMEndpoint,
   JDOWNLOADER_DEFAULT_ENDPOINT,
   JDOWNLOADER_DOWNLOADER_ID,
   JDOWNLOADER_PROVIDER,
@@ -154,6 +160,9 @@ const PREF_LINK_GROUPS = "downloadit.linkGroups";
 const PREF_MIRRORS = "downloadit.mirrors";
 const PREF_DEVELOPER_MODE = "downloadit.developerMode";
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
+const PREF_ABDM_ENABLED = "downloadit.abdm.enabled";
+const PREF_ABDM_ENDPOINT = "downloadit.abdm.endpoint";
+const PREF_ABDM_API_KEY = "downloadit.abdm.apiKey";
 const PREF_JDOWNLOADER_ENABLED = "downloadit.jdownloader.enabled";
 const PREF_JDOWNLOADER_ENDPOINT = "downloadit.jdownloader.endpoint";
 const PREF_JDOWNLOADER_LAUNCH_PATH = "downloadit.jdownloader.launchPath";
@@ -165,6 +174,7 @@ const PREF_JDOWNLOADER_DETECTED_JAVA_ARGS =
 const JDOWNLOADER_REQUEST_TIMEOUT_MS = 3000;
 const JDOWNLOADER_RETRY_DELAY_MS = 8000;
 const JDOWNLOADER_MAX_STARTUP_PROBES = 6;
+const ABDM_REQUEST_TIMEOUT_MS = 3000;
 
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
@@ -287,6 +297,10 @@ export class DownloadItService {
     this.refreshPromise = null;
     this.builtInRefreshPromise = null;
     this.aria2StartupPromises = new Map();
+    this.abdmOnline = false;
+    this.abdmProbePromise = null;
+    this.abdmProbeEndpoint = "";
+    this.abdmProbeApiKey = "";
     this.jDownloaderOnline = false;
     this.jDownloaderProbePromise = null;
     this.jDownloaderProbeEndpoint = "";
@@ -347,6 +361,16 @@ export class DownloadItService {
         ) || null,
         download: (id, task) => this.downloadViaFlashGot(id, task),
         refresh: options => this.refreshFlashGotManagers(options),
+      },
+      {
+        provider: ABDM_PROVIDER,
+        listDownloaders: () => this.listABDMDownloaders(),
+        getDownloader: id => id === ABDM_DOWNLOADER_ID
+          ? this.listABDMDownloaders()[0] || null
+          : null,
+        download: (id, task, runtimeContext, options) =>
+          this.downloadViaABDM(id, task, options),
+        refresh: () => this.refreshABDM(),
       },
       {
         provider: CUSTOM_PROVIDER,
@@ -458,11 +482,58 @@ export class DownloadItService {
     return downloader.enabled ? [downloader] : [];
   }
 
+  createABDMDescriptor(settingsOverride = null) {
+    const currentSettings = this.getABDMSettings();
+    const settings = settingsOverride
+      ? { ...currentSettings, ...settingsOverride }
+      : currentSettings;
+    let available = false;
+    let unavailableReason = settings.enabled ? "abdm-unavailable" : "disabled";
+    try {
+      const normalized = this.normalizeABDMSettings(settings);
+      if (!normalized.enabled) {
+        unavailableReason = "disabled";
+      } else {
+        let sameConfiguration = false;
+        try {
+          sameConfiguration = normalized.endpoint ===
+            normalizeABDMEndpoint(currentSettings.endpoint) &&
+            normalized.apiKey === String(currentSettings.apiKey || "").trim();
+        } catch {}
+        if (!this.abdmOnline || !sameConfiguration) {
+          unavailableReason = "abdm-unavailable";
+        } else {
+          available = true;
+          unavailableReason = "";
+        }
+      }
+    } catch (error) {
+      unavailableReason = error?.code || "unavailable";
+    }
+    return this.createDownloaderDescriptor({
+      ref: createDownloaderRef(ABDM_PROVIDER, ABDM_DOWNLOADER_ID),
+      name: "AB Download Manager",
+      type: "abdm",
+      custom: false,
+      enabled: Boolean(settings.enabled),
+      available,
+      unavailableReason: available ? "" : unavailableReason,
+      capabilities: getABDMCapabilities(),
+    });
+  }
+
+  listABDMDownloaders() {
+    const downloader = this.createABDMDescriptor();
+    return downloader.enabled && downloader.available ? [downloader] : [];
+  }
+
   listFlashGotDownloaders() {
     if (!this.platformDefinition?.flashGotSupported) {
       return [];
     }
-    return this.flashGotManagers.map(name => this.createDownloaderDescriptor({
+    return this.flashGotManagers
+      .filter(name => name !== "AB Download Manager" || !this.abdmOnline)
+      .map(name => this.createDownloaderDescriptor({
       ref: createDownloaderRef(FLASHGOT_PROVIDER, name),
       name,
       type: "flashgot",
@@ -471,7 +542,7 @@ export class DownloadItService {
       available: true,
       unavailableReason: "",
       capabilities: getFlashGotDownloaderCapabilities(name),
-    }));
+      }));
   }
 
   listCustomDownloaders(document = this.customDownloaderDocument) {
@@ -759,6 +830,52 @@ export class DownloadItService {
     return operation;
   }
 
+  getABDMSettings() {
+    return {
+      enabled: this.isABDMEnabled(),
+      endpoint: Services.prefs.getStringPref(
+        PREF_ABDM_ENDPOINT,
+        ABDM_DEFAULT_ENDPOINT,
+      ),
+      apiKey: Services.prefs.getStringPref(PREF_ABDM_API_KEY, ""),
+      online: this.abdmOnline,
+    };
+  }
+
+  getABDMLocks() {
+    return {
+      enabled: Services.prefs.prefIsLocked(PREF_ABDM_ENABLED),
+      endpoint: Services.prefs.prefIsLocked(PREF_ABDM_ENDPOINT),
+      apiKey: Services.prefs.prefIsLocked(PREF_ABDM_API_KEY),
+    };
+  }
+
+  isABDMEnabled() {
+    if (
+      Services.prefs.prefHasUserValue(PREF_ABDM_ENABLED) ||
+      Services.prefs.prefIsLocked(PREF_ABDM_ENABLED)
+    ) {
+      return Services.prefs.getBoolPref(PREF_ABDM_ENABLED, true);
+    }
+    return true;
+  }
+
+  getBuiltInProtocolSettings(id) {
+    if (id === JDOWNLOADER_PROVIDER) {
+      return {
+        settings: this.getJDownloaderSettings(),
+        locks: this.getJDownloaderLocks(),
+      };
+    }
+    if (id === ABDM_PROVIDER) {
+      return {
+        settings: this.getABDMSettings(),
+        locks: this.getABDMLocks(),
+      };
+    }
+    throw new Error(`Unsupported built-in protocol: ${id}`);
+  }
+
   getJDownloaderSettings() {
     let detectedJavaArgs = [];
     try {
@@ -822,14 +939,11 @@ export class DownloadItService {
 
   getBuiltInProtocols() {
     return BUILT_IN_PROTOCOLS.map(protocol => {
-      if (protocol.id !== JDOWNLOADER_PROVIDER) {
-        throw new Error(`Unsupported built-in protocol: ${protocol.id}`);
-      }
+      const protocolSettings = this.getBuiltInProtocolSettings(protocol.id);
       return {
         ...protocol,
         ref: createDownloaderRef(protocol.provider, protocol.downloaderId),
-        settings: this.getJDownloaderSettings(),
-        locks: this.getJDownloaderLocks(),
+        ...protocolSettings,
       };
     });
   }
@@ -1093,6 +1207,199 @@ export class DownloadItService {
     });
   }
 
+  async refreshABDM() {
+    const settings = this.getABDMSettings();
+    if (!settings.enabled) {
+      this.abdmOnline = false;
+      return null;
+    }
+    this.abdmOnline = false;
+    return this.probeABDM({
+      endpoint: settings.endpoint,
+      apiKey: settings.apiKey,
+    });
+  }
+
+  async testABDMConfiguration({ endpoint, apiKey } = {}) {
+    return this.probeABDM({
+      endpoint,
+      apiKey,
+      persist: false,
+      updateState: false,
+    });
+  }
+
+  async probeABDM({
+    endpoint = this.getABDMSettings().endpoint,
+    apiKey = this.getABDMSettings().apiKey,
+    persist = true,
+    updateState = true,
+  } = {}) {
+    let normalizedEndpoint;
+    let normalizedApiKey;
+    try {
+      normalizedEndpoint = normalizeABDMEndpoint(endpoint);
+      normalizedApiKey = String(apiKey || "").trim();
+      if (/[\r\n]/.test(normalizedApiKey)) {
+        throw new DownloadItError("abdm-api-key-invalid");
+      }
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "abdm-endpoint-invalid",
+        error?.args || {},
+      );
+    }
+
+    const isConfigured = () => {
+      try {
+        const settings = this.getABDMSettings();
+        return settings.enabled &&
+          normalizedEndpoint === normalizeABDMEndpoint(settings.endpoint) &&
+          normalizedApiKey === String(settings.apiKey || "").trim();
+      } catch {
+        return false;
+      }
+    };
+    const shareProbe = persist && updateState && isConfigured();
+    if (
+      shareProbe &&
+      this.abdmProbePromise &&
+      this.abdmProbeEndpoint === normalizedEndpoint &&
+      this.abdmProbeApiKey === normalizedApiKey
+    ) {
+      return this.abdmProbePromise;
+    }
+
+    const probe = (async () => {
+      const response = await this.sendABDMRequest(
+        "GET",
+        `${normalizedEndpoint}queues`,
+        null,
+        normalizedApiKey,
+        ABDM_REQUEST_TIMEOUT_MS,
+      );
+      if (response.status !== 200) {
+        throw new DownloadItError("abdm-http-error", {
+          status: response.status,
+        });
+      }
+      let queues;
+      try {
+        queues = JSON.parse(response.text || "");
+      } catch {
+        throw new DownloadItError("abdm-response-invalid");
+      }
+      if (!Array.isArray(queues)) {
+        throw new DownloadItError("abdm-response-invalid");
+      }
+      if (updateState && isConfigured()) {
+        this.abdmOnline = true;
+        if (persist) {
+          this.migrateABDMDefaultManagerPreference();
+        }
+      }
+      return queues;
+    })().catch(error => {
+      if (updateState && isConfigured()) {
+        this.abdmOnline = false;
+      }
+      throw error;
+    });
+
+    if (!shareProbe) {
+      return probe;
+    }
+    const sharedProbe = probe.finally(() => {
+      if (this.abdmProbePromise === sharedProbe) {
+        this.abdmProbePromise = null;
+        this.abdmProbeEndpoint = "";
+        this.abdmProbeApiKey = "";
+      }
+    });
+    this.abdmProbePromise = sharedProbe;
+    this.abdmProbeEndpoint = normalizedEndpoint;
+    this.abdmProbeApiKey = normalizedApiKey;
+    return sharedProbe;
+  }
+
+  sendABDMRequest(
+    method,
+    endpoint,
+    body = null,
+    apiKey = "",
+    timeoutMs = ABDM_REQUEST_TIMEOUT_MS,
+  ) {
+    return new Promise((resolve, reject) => {
+      let request;
+      try {
+        const requestURL = new URL(String(endpoint));
+        const origin = normalizeABDMEndpoint(
+          `${requestURL.protocol}//${requestURL.host}/`,
+        );
+        if (
+          requestURL.username ||
+          requestURL.password ||
+          requestURL.origin !== new URL(origin).origin ||
+          requestURL.search ||
+          requestURL.hash ||
+          !requestURL.pathname.startsWith("/")
+        ) {
+          throw new DownloadItError("abdm-endpoint-invalid");
+        }
+        const normalizedApiKey = String(apiKey || "").trim();
+        if (/[\r\n]/.test(normalizedApiKey)) {
+          throw new DownloadItError("abdm-api-key-invalid");
+        }
+        request = this.createPrivilegedXMLHttpRequest();
+        request.open(method, requestURL.href, true);
+        request.timeout = timeoutMs;
+        const channel = request.channel.QueryInterface(Ci.nsIHttpChannel);
+        channel.loadFlags |= Ci.nsIRequest.LOAD_BYPASS_CACHE |
+          Ci.nsIRequest.INHIBIT_CACHING |
+          Ci.nsIRequest.LOAD_ANONYMOUS |
+          Ci.nsIChannel.LOAD_BYPASS_URL_CLASSIFIER;
+        channel.setTRRMode(Ci.nsIRequest.TRR_DISABLED_MODE);
+        channel.loadInfo.httpsOnlyStatus |= Ci.nsILoadInfo.HTTPS_ONLY_EXEMPT;
+        channel.loadInfo.allowDeprecatedSystemRequests = true;
+        channel.redirectionLimit = 0;
+        channel.allowSTS = false;
+        if (method === "POST") {
+          request.setRequestHeader(
+            "Content-Type",
+            "application/json; charset=UTF-8",
+          );
+        }
+        if (normalizedApiKey) {
+          request.setRequestHeader("X-Api-Key", normalizedApiKey);
+        }
+      } catch (error) {
+        if (error?.code === "abdm-endpoint-invalid" ||
+            error?.code === "abdm-api-key-invalid") {
+          reject(error);
+        } else {
+          reject(new DownloadItError("abdm-unavailable", {
+            error: error?.message || String(error),
+          }));
+        }
+        return;
+      }
+      request.addEventListener("load", () => {
+        resolve({ status: request.status, text: request.responseText || "" });
+      }, { once: true });
+      const fail = () => reject(new DownloadItError("abdm-unavailable"));
+      request.addEventListener("error", fail, { once: true });
+      request.addEventListener("abort", fail, { once: true });
+      request.addEventListener("timeout", fail, { once: true });
+      try {
+        request.send(body == null ? null : String(body));
+      } catch (error) {
+        reject(new DownloadItError("abdm-unavailable", {
+          error: error?.message || String(error),
+        }));
+      }
+    });
+  }
+
   async testAria2Configuration(config) {
     validateCustomDownloaderDocument({
       version: 1,
@@ -1246,6 +1553,8 @@ export class DownloadItService {
       omitCookies: Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false),
       autoStartTasks: Services.prefs.getBoolPref(PREF_AUTO_START_TASKS, true),
       builtInProtocols: this.getBuiltInProtocols(),
+      abdm: this.getABDMSettings(),
+      abdmLocked: this.getABDMLocks(),
       jdownloader: this.getJDownloaderSettings(),
       jdownloaderLocked: this.getJDownloaderLocks(),
       idmBridgeEnabled: Services.prefs.getBoolPref(
@@ -1296,6 +1605,7 @@ export class DownloadItService {
     omitCookies = false,
     autoStartTasks = null,
     builtInProtocols = null,
+    abdm = null,
     jdownloader = null,
     idmBridgeEnabled = null,
     autoCaptureRules = null,
@@ -1352,6 +1662,26 @@ export class DownloadItService {
             autoLaunch: currentJDownloader.autoLaunch,
           }
         : this.normalizeJDownloaderSettings(requestedJDownloaderInput);
+    const currentABDM = this.getABDMSettings();
+    const builtInABDM = builtInProtocols &&
+      typeof builtInProtocols === "object" &&
+      !Array.isArray(builtInProtocols)
+      ? builtInProtocols[ABDM_PROVIDER]
+      : null;
+    const requestedABDMInput = builtInABDM ?? abdm;
+    const requestedABDM = requestedABDMInput == null
+      ? {
+          enabled: currentABDM.enabled,
+          endpoint: currentABDM.endpoint,
+          apiKey: currentABDM.apiKey,
+        }
+      : requestedABDMInput.enabled === false
+        ? {
+            enabled: false,
+            endpoint: currentABDM.endpoint,
+            apiKey: currentABDM.apiKey,
+          }
+        : this.normalizeABDMSettings(requestedABDMInput);
     const currentIDMBridgeEnabled = Services.prefs.getBoolPref(
       PREF_IDM_BRIDGE,
       false,
@@ -1385,6 +1715,8 @@ export class DownloadItService {
     const requestedRef = manager ? parseDownloaderRef(manager) : null;
     const requestedDownloader = requestedRef?.provider === JDOWNLOADER_PROVIDER
       ? this.createJDownloaderDescriptor(requestedJDownloader)
+      : requestedRef?.provider === ABDM_PROVIDER
+        ? this.createABDMDescriptor(requestedABDM)
       : manager
         ? this.resolveDownloader(manager, requestedCustomDownloaders)
         : null;
@@ -1402,13 +1734,17 @@ export class DownloadItService {
     const configuredJDownloaderInvalidated =
       configuredDefaultRef?.provider === JDOWNLOADER_PROVIDER &&
       !requestedJDownloader.enabled;
+    const configuredABDMInvalidated =
+      configuredDefaultRef?.provider === ABDM_PROVIDER &&
+      !requestedABDM.enabled;
     const defaultManagerLocked = Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER);
     if (
       defaultManagerLocked &&
       (
         (defaultManagerRequested && manager !== configuredDefaultKey) ||
         configuredCustomInvalidated ||
-        configuredJDownloaderInvalidated
+        configuredJDownloaderInvalidated ||
+        configuredABDMInvalidated
       )
     ) {
       throw new Error("The default download manager preference is locked");
@@ -1429,6 +1765,12 @@ export class DownloadItService {
     for (const key of ["enabled", "endpoint", "launchPath", "autoLaunch"]) {
       if (jDownloaderLocks[key] && requestedJDownloader[key] !== currentJDownloader[key]) {
         throw new Error(`The JDownloader ${key} preference is locked`);
+      }
+    }
+    const abdmLocks = this.getABDMLocks();
+    for (const key of ["enabled", "endpoint", "apiKey"]) {
+      if (abdmLocks[key] && requestedABDM[key] !== currentABDM[key]) {
+        throw new Error(`The AB Download Manager ${key} preference is locked`);
       }
     }
     if (
@@ -1462,9 +1804,14 @@ export class DownloadItService {
       if (defaultManagerRequested) {
         nextDefault = requestedDownloader;
         updateDefault = manager !== configuredDefaultKey;
-      } else if (configuredCustomInvalidated || configuredJDownloaderInvalidated) {
+      } else if (
+        configuredCustomInvalidated ||
+        configuredJDownloaderInvalidated ||
+        configuredABDMInvalidated
+      ) {
         nextDefault = [
           ...this.listFlashGotDownloaders(),
+          ...this.listABDMDownloaders(),
           ...this.listCustomDownloaders(effectiveCustomDownloaders),
           ...(requestedJDownloader.enabled
             ? [this.createJDownloaderDescriptor(requestedJDownloader)]
@@ -1489,6 +1836,29 @@ export class DownloadItService {
     }
     if (requestedAutoStartTasks !== currentAutoStartTasks) {
       Services.prefs.setBoolPref(PREF_AUTO_START_TASKS, requestedAutoStartTasks);
+    }
+    if (requestedABDM.enabled !== currentABDM.enabled) {
+      Services.prefs.setBoolPref(PREF_ABDM_ENABLED, requestedABDM.enabled);
+    }
+    if (!requestedABDM.enabled) {
+      if (currentABDM.enabled) {
+        this.clearABDMConfiguration();
+      }
+    } else {
+      if (requestedABDM.endpoint !== currentABDM.endpoint) {
+        Services.prefs.setStringPref(PREF_ABDM_ENDPOINT, requestedABDM.endpoint);
+        this.abdmOnline = false;
+        this.abdmProbePromise = null;
+        this.abdmProbeEndpoint = "";
+        this.abdmProbeApiKey = "";
+      }
+      if (requestedABDM.apiKey !== currentABDM.apiKey) {
+        Services.prefs.setStringPref(PREF_ABDM_API_KEY, requestedABDM.apiKey);
+        this.abdmOnline = false;
+        this.abdmProbePromise = null;
+        this.abdmProbeEndpoint = "";
+        this.abdmProbeApiKey = "";
+      }
     }
     if (requestedJDownloader.enabled !== currentJDownloader.enabled) {
       Services.prefs.setBoolPref(
@@ -1558,6 +1928,10 @@ export class DownloadItService {
         JSON.stringify(requestedMirrorSettings),
       );
     }
+    // Revalidate enabled built-in protocols after their settings are saved.
+    // The settings page observes this background probe and refreshes its snapshot.
+    this.builtInRefreshPromise = null;
+    this.refreshConfiguredBuiltInProtocols();
     return this.readSettings();
   }
 
@@ -1666,6 +2040,25 @@ export class DownloadItService {
     const ref = parseDownloaderRef(raw);
     if (this.providers.getDownloader(ref)) {
       Services.prefs.setStringPref(PREF_DEFAULT_MANAGER, serializeDownloaderRef(ref));
+    }
+  }
+
+  migrateABDMDefaultManagerPreference() {
+    if (Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER)) {
+      return;
+    }
+    const ref = this.configuredDefaultRef;
+    if (
+      ref?.provider === FLASHGOT_PROVIDER &&
+      ref.id === "AB Download Manager"
+    ) {
+      Services.prefs.setStringPref(
+        PREF_DEFAULT_MANAGER,
+        serializeDownloaderRef({
+          provider: ABDM_PROVIDER,
+          id: ABDM_DOWNLOADER_ID,
+        }),
+      );
     }
   }
 
@@ -1879,6 +2272,9 @@ export class DownloadItService {
       try {
         if (protocol.id === JDOWNLOADER_PROVIDER) {
           return this.getJDownloaderSettings().enabled;
+        }
+        if (protocol.id === ABDM_PROVIDER) {
+          return this.getABDMSettings().enabled;
         }
       } catch {}
       return false;
@@ -2128,6 +2524,34 @@ export class DownloadItService {
         ? Services.prefs.getBoolPref(PREF_AUTO_START_TASKS, true)
         : true,
     };
+  }
+
+  normalizeABDMSettings(value = {}) {
+    const endpoint = normalizeABDMEndpoint(value.endpoint);
+    const apiKey = String(value.apiKey || "").trim();
+    if (/[\r\n]/.test(apiKey)) {
+      throw new DownloadItError("abdm-api-key-invalid");
+    }
+    return {
+      enabled: value.enabled !== false,
+      endpoint,
+      apiKey,
+    };
+  }
+
+  clearABDMConfiguration() {
+    for (const preference of [PREF_ABDM_ENDPOINT, PREF_ABDM_API_KEY]) {
+      if (
+        !Services.prefs.prefIsLocked(preference) &&
+        Services.prefs.prefHasUserValue(preference)
+      ) {
+        Services.prefs.clearUserPref(preference);
+      }
+    }
+    this.abdmOnline = false;
+    this.abdmProbePromise = null;
+    this.abdmProbeEndpoint = "";
+    this.abdmProbeApiKey = "";
   }
 
   async dispatchDownload(downloader, job, runtimeContexts = []) {
@@ -2742,6 +3166,70 @@ export class DownloadItService {
       },
     });
     return process;
+  }
+
+  async downloadViaABDM(
+    managerId,
+    job,
+    { autoStartTask = true } = {},
+  ) {
+    if (managerId !== ABDM_DOWNLOADER_ID) {
+      throw new DownloadItError("abdm-submit-failed");
+    }
+    let settings;
+    try {
+      const currentSettings = this.getABDMSettings();
+      if (currentSettings.enabled === false) {
+        throw new DownloadItError("abdm-unavailable");
+      }
+      settings = {
+        ...currentSettings,
+        ...this.normalizeABDMSettings(currentSettings),
+      };
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "abdm-endpoint-invalid",
+        error?.args || {},
+      );
+    }
+
+    let payload;
+    try {
+      payload = buildABDMRequest(job, { autoStartTask });
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "abdm-submit-failed",
+        error?.args || {},
+      );
+    }
+
+    await this.probeABDM({
+      endpoint: settings.endpoint,
+      apiKey: settings.apiKey,
+    });
+
+    let response;
+    try {
+      response = await this.sendABDMRequest(
+        "POST",
+        `${settings.endpoint}add`,
+        JSON.stringify(payload),
+        settings.apiKey,
+        ABDM_REQUEST_TIMEOUT_MS,
+      );
+    } catch (error) {
+      this.abdmOnline = false;
+      if (error?.code === "abdm-unavailable") {
+        throw new DownloadItError("abdm-submit-failed");
+      }
+      throw error;
+    }
+    if (response.status < 200 || response.status >= 300) {
+      throw new DownloadItError("abdm-http-error", {
+        status: response.status,
+      });
+    }
+    return { succeeded: job.links.length, failed: 0 };
   }
 
   async downloadViaJDownloader(

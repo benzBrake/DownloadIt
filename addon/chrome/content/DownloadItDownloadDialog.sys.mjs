@@ -54,6 +54,13 @@ const DOWNLOAD_ERROR_MESSAGES = {
   "jdownloader-start-timeout": "downloadit-error-jdownloader-start-timeout",
   "jdownloader-submit-failed": "downloadit-error-jdownloader-submit",
   "jdownloader-mixed-post-data": "downloadit-error-jdownloader-mixed-post",
+  "abdm-endpoint-invalid": "downloadit-error-abdm-endpoint",
+  "abdm-api-key-invalid": "downloadit-error-abdm-api-key",
+  "abdm-unavailable": "downloadit-error-abdm-unavailable",
+  "abdm-http-error": "downloadit-error-abdm-http",
+  "abdm-response-invalid": "downloadit-error-abdm-response",
+  "abdm-submit-failed": "downloadit-error-abdm-submit",
+  "abdm-post-unsupported": "downloadit-error-abdm-post",
 };
 
 function bindingAbortedResult () {

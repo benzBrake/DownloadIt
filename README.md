@@ -17,6 +17,7 @@ The project is currently being migrated. It supports Windows and Linux, and the 
 - Shows POST, cookie, batch, download-directory, and task-start capabilities for each downloader.
 - Provides an always-available Firefox downloader without routing requests through `FlashGot.exe`.
 - Supports JDownloader directly through its loopback FlashGot endpoint without routing requests through `FlashGot.exe`.
+- Supports AB Download Manager directly through its loopback HTTP API without routing requests through `FlashGot.exe`.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
@@ -48,6 +49,7 @@ DownloadIt background service
         ├── native provider ── Firefox Downloads API
         ├── flashgot provider (Windows) ── temporary job JSON ── FlashGot.exe
         ├── jdownloader provider ── loopback HTTP `/flashgot`
+        ├── abdm provider ── loopback HTTP `/queues` and `/add`
         ├── custom command provider ── native Firefox process API
         └── custom aria2 provider ── JSON-RPC
 ```
@@ -71,6 +73,7 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 | Custom commands | Supported | Supported |
 | aria2 JSON-RPC and optional local startup | Supported | Supported |
 | JDownloader endpoint and optional local startup | Supported | Supported |
+| AB Download Manager loopback API | Supported | Supported |
 | FlashGot manager discovery and task submission | Supported | Not used |
 | Packaged `FlashGot.exe` deployment | Enabled | Skipped |
 
@@ -114,7 +117,7 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.1.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -126,7 +129,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, JDownloader endpoint validation and startup orchestration, the toolbar PanelView and context-menu insertion point, allow/deny automatic-capture matching and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, JDownloader and AB Download Manager endpoint validation, request construction and startup orchestration, the toolbar PanelView and context-menu insertion point, allow/deny automatic-capture matching and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature.
 
@@ -153,13 +156,16 @@ The discovered-tool list in settings shows capability metadata for the active Do
 
 Open the settings page from the toolbar panel, from “DownloadIt Settings” in the context menu, or from the extension settings in `about:addons`.
 
-The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader is a singleton: adding it enables one configured entry, configuring it reopens that entry, and removing it resets its saved settings and detection cache after the draft is applied. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
+The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader and AB Download Manager are singletons: configuring either one reopens its entry, and removing it disables and clears its namespaced settings. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
 
 | Preference | Type | Description |
 | --- | --- | --- |
 | `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"native","id":"firefox"}`, `{"provider":"jdownloader","id":"jdownloader"}`, `{"provider":"flashgot","id":"Internet Download Manager"}`, or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
-| `downloadit.autoStartTasks` | Boolean | Requests automatic start for providers with the task-start capability. The default is `true`; currently only JDownloader consumes it. |
+| `downloadit.autoStartTasks` | Boolean | Requests automatic start for providers with the task-start capability. The default is `true`; JDownloader and AB Download Manager consume it. |
+| `downloadit.abdm.enabled` | Boolean | Enables the AB Download Manager loopback provider. The provider only probes an already-running service and never starts it. |
+| `downloadit.abdm.endpoint` | String | AB Download Manager API endpoint. Only HTTP loopback URLs are accepted; the default is `http://127.0.0.1:15151/`. |
+| `downloadit.abdm.apiKey` | String | Optional API key sent as `X-Api-Key`; it is not shared with JDownloader or FlashGot. |
 | `downloadit.jdownloader.enabled` | Boolean | Controls whether the JDownloader built-in-protocol integration is configured and shown. New installations default to `false`; existing JDownloader preferences or a JDownloader default selection are treated as an enabled legacy configuration until explicitly removed. |
 | `downloadit.jdownloader.endpoint` | String | JDownloader FlashGot endpoint. The default is `http://127.0.0.1:9666/flashgot`. |
 | `downloadit.jdownloader.launchPath` | String | Optional absolute path to a JDownloader Windows `.exe`, Linux executable launcher, or `.jar`; a manual value overrides detected installation data. |
@@ -214,6 +220,14 @@ A successful GET response must contain exactly two non-empty lines: an absolute 
 When a submission finds the endpoint offline and automatic startup is enabled, a selected native launcher is run directly through Firefox's process API. On Windows, JAR startup checks the same-named `.exe`, `JDownloader2.exe`, `JDownloader 2.exe`, and `JDownloader.exe`, then bundled `jre`/`runtime` directories, `JAVA_HOME`, JavaSoft registry homes, and Windows System32, preferring `javaw.exe` to `java.exe`. On Linux, it first checks executable sibling launchers named `JDownloader2` and `JDownloader`, then bundled `jre`/`runtime`, `JAVA_HOME/bin/java`, and each directory in `PATH` for an executable `java`. Java receives only the validated JVM arguments plus `-jar <path>`; no command shell is involved. Concurrent submissions share one startup wait. DownloadIt probes every eight seconds up to six times, then performs each submission POST only once after readiness so a retry cannot duplicate a task.
 
 The UTF-8 form sends newline-aligned `urls`, `descriptions`, and `fnames`, plus `package=DownloadIt`, the task referrer (or download-page URL), and Firefox's preferred download directory when readable. `autostart` follows `downloadit.autoStartTasks`; disabling it does not change any provider without the task-start capability. A batch sends cookies only when every link has the same cookie string, otherwise cookies are omitted for the whole batch. POST data is omitted when all links are empty and sent when all links are identical; mixed or partially different POST bodies reject the batch before probing or launching JDownloader. Download and archive passwords (`dpass` and `apass`) are not implemented.
+
+### AB Download Manager provider
+
+The `abdm:abdm` provider uses AB Download Manager's local HTTP API directly. An enabled configuration probes `GET /queues` in the background; concurrent probes for the same endpoint and API key share one request, and stale results cannot change the state after either value changes. Connection tests probe the draft values without saving them. Requests use HTTP loopback only, disable redirects, bypass the HTTP cache, and never start the AB Download Manager process.
+
+Tasks are submitted to `POST /add` as JSON. Each item contains `link`, `headers`, `downloadPage`, and `suggestedName`; cookies, Referer, and User-Agent are passed through the item headers. `downloadit.autoStartTasks` maps to the request's `options.silentStart`, while `silentAdd` is always `true`. AB Download Manager does not receive caller-selected directories or POST request bodies; the provider reports those capabilities as unsupported and rejects a task when its POST body cannot be passed through.
+
+On Windows, `FlashGot.exe --list-json` may still report `AB Download Manager`. The native provider hides that exact FlashGot entry while its API is online and leaves it visible as a fallback while the API is offline. If the old default is the FlashGot `AB Download Manager` entry, a successful native probe migrates it to `{"provider":"abdm","id":"abdm"}` unless the default preference is locked.
 
 ### IDM local protocol compatibility
 
@@ -270,7 +284,7 @@ addon/
     ├── DownloadItPanelView.sys.mjs      # Native toolbar panel behavior
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
-    ├── DownloadItDownloaders.sys.mjs    # Provider references, JDownloader/aria2 protocols, custom schema, and templates
+    ├── DownloadItDownloaders.sys.mjs    # Provider references, JDownloader/ABDM/aria2 protocols, custom schema, and templates
     ├── DownloadItMirrors.sys.mjs        # Mirror adapter registry, settings validation, and task rewriting
     ├── DownloadItGitHubMirror.sys.mjs   # GitHub file-URL adapter
     ├── DownloadItIDMBridge.sys.mjs      # Firefox request hook and loopback response bridge

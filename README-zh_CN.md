@@ -17,6 +17,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 显示每个下载器对 POST、Cookie、批量提交、下载目录和任务启动控制的支持情况。
 - 提供始终可用且不经过 `FlashGot.exe` 的 Firefox 内建下载器。
 - 通过 JDownloader 的本地 FlashGot 端点直接集成，不经过 `FlashGot.exe`。
+- 通过 AB Download Manager 的本地 HTTP API 直接集成，不经过 `FlashGot.exe`。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
@@ -48,6 +49,7 @@ DownloadIt 后台服务
         ├── native provider ── Firefox Downloads API
         ├── flashgot provider（Windows）── 临时任务 JSON ── FlashGot.exe
         ├── jdownloader provider ── 回环 HTTP `/flashgot`
+        ├── abdm provider ── 回环 HTTP `/queues` 和 `/add`
         ├── 自定义命令 provider ── Firefox 原生进程 API
         └── 自定义 aria2 provider ── JSON-RPC
 ```
@@ -71,6 +73,7 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 | 自定义命令 | 支持 | 支持 |
 | aria2 JSON-RPC 与可选本地启动 | 支持 | 支持 |
 | JDownloader 端点与可选本地启动 | 支持 | 支持 |
+| AB Download Manager 回环 API | 支持 | 支持 |
 | FlashGot 下载器发现与任务提交 | 支持 | 不使用 |
 | 部署包内 `FlashGot.exe` | 启用 | 跳过 |
 
@@ -114,7 +117,7 @@ Linux：
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.1.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -126,7 +129,7 @@ DownloadIt 从 `2.0.0` 开始使用自己的版本线；继承自 FlashGot 的�
 node --test .\tests\*.test.mjs
 ```
 
-测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型与后缀筛选、选择状态、下载管理器解析、JDownloader 端点校验与启动编排、工具栏 PanelView 与右键菜单插入点、自动接管黑白名单判定与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
+测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型与后缀筛选、选择状态、下载管理器解析、JDownloader 与 AB Download Manager 端点校验、请求构造和启动编排、工具栏 PanelView 与右键菜单插入点、自动接管黑白名单判定与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
 
 DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。
 
@@ -153,13 +156,16 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
-下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader 是单例：添加操作会启用唯一的配置条目，配置操作会重新打开该条目，移除后会在应用草稿时重置已保存设置和检测缓存。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
+下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader 和 AB Download Manager 都是单例：配置操作会重新打开对应条目，移除后会禁用并清理其独立偏好。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
 | `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"jdownloader","id":"jdownloader"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
-| `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前仅 JDownloader 使用。 |
+| `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前由 JDownloader 和 AB Download Manager 使用。 |
+| `downloadit.abdm.enabled` | 布尔值 | 启用 AB Download Manager 回环 provider。该 provider 只探测已经运行的服务，不会启动它。 |
+| `downloadit.abdm.endpoint` | 字符串 | AB Download Manager API 端点。只接受 HTTP 回环 URL；默认值为 `http://127.0.0.1:15151/`。 |
+| `downloadit.abdm.apiKey` | 字符串 | 可选 API key，会作为 `X-Api-Key` 发送；不会与 JDownloader 或 FlashGot 共用。 |
 | `downloadit.jdownloader.enabled` | 布尔值 | 控制是否已配置并显示 JDownloader 内建协议集成。新安装默认为 `false`；已有 JDownloader 偏好或将 JDownloader 设为默认工具的旧配置会迁移为启用状态，直到用户明确移除。 |
 | `downloadit.jdownloader.endpoint` | 字符串 | JDownloader FlashGot 端点；默认值为 `http://127.0.0.1:9666/flashgot`。 |
 | `downloadit.jdownloader.launchPath` | 字符串 | 可选的 JDownloader Windows `.exe`、Linux 可执行启动器或 `.jar` 绝对路径；手动值优先于检测结果。 |
@@ -214,6 +220,14 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 提交时若端点离线且已启用自动启动，手动选择的本地启动器会由 Firefox 进程 API 直接运行。Windows 上启动 JAR 时，DownloadIt 会依次检查同名 `.exe`、`JDownloader2.exe`、`JDownloader 2.exe` 和 `JDownloader.exe`，然后查找包内 `jre`/`runtime`、`JAVA_HOME`、JavaSoft 注册表路径和 Windows System32，每处优先 `javaw.exe`，其次 `java.exe`。Linux 上会先检查同目录且具有执行权限的 `JDownloader2` 和 `JDownloader`，再依次查找包内 `jre`/`runtime`、`JAVA_HOME/bin/java` 以及 `PATH` 各目录中的可执行 `java`。Java 只接收已验证的 JVM 参数和 `-jar <路径>`，不会经过命令 shell。并发提交共享一次启动等待；DownloadIt 每 8 秒探测一次，最多 6 次，就绪后每个提交只 POST 一次，避免重试造成重复任务。
 
 UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发送 `package=DownloadIt`、任务 Referer（缺失时使用下载页面 URL）以及可读取时的 Firefox 首选下载目录。`autostart` 取自 `downloadit.autoStartTasks`；关闭该偏好不会改变不具备任务启动能力的其他 provider。批量任务只有在所有链接 Cookie 完全相同时才发送 Cookie，否则整批省略。POST 数据全部为空时省略，全部相同时发送；混合或部分不同的 POST 正文会在探测或启动 JDownloader 之前拒绝该批次。下载密码和压缩包密码（`dpass`、`apass`）尚未实现。
+
+### AB Download Manager provider
+
+`abdm:abdm` provider 直接使用 AB Download Manager 的本地 HTTP API。启用后会在后台探测 `GET /queues`；相同 endpoint 和 API key 的并发探测会共享一次请求，endpoint 或 API key 变化后旧结果不会更新状态。连接测试只探测草稿值，不保存配置。请求仅允许 HTTP 回环地址，禁止重定向并绕过 HTTP 缓存，且不会启动 AB Download Manager 进程。
+
+任务通过 `POST /add` 以 JSON 提交。每个 item 包含 `link`、`headers`、`downloadPage` 和 `suggestedName`；Cookie、Referer 和 User-Agent 会放入 item headers。`downloadit.autoStartTasks` 映射为请求 `options.silentStart`，`silentAdd` 始终为 `true`。AB Download Manager 不接收调用方指定的下载目录或 POST 请求正文，因此能力会标记为不支持，并拒绝无法完整传递的 POST 任务。
+
+在 Windows 上，`FlashGot.exe --list-json` 仍可能返回 `AB Download Manager`。原生 provider 在线时会隐藏这个完全同名的 FlashGot 条目，离线时保留它作为回退路径。如果旧默认值是 FlashGot 的 `AB Download Manager` 条目，原生探测成功后会将其迁移为 `{"provider":"abdm","id":"abdm"}`，但不会修改被锁定的默认偏好。
 
 ### IDM 本地协议兼容
 
