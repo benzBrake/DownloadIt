@@ -224,6 +224,7 @@ function createSettingsService(platform = "windows") {
   service.abdmProbePromise = null;
   service.abdmProbeEndpoint = "";
   service.abdmProbeApiKey = "";
+  service.abdmStartupPromise = null;
   service.xdmOnline = false;
   service.xdmProbePromise = null;
   service.xdmStartupPromise = null;
@@ -1947,6 +1948,134 @@ test("ABDM submission uses API key, task headers, and silentStart", async () => 
   );
 });
 
+test("ABDM starts a selected launcher after an unavailable probe", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  assert.equal(service.createABDMDescriptor({
+    enabled: true,
+    launchPath: "C:\\ABDM\\ABDownloadManager.exe",
+  }).available, true);
+  const launches = [];
+  service.startDetachedProcess = (...args) => launches.push(args);
+  service.probeABDM = async options => {
+    assert.equal(options.endpoint, "http://127.0.0.1:15152/");
+    assert.equal(options.apiKey, "draft-key");
+    return [];
+  };
+  const delays = [];
+  await service.ensureABDMRunning({
+    enabled: true,
+    endpoint: "http://127.0.0.1:15152/",
+    apiKey: "draft-key",
+    launchPath: "C:\\ABDM\\ABDownloadManager.exe",
+  }, {
+    delay: async milliseconds => delays.push(milliseconds),
+  });
+  assert.deepEqual(launches, [[
+    "C:\\ABDM\\ABDownloadManager.exe",
+    [],
+    null,
+    false,
+    { validateFile: false },
+  ]]);
+  assert.deepEqual(delays, [1000]);
+  assert.equal(service.abdmStartupPromise, null);
+});
+
+test("ABDM shares a pending launcher start", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  let launches = 0;
+  service.startDetachedProcess = () => {
+    launches++;
+  };
+  let finishProbe;
+  service.probeABDM = () => new Promise(resolve => {
+    finishProbe = resolve;
+  });
+  const settings = {
+    enabled: true,
+    launchPath: "C:\\ABDM\\ABDownloadManager.exe",
+  };
+  const first = service.ensureABDMRunning(settings, { delay: async () => {} });
+  const second = service.ensureABDMRunning(settings, { delay: async () => {} });
+  await Promise.resolve();
+  assert.equal(launches, 1);
+  finishProbe([]);
+  await Promise.all([first, second]);
+  assert.equal(service.abdmStartupPromise, null);
+});
+
+test("draft XDM and ABDM connection tests do not change online state", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  service.sendXDMRequest = async () => ({
+    status: 200,
+    text: '{"enabled":true}',
+  });
+  await service.testXDMConfiguration();
+  assert.equal(service.xdmOnline, false);
+
+  service.sendABDMRequest = async () => ({ status: 200, text: "[]" });
+  await service.testABDMConfiguration();
+  assert.equal(service.abdmOnline, false);
+});
+
+test("ABDM connection tests start a draft path only after an offline result", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  const probeOptions = [];
+  let probeCount = 0;
+  service.probeABDM = async options => {
+    probeOptions.push(options);
+    probeCount++;
+    if (probeCount === 1) {
+      throw new DownloadItError("abdm-unavailable");
+    }
+    return [];
+  };
+  let startupSettings;
+  let startupOptions;
+  service.ensureABDMRunning = async (settings, options) => {
+    startupSettings = settings;
+    startupOptions = options;
+  };
+  assert.deepEqual(await service.testABDMConfiguration({
+    launchPath: "C:\\ABDM\\ABDownloadManager.exe",
+  }), []);
+  assert.equal(probeCount, 2);
+  assert.equal(startupSettings.launchPath, "C:\\ABDM\\ABDownloadManager.exe");
+  assert.deepEqual(startupOptions.probeOptions, {
+    persist: false,
+    updateState: false,
+  });
+  assert.deepEqual(probeOptions, [{
+    endpoint: "http://127.0.0.1:15151/",
+    apiKey: "",
+    persist: false,
+    updateState: false,
+  }, {
+    endpoint: "http://127.0.0.1:15151/",
+    apiKey: "",
+    persist: false,
+    updateState: false,
+  }]);
+});
+
+test("ABDM accepts an absolute manual launch path without Firefox file enumeration", () => {
+  const service = createSettingsService("linux");
+  const settings = service.normalizeABDMSettings({
+    enabled: true,
+    launchPath: "/opt/abdm/ab-download-manager",
+  });
+  assert.equal(settings.launchPath, "/opt/abdm/ab-download-manager");
+  assert.equal(service.createABDMDescriptor(settings).available, true);
+  assert.throws(
+    () => service.normalizeABDMSettings({ launchPath: "ab-download-manager" }),
+    error => error.code === "abdm-launch-path-invalid",
+  );
+});
+
 test("XDM probes enabled local state and submits its browser payload", async () => {
   preferenceValues.clear();
   preferenceLocks.clear();
@@ -2308,6 +2437,7 @@ test("ABDM preferences normalize, honor locks, and clear on disable", async () =
       enabled: true,
       endpoint: "http://localhost:15151",
       apiKey: "secret",
+      launchPath: "C:\\ABDM\\ABDownloadManager.exe",
     },
   });
   assert.equal(
@@ -2315,6 +2445,10 @@ test("ABDM preferences normalize, honor locks, and clear on disable", async () =
     "http://localhost:15151/",
   );
   assert.equal(preferenceValues.get("downloadit.abdm.apiKey"), "secret");
+  assert.equal(
+    preferenceValues.get("downloadit.abdm.launchPath"),
+    "C:\\ABDM\\ABDownloadManager.exe",
+  );
   assert.equal(service.readSettings().abdm.apiKey, "secret");
 
   preferenceLocks.add("downloadit.abdm.apiKey");
@@ -2330,10 +2464,25 @@ test("ABDM preferences normalize, honor locks, and clear on disable", async () =
   );
   preferenceLocks.clear();
 
+  preferenceLocks.add("downloadit.abdm.launchPath");
+  await assert.rejects(
+    service.applySettings({
+      abdm: {
+        enabled: true,
+        endpoint: "http://localhost:15151/",
+        apiKey: "secret",
+        launchPath: "C:\\ABDM\\Changed.exe",
+      },
+    }),
+    /AB Download Manager launchPath preference is locked/i,
+  );
+  preferenceLocks.clear();
+
   const snapshot = await service.applySettings({ abdm: { enabled: false } });
   assert.equal(preferenceValues.get("downloadit.abdm.enabled"), false);
   assert.equal(preferenceValues.has("downloadit.abdm.endpoint"), false);
   assert.equal(preferenceValues.has("downloadit.abdm.apiKey"), false);
+  assert.equal(preferenceValues.has("downloadit.abdm.launchPath"), false);
   assert.equal(snapshot.abdm.enabled, false);
 });
 

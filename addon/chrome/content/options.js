@@ -140,6 +140,9 @@ const CUSTOM_ERROR_MESSAGES = {
   "abdm-response-invalid": "downloadit-error-abdm-response",
   "abdm-submit-failed": "downloadit-error-abdm-submit",
   "abdm-post-unsupported": "downloadit-error-abdm-post",
+  "abdm-launch-path-invalid": "downloadit-error-abdm-path",
+  "abdm-launch-failed": "downloadit-error-abdm-launch",
+  "abdm-start-timeout": "downloadit-error-abdm-start-timeout",
   "xdm-unavailable": "downloadit-error-xdm-unavailable",
   "xdm-disabled": "downloadit-error-xdm-disabled",
   "xdm-http-error": "downloadit-error-xdm-http",
@@ -448,6 +451,18 @@ function bindEvents() {
     "click",
     enableXDMPathInput,
   );
+  document.getElementById("browse-abdm-path").addEventListener(
+    "click",
+    browseABDMPath,
+  );
+  document.getElementById("clear-abdm-path").addEventListener(
+    "click",
+    clearABDMPath,
+  );
+  document.getElementById("edit-abdm-path").addEventListener(
+    "click",
+    enableABDMPathInput,
+  );
   document.getElementById("test-jdownloader").addEventListener(
     "click",
     testJDownloader,
@@ -462,6 +477,10 @@ function bindEvents() {
   );
   document.getElementById("abdm-enabled").addEventListener(
     "change",
+    renderABDMEditorState,
+  );
+  document.getElementById("abdm-launch-path").addEventListener(
+    "input",
     renderABDMEditorState,
   );
   document.getElementById("test-abdm").addEventListener(
@@ -1844,6 +1863,9 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   document.getElementById("abdm-enabled").checked = Boolean(abdm?.enabled);
   document.getElementById("abdm-endpoint").value = abdm?.endpoint || "";
   document.getElementById("abdm-api-key").value = abdm?.apiKey || "";
+  const abdmLaunchPath = document.getElementById("abdm-launch-path");
+  abdmLaunchPath.value = abdm?.launchPath || "";
+  abdmLaunchPath.readOnly = true;
   document.getElementById("abdm-test-state").textContent = "";
   const xdm = state.draft.builtInProtocols[XDM_PROVIDER];
   document.getElementById("xdm-enabled").checked = Boolean(xdm?.enabled);
@@ -2134,11 +2156,13 @@ function saveDownloadToolEditor() {
               enabled: true,
               endpoint: document.getElementById("abdm-endpoint").value,
               apiKey: document.getElementById("abdm-api-key").value,
+              launchPath: document.getElementById("abdm-launch-path").value,
             })
           : {
               enabled: false,
               endpoint: state.draft.builtInProtocols[ABDM_PROVIDER].endpoint,
               apiKey: state.draft.builtInProtocols[ABDM_PROVIDER].apiKey,
+              launchPath: state.draft.builtInProtocols[ABDM_PROVIDER].launchPath,
             };
       } else if (protocol === XDM_PROVIDER) {
         settings = state.service.normalizeXDMSettings({
@@ -2151,7 +2175,7 @@ function saveDownloadToolEditor() {
       state.draft.builtInProtocols[protocol] = {
         ...state.draft.builtInProtocols[protocol],
         ...settings,
-        enabled: protocol === XDM_PROVIDER ? settings.enabled : true,
+        enabled: settings.enabled,
       };
       closeDownloadToolEditor();
       clearFeedback();
@@ -2213,6 +2237,10 @@ function renderABDMEditorState() {
   const endpoint = document.getElementById("abdm-endpoint");
   const apiKey = document.getElementById("abdm-api-key");
   const enabled = document.getElementById("abdm-enabled");
+  const launchPath = document.getElementById("abdm-launch-path");
+  const browse = document.getElementById("browse-abdm-path");
+  const edit = document.getElementById("edit-abdm-path");
+  const clear = document.getElementById("clear-abdm-path");
   const test = document.getElementById("test-abdm");
   const lock = document.getElementById("abdm-lock");
   const status = document.getElementById("abdm-status");
@@ -2221,23 +2249,33 @@ function renderABDMEditorState() {
   enabled.disabled = Boolean(locks.enabled);
   endpoint.disabled = Boolean(locks.endpoint);
   apiKey.disabled = Boolean(locks.apiKey);
+  launchPath.disabled = Boolean(locks.launchPath);
+  browse.disabled = launchPath.disabled;
+  edit.disabled = launchPath.disabled;
+  clear.disabled = launchPath.disabled || !launchPath.value;
   test.disabled = !state.service || !endpoint.value || !enabled.checked;
   lock.hidden = !Object.values(locks).some(Boolean);
 
   let available = false;
+  let online = false;
   try {
-    available = state.service.createABDMDescriptor({
+    const settings = {
       ...state.draft.builtInProtocols[ABDM_PROVIDER],
       enabled: enabled.checked,
       endpoint: endpoint.value,
       apiKey: apiKey.value,
-    }).available;
+      launchPath: launchPath.value,
+    };
+    available = state.service.createABDMDescriptor(settings).available;
+    online = state.service.isABDMOnlineForSettings(settings);
   } catch {}
   statusDot.className = `manager-dot ${available ? "is-ready" : "is-error"}`;
   setLocalized(
     status,
     available
-      ? "downloadit-abdm-status-ready"
+      ? online
+        ? "downloadit-abdm-status-ready"
+        : "downloadit-abdm-status-startable"
       : enabled.checked
         ? "downloadit-abdm-status-unavailable"
         : "downloadit-abdm-status-disabled",
@@ -2400,6 +2438,22 @@ async function browseXDMPath() {
   renderXDMEditorState();
 }
 
+async function browseABDMPath() {
+  const linux = state.snapshot?.platform === "linux";
+  const path = await browseLocalFile("abdm-launch-path", {
+    titleId: "downloadit-browse-abdm-title",
+    filterId: linux ? "" : "downloadit-abdm-file-filter",
+    filter: linux ? "" : "*.exe",
+    application: false,
+    absolute: true,
+    includeAllFiles: linux,
+  });
+  if (path == null || !state.editor) {
+    return;
+  }
+  renderABDMEditorState();
+}
+
 function clearJDownloaderPath() {
   const protocol = getBuiltInProtocolSnapshot(JDOWNLOADER_PROVIDER);
   if (!state.editor || protocol?.locks?.launchPath) {
@@ -2418,12 +2472,32 @@ function clearXDMPath() {
   renderXDMEditorState();
 }
 
+function clearABDMPath() {
+  const protocol = getBuiltInProtocolSnapshot(ABDM_PROVIDER);
+  if (!state.editor || protocol?.locks?.launchPath) {
+    return;
+  }
+  document.getElementById("abdm-launch-path").value = "";
+  renderABDMEditorState();
+}
+
 function enableXDMPathInput() {
   const protocol = getBuiltInProtocolSnapshot(XDM_PROVIDER);
   if (!state.editor || protocol?.locks?.launchPath) {
     return;
   }
   const input = document.getElementById("xdm-launch-path");
+  input.readOnly = false;
+  input.focus();
+  input.select();
+}
+
+function enableABDMPathInput() {
+  const protocol = getBuiltInProtocolSnapshot(ABDM_PROVIDER);
+  if (!state.editor || protocol?.locks?.launchPath) {
+    return;
+  }
+  const input = document.getElementById("abdm-launch-path");
   input.readOnly = false;
   input.focus();
   input.select();
@@ -2563,6 +2637,7 @@ async function testABDM() {
     await state.service.testABDMConfiguration({
       endpoint: document.getElementById("abdm-endpoint").value,
       apiKey: document.getElementById("abdm-api-key").value,
+      launchPath: document.getElementById("abdm-launch-path").value,
     });
     output.className = "is-success";
     setLocalized(output, "downloadit-abdm-test-success");

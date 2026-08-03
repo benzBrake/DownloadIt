@@ -376,6 +376,9 @@ test("built-in provider settings and guarded local protocols are wired end to en
     "abdm-response-invalid",
     "abdm-submit-failed",
     "abdm-post-unsupported",
+    "abdm-launch-path-invalid",
+    "abdm-launch-failed",
+    "abdm-start-timeout",
     "xdm-unavailable",
     "xdm-disabled",
     "xdm-http-error",
@@ -407,6 +410,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
       "downloadit.abdm.enabled",
       "downloadit.abdm.endpoint",
       "downloadit.abdm.apiKey",
+      "downloadit.abdm.launchPath",
       "xdm:xdm",
       "downloadit.xdm.enabled",
       "downloadit.xdm.launchPath",
@@ -459,6 +463,10 @@ test("settings dialog exposes a unified download-tool editor", () => {
     "browse-xdm-path",
     "clear-xdm-path",
     "edit-xdm-path",
+    "abdm-launch-path",
+    "browse-abdm-path",
+    "clear-abdm-path",
+    "edit-abdm-path",
   ]) {
     assert.match(markup, new RegExp(`id="${id}"`));
   }
@@ -475,7 +483,10 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(markup, /data-built-in-protocol-fields="jdownloader"/);
   assert.match(markup, /data-built-in-protocol-fields="xdm"/);
   assert.match(markup, /id="xdm-launch-path"[^>]+readonly="readonly"/);
+  assert.match(markup, /id="abdm-launch-path"[^>]+readonly="readonly"/);
   assert.match(script, /function enableXDMPathInput\(\)/);
+  assert.match(script, /function enableABDMPathInput\(\)/);
+  assert.match(script, /async function browseABDMPath\(\)/);
   assert.match(
     markup,
     /<details class="advanced-settings">[\s\S]*?id="jdownloader-endpoint"[\s\S]*?<\/details>/,
@@ -493,7 +504,8 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(script, /function openDownloadToolEditor\(kind = "builtin"/);
   assert.match(script, /editingKind: id \? kind : ""/);
   assert.match(script, /state\.draft\.builtInProtocols\[protocol\] =/);
-  assert.match(script, /enabled: true/);
+  assert.match(script, /enabled: settings\.enabled/);
+  assert.doesNotMatch(script, /enabled: protocol === XDM_PROVIDER/);
   assert.match(script, /settings\.enabled = false/);
   assert.match(script, /kind === "custom" && customBlocked/);
   assert.match(

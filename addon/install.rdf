@@ -4,7 +4,7 @@
   <Description about="urn:mozilla:install-manifest">
     <em:id>downloadit@downloadit.invalid</em:id>
     <em:name>DownloadIt</em:name>
-    <em:version>2.3.0</em:version>
+    <em:version>2.4.0</em:version>
     <em:type>2</em:type>
     <em:bootstrap>true</em:bootstrap>
     <em:description>Send Firefox downloads to external download managers through DownloadIt.</em:description>

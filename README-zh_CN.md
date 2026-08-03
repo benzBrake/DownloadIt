@@ -159,16 +159,17 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
-下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager 和 Xtreme Download Manager 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。XDM 默认启用，本地服务响应或配置 XDM 启动器或 JAR 的绝对路径后即可选择。该路径只会在明确测试连接或提交下载而本地 API 离线时启动 XDM。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
+下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager 和 Xtreme Download Manager 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径。配置的路径只会在明确测试连接或提交下载而对应本地 API 离线时启动下载器。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
 | `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"jdownloader","id":"jdownloader"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
 | `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前由 JDownloader 和 AB Download Manager 使用。 |
-| `downloadit.abdm.enabled` | 布尔值 | 启用 AB Download Manager 回环 provider。该 provider 只探测已经运行的服务，不会启动它。 |
+| `downloadit.abdm.enabled` | 布尔值 | 启用 AB Download Manager 回环 provider。 |
 | `downloadit.abdm.endpoint` | 字符串 | AB Download Manager API 端点。只接受 HTTP 回环 URL；默认值为 `http://127.0.0.1:15151/`。 |
 | `downloadit.abdm.apiKey` | 字符串 | 可选 API key，会作为 `X-Api-Key` 发送；不会与 JDownloader 或 FlashGot 共用。 |
+| `downloadit.abdm.launchPath` | 字符串 | 可选的 AB Download Manager 启动器绝对路径。本地 API 离线时，DownloadIt 只会在明确测试连接或提交下载时使用该路径。 |
 | `downloadit.xdm.enabled` | 布尔值 | 启用 Xtreme Download Manager 回环 provider。它探测固定的 `http://127.0.0.1:8597/sync` 端点；默认值为 `true`。 |
 | `downloadit.xdm.launchPath` | 字符串 | 可选的 XDM 启动器或 JAR 绝对路径。Linux 下的 JAR 会使用系统 Java 运行；本地 API 离线时，DownloadIt 只会在明确测试连接或提交下载时使用该路径。 |
 | `downloadit.jdownloader.enabled` | 布尔值 | 控制是否已配置并显示 JDownloader 内建协议集成。新安装默认为 `false`；已有 JDownloader 偏好或将 JDownloader 设为默认工具的旧配置会迁移为启用状态，直到用户明确移除。 |
@@ -228,7 +229,7 @@ UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发�
 
 ### AB Download Manager provider
 
-`abdm:abdm` provider 直接使用 AB Download Manager 的本地 HTTP API。启用后会在后台探测 `GET /queues`；相同 endpoint 和 API key 的并发探测会共享一次请求，endpoint 或 API key 变化后旧结果不会更新状态。连接测试只探测草稿值，不保存配置。请求仅允许 HTTP 回环地址，禁止重定向并绕过 HTTP 缓存，且不会启动 AB Download Manager 进程。
+`abdm:abdm` provider 直接使用 AB Download Manager 的本地 HTTP API。启用后会在后台探测 `GET /queues`；相同 endpoint 和 API key 的并发探测会共享一次请求，endpoint 或 API key 变化后旧结果不会更新状态。配置绝对启动器路径后，即使 API 离线也可以选择该 provider。后台刷新不会启动 AB Download Manager。连接测试使用草稿值，不保存配置，也不改变已配置 provider 的在线状态；API 不可用且草稿中存在启动器路径时，明确测试会启动该程序并等待 API 就绪。提交下载也遵循同样的“先探测、再启动”行为。请求仅允许 HTTP 回环地址，禁止重定向并绕过 HTTP 缓存。
 
 任务通过 `POST /add` 以 JSON 提交。每个 item 包含 `link`、`headers`、`downloadPage` 和 `suggestedName`；Cookie、Referer 和 User-Agent 会放入 item headers。`downloadit.autoStartTasks` 映射为请求 `options.silentStart`，`silentAdd` 始终为 `true`。AB Download Manager 不接收调用方指定的下载目录或 POST 请求正文，因此能力会标记为不支持，并拒绝无法完整传递的 POST 任务。
 
@@ -236,7 +237,7 @@ UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发�
 
 ### Xtreme Download Manager provider
 
-`xdm:xdm` provider 直接连接 Xtreme Download Manager 固定的本地 HTTP API。它默认启用，`GET http://127.0.0.1:8597/sync` 返回包含 `enabled: true` 的有效 JSON，或 `downloadit.xdm.launchPath` 填入当前系统上的启动器或 JAR 绝对路径后即可成为可选下载器。Firefox 不会预先校验该路径，因此在文件选择器或 Firefox 文件 API 无法枚举、但实际可以运行启动器的环境中，手动输入的路径仍能使用。启动时和手动刷新下载工具时只会在后台探测该端点，相同并发探测会共享一个请求，并且请求会禁用重定向、绕过缓存。明确测试连接或提交下载遇到 API 离线时会尝试启动已配置路径并等待端点就绪；路径不可用时会在此时报告启动错误。
+`xdm:xdm` provider 直接连接 Xtreme Download Manager 固定的本地 HTTP API。它默认启用，`GET http://127.0.0.1:8597/sync` 返回包含 `enabled: true` 的有效 JSON，或 `downloadit.xdm.launchPath` 填入当前系统上的启动器或 JAR 绝对路径后即可成为可选下载器。Firefox 不会预先校验该路径，因此在文件选择器或 Firefox 文件 API 无法枚举、但实际可以运行启动器的环境中，手动输入的路径仍能使用。启动时和手动刷新下载工具时只会在后台探测该端点，相同并发探测会共享一个请求，并且请求会禁用重定向、绕过缓存。连接测试使用草稿值，不保存配置，也不改变已配置 provider 的在线状态。明确测试连接或提交下载遇到 API 离线时会尝试启动已配置路径并等待端点就绪；路径不可用时会在此时报告启动错误。
 
 单个任务通过 `POST /download` 发送 JSON，批量任务通过 `POST /link` 发送数组。DownloadIt 会转发每个 URL、Cookie、User-Agent 与 Referer，并为单个任务转发建议文件名。XDM 不接收调用方指定目录、POST 请求正文或 DownloadIt 的任务启动偏好，因此带 POST 正文的任务会在提交前被拒绝。
 

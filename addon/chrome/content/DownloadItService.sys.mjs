@@ -201,6 +201,7 @@ const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
 const PREF_ABDM_ENABLED = "downloadit.abdm.enabled";
 const PREF_ABDM_ENDPOINT = "downloadit.abdm.endpoint";
 const PREF_ABDM_API_KEY = "downloadit.abdm.apiKey";
+const PREF_ABDM_LAUNCH_PATH = "downloadit.abdm.launchPath";
 const PREF_XDM_ENABLED = "downloadit.xdm.enabled";
 const PREF_XDM_LAUNCH_PATH = "downloadit.xdm.launchPath";
 const PREF_JDOWNLOADER_ENABLED = "downloadit.jdownloader.enabled";
@@ -215,6 +216,8 @@ const JDOWNLOADER_REQUEST_TIMEOUT_MS = 3000;
 const JDOWNLOADER_RETRY_DELAY_MS = 8000;
 const JDOWNLOADER_MAX_STARTUP_PROBES = 6;
 const ABDM_REQUEST_TIMEOUT_MS = 3000;
+const ABDM_RETRY_DELAY_MS = 1000;
+const ABDM_MAX_STARTUP_PROBES = 10;
 const XDM_REQUEST_TIMEOUT_MS = 3000;
 const XDM_RETRY_DELAY_MS = 1000;
 const XDM_MAX_STARTUP_PROBES = 10;
@@ -344,6 +347,7 @@ export class DownloadItService {
     this.abdmProbePromise = null;
     this.abdmProbeEndpoint = "";
     this.abdmProbeApiKey = "";
+    this.abdmStartupPromise = null;
     this.xdmOnline = false;
     this.xdmProbePromise = null;
     this.xdmStartupPromise = null;
@@ -537,6 +541,18 @@ export class DownloadItService {
     return downloader.enabled ? [downloader] : [];
   }
 
+  isABDMOnlineForSettings(settings = this.getABDMSettings()) {
+    try {
+      const normalized = this.normalizeABDMSettings(settings);
+      const current = this.normalizeABDMSettings(this.getABDMSettings());
+      return this.abdmOnline && normalized.enabled &&
+        normalized.endpoint === current.endpoint &&
+        normalized.apiKey === current.apiKey;
+    } catch {
+      return false;
+    }
+  }
+
   createABDMDescriptor(settingsOverride = null) {
     const currentSettings = this.getABDMSettings();
     const settings = settingsOverride
@@ -549,17 +565,14 @@ export class DownloadItService {
       if (!normalized.enabled) {
         unavailableReason = "disabled";
       } else {
-        let sameConfiguration = false;
-        try {
-          sameConfiguration = normalized.endpoint ===
-            normalizeABDMEndpoint(currentSettings.endpoint) &&
-            normalized.apiKey === String(currentSettings.apiKey || "").trim();
-        } catch {}
-        if (!this.abdmOnline || !sameConfiguration) {
-          unavailableReason = "abdm-unavailable";
-        } else {
+        if (this.isABDMOnlineForSettings(normalized)) {
           available = true;
           unavailableReason = "";
+        } else if (normalized.launchPath) {
+          available = true;
+          unavailableReason = "";
+        } else {
+          unavailableReason = "abdm-unavailable";
         }
       }
     } catch (error) {
@@ -972,6 +985,7 @@ export class DownloadItService {
         ABDM_DEFAULT_ENDPOINT,
       ),
       apiKey: Services.prefs.getStringPref(PREF_ABDM_API_KEY, ""),
+      launchPath: Services.prefs.getStringPref(PREF_ABDM_LAUNCH_PATH, ""),
       online: this.abdmOnline,
     };
   }
@@ -981,6 +995,7 @@ export class DownloadItService {
       enabled: Services.prefs.prefIsLocked(PREF_ABDM_ENABLED),
       endpoint: Services.prefs.prefIsLocked(PREF_ABDM_ENDPOINT),
       apiKey: Services.prefs.prefIsLocked(PREF_ABDM_API_KEY),
+      launchPath: Services.prefs.prefIsLocked(PREF_ABDM_LAUNCH_PATH),
     };
   }
 
@@ -1010,7 +1025,17 @@ export class DownloadItService {
   }
 
   normalizeXDMSettings(value = {}) {
-    const launchPath = String(value.launchPath || "").trim();
+    return {
+      enabled: value.enabled !== false,
+      launchPath: this.normalizeLoopbackLaunchPath(
+        value.launchPath,
+        "xdm-launch-path-invalid",
+      ),
+    };
+  }
+
+  normalizeLoopbackLaunchPath(value, errorCode) {
+    const launchPath = String(value || "").trim();
     const launchPathPlatform = getAbsolutePathPlatform(launchPath);
     if (
       launchPath &&
@@ -1019,12 +1044,9 @@ export class DownloadItService {
         launchPathPlatform !== this.platformDefinition?.id
       )
     ) {
-      throw new DownloadItError("xdm-launch-path-invalid");
+      throw new DownloadItError(errorCode);
     }
-    return {
-      enabled: value.enabled !== false,
-      launchPath,
-    };
+    return launchPath;
   }
 
   clearXDMConfiguration() {
@@ -1381,6 +1403,14 @@ export class DownloadItService {
     });
   }
 
+  resolveABDMLaunch(settings = this.getABDMSettings()) {
+    const normalized = this.normalizeABDMSettings(settings);
+    if (!normalized.launchPath) {
+      return null;
+    }
+    return { executablePath: normalized.launchPath, argumentsList: [] };
+  }
+
   resolveJDownloaderLaunch(
     settings = this.getJDownloaderSettings(),
     { clearInvalidCache = true } = {},
@@ -1451,48 +1481,58 @@ export class DownloadItService {
     return this.probeXDM();
   }
 
-  async testXDMConfiguration({ launchPath } = {}) {
-    const settings = this.normalizeXDMSettings({
-      ...this.getXDMSettings(),
-      ...(launchPath === undefined ? {} : { launchPath }),
-    });
+  async testLoopbackProviderConfiguration(
+    settings,
+    { probe, ensureRunning, unavailableCode },
+  ) {
+    const probeOptions = { persist: false, updateState: false };
     try {
-      return await this.probeXDM({ persist: false, updateState: true });
+      return await probe(probeOptions);
     } catch (error) {
-      if (error?.code !== "xdm-unavailable" || !settings.launchPath) {
+      if (error?.code !== unavailableCode || !settings.launchPath) {
         throw error;
       }
-      await this.ensureXDMRunning(settings);
-      return this.probeXDM({ persist: false, updateState: true });
+      await ensureRunning(settings, { probeOptions });
+      return probe(probeOptions);
     }
   }
 
-  async ensureXDMRunning(
-    settings = this.normalizeXDMSettings(this.getXDMSettings()),
+  async ensureLoopbackProviderRunning(
+    {
+      launchPath,
+      resolveLaunch,
+      probe,
+      unavailableCode,
+      launchFailedCode,
+      startTimeoutCode,
+      startupPromiseProperty,
+      retryDelayMs,
+    },
     {
       delay = milliseconds => new Promise(resolve =>
         setTimeoutPromise(resolve, milliseconds)
       ),
-      maxProbes = XDM_MAX_STARTUP_PROBES,
+      maxProbes = 1,
+      probeOptions = {},
     } = {},
   ) {
-    if (!settings.launchPath) {
-      throw new DownloadItError("xdm-unavailable");
+    if (!launchPath) {
+      throw new DownloadItError(unavailableCode);
     }
-    if (this.xdmStartupPromise) {
-      return this.xdmStartupPromise;
+    if (this[startupPromiseProperty]) {
+      return this[startupPromiseProperty];
     }
     const promise = (async () => {
       let launch;
       try {
-        launch = this.resolveXDMLaunch(settings);
+        launch = resolveLaunch();
       } catch (error) {
-        throw new DownloadItError("xdm-launch-failed", {
+        throw new DownloadItError(launchFailedCode, {
           error: error?.message || String(error),
         });
       }
       if (!launch) {
-        throw new DownloadItError("xdm-launch-failed");
+        throw new DownloadItError(launchFailedCode);
       }
       try {
         this.startDetachedProcess(
@@ -1503,27 +1543,81 @@ export class DownloadItService {
           { validateFile: false },
         );
       } catch (error) {
-        throw new DownloadItError("xdm-launch-failed", {
+        throw new DownloadItError(launchFailedCode, {
           error: error?.message || String(error),
         });
       }
       for (let attempt = 0; attempt < maxProbes; attempt++) {
-        await delay(XDM_RETRY_DELAY_MS);
+        await delay(retryDelayMs);
         try {
-          await this.probeXDM();
+          await probe(probeOptions);
           return true;
         } catch (error) {
-          if (error?.code !== "xdm-unavailable") {
+          if (error?.code !== unavailableCode) {
             throw error;
           }
         }
       }
-      throw new DownloadItError("xdm-start-timeout");
+      throw new DownloadItError(startTimeoutCode);
     })().finally(() => {
-      this.xdmStartupPromise = null;
+      this[startupPromiseProperty] = null;
     });
-    this.xdmStartupPromise = promise;
+    this[startupPromiseProperty] = promise;
     return promise;
+  }
+
+  async ensureABDMRunning(
+    settings = this.normalizeABDMSettings(this.getABDMSettings()),
+    options = {},
+  ) {
+    return this.ensureLoopbackProviderRunning({
+      launchPath: settings.launchPath,
+      resolveLaunch: () => this.resolveABDMLaunch(settings),
+      probe: value => this.probeABDM({
+        endpoint: settings.endpoint,
+        apiKey: settings.apiKey,
+        ...value,
+      }),
+      unavailableCode: "abdm-unavailable",
+      launchFailedCode: "abdm-launch-failed",
+      startTimeoutCode: "abdm-start-timeout",
+      startupPromiseProperty: "abdmStartupPromise",
+      retryDelayMs: ABDM_RETRY_DELAY_MS,
+    }, {
+      maxProbes: ABDM_MAX_STARTUP_PROBES,
+      ...options,
+    });
+  }
+
+  async testXDMConfiguration({ launchPath } = {}) {
+    const settings = this.normalizeXDMSettings({
+      ...this.getXDMSettings(),
+      ...(launchPath === undefined ? {} : { launchPath }),
+    });
+    return this.testLoopbackProviderConfiguration(settings, {
+      probe: options => this.probeXDM(options),
+      ensureRunning: (value, options) => this.ensureXDMRunning(value, options),
+      unavailableCode: "xdm-unavailable",
+    });
+  }
+
+  async ensureXDMRunning(
+    settings = this.normalizeXDMSettings(this.getXDMSettings()),
+    options = {},
+  ) {
+    return this.ensureLoopbackProviderRunning({
+      launchPath: settings.launchPath,
+      resolveLaunch: () => this.resolveXDMLaunch(settings),
+      probe: value => this.probeXDM(value),
+      unavailableCode: "xdm-unavailable",
+      launchFailedCode: "xdm-launch-failed",
+      startTimeoutCode: "xdm-start-timeout",
+      startupPromiseProperty: "xdmStartupPromise",
+      retryDelayMs: XDM_RETRY_DELAY_MS,
+    }, {
+      maxProbes: XDM_MAX_STARTUP_PROBES,
+      ...options,
+    });
   }
 
   async probeXDM({ persist = true, updateState = true } = {}) {
@@ -1579,12 +1673,21 @@ export class DownloadItService {
     return sharedProbe;
   }
 
-  async testABDMConfiguration({ endpoint, apiKey } = {}) {
-    return this.probeABDM({
-      endpoint,
-      apiKey,
-      persist: false,
-      updateState: false,
+  async testABDMConfiguration({ endpoint, apiKey, launchPath } = {}) {
+    const settings = this.normalizeABDMSettings({
+      ...this.getABDMSettings(),
+      ...(endpoint === undefined ? {} : { endpoint }),
+      ...(apiKey === undefined ? {} : { apiKey }),
+      ...(launchPath === undefined ? {} : { launchPath }),
+    });
+    return this.testLoopbackProviderConfiguration(settings, {
+      probe: options => this.probeABDM({
+        endpoint: settings.endpoint,
+        apiKey: settings.apiKey,
+        ...options,
+      }),
+      ensureRunning: (value, options) => this.ensureABDMRunning(value, options),
+      unavailableCode: "abdm-unavailable",
     });
   }
 
@@ -2086,12 +2189,14 @@ export class DownloadItService {
           enabled: currentABDM.enabled,
           endpoint: currentABDM.endpoint,
           apiKey: currentABDM.apiKey,
+          launchPath: currentABDM.launchPath,
         }
       : requestedABDMInput.enabled === false
         ? {
             enabled: false,
             endpoint: currentABDM.endpoint,
             apiKey: currentABDM.apiKey,
+            launchPath: currentABDM.launchPath,
           }
         : this.normalizeABDMSettings(requestedABDMInput);
     const currentXDM = this.getXDMSettings();
@@ -2204,7 +2309,7 @@ export class DownloadItService {
       }
     }
     const abdmLocks = this.getABDMLocks();
-    for (const key of ["enabled", "endpoint", "apiKey"]) {
+    for (const key of ["enabled", "endpoint", "apiKey", "launchPath"]) {
       if (abdmLocks[key] && requestedABDM[key] !== currentABDM[key]) {
         throw new Error(`The AB Download Manager ${key} preference is locked`);
       }
@@ -2312,6 +2417,16 @@ export class DownloadItService {
       }
       if (requestedABDM.apiKey !== currentABDM.apiKey) {
         Services.prefs.setStringPref(PREF_ABDM_API_KEY, requestedABDM.apiKey);
+        this.abdmOnline = false;
+        this.abdmProbePromise = null;
+        this.abdmProbeEndpoint = "";
+        this.abdmProbeApiKey = "";
+      }
+      if (requestedABDM.launchPath !== currentABDM.launchPath) {
+        Services.prefs.setStringPref(
+          PREF_ABDM_LAUNCH_PATH,
+          requestedABDM.launchPath,
+        );
         this.abdmOnline = false;
         this.abdmProbePromise = null;
         this.abdmProbeEndpoint = "";
@@ -2997,11 +3112,19 @@ export class DownloadItService {
       enabled: value.enabled !== false,
       endpoint,
       apiKey,
+      launchPath: this.normalizeLoopbackLaunchPath(
+        value.launchPath,
+        "abdm-launch-path-invalid",
+      ),
     };
   }
 
   clearABDMConfiguration() {
-    for (const preference of [PREF_ABDM_ENDPOINT, PREF_ABDM_API_KEY]) {
+    for (const preference of [
+      PREF_ABDM_ENDPOINT,
+      PREF_ABDM_API_KEY,
+      PREF_ABDM_LAUNCH_PATH,
+    ]) {
       if (
         !Services.prefs.prefIsLocked(preference) &&
         Services.prefs.prefHasUserValue(preference)
@@ -3692,10 +3815,17 @@ export class DownloadItService {
       );
     }
 
-    await this.probeABDM({
-      endpoint: settings.endpoint,
-      apiKey: settings.apiKey,
-    });
+    try {
+      await this.probeABDM({
+        endpoint: settings.endpoint,
+        apiKey: settings.apiKey,
+      });
+    } catch (error) {
+      if (error?.code !== "abdm-unavailable" || !settings.launchPath) {
+        throw error;
+      }
+      await this.ensureABDMRunning(settings);
+    }
 
     let response;
     try {
