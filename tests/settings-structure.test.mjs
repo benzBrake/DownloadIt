@@ -347,7 +347,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
   assert.match(script, /createUGetDescriptor\(uGetDraft\)/);
   assert.match(
     script,
-    /provider === ABDM_PROVIDER \|\|\s*downloader\.ref\?\.provider === XDM_PROVIDER/,
+    /function isBuiltInDownloader\(downloader\) \{[\s\S]*?BUILT_IN_PROTOCOLS\.some/,
   );
   assert.match(script, /data-remove-built-in/);
   assert.match(script, /removeBuiltInDownloader/);

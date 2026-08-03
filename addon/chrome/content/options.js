@@ -845,6 +845,13 @@ function renderTaskStartSettings() {
   autoStartTasksLock.hidden = !snapshot?.autoStartTasksLocked;
 }
 
+function isBuiltInDownloader(downloader) {
+  return BUILT_IN_PROTOCOLS.some(protocol =>
+    protocol.provider === downloader.ref?.provider &&
+    protocol.downloaderId === downloader.ref?.id
+  );
+}
+
 function renderManagers() {
   const snapshot = state.snapshot;
   const downloaders = draftDownloaders();
@@ -986,9 +993,7 @@ function renderManagers() {
     identity.append(name, createManagerCapabilities(downloader.capabilities));
     row.append(dot, identity);
 
-    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER ||
-        downloader.ref?.provider === ABDM_PROVIDER ||
-        downloader.ref?.provider === XDM_PROVIDER) {
+    if (isBuiltInDownloader(downloader)) {
       const builtInBadge = document.createElement("span");
       builtInBadge.className = "manager-badge is-built-in";
       setLocalized(builtInBadge, "downloadit-manager-built-in");
@@ -1013,9 +1018,7 @@ function renderManagers() {
         : "downloadit-manager-disabled");
       row.append(status);
     }
-    if (downloader.ref?.provider === JDOWNLOADER_PROVIDER ||
-        downloader.ref?.provider === ABDM_PROVIDER ||
-        downloader.ref?.provider === XDM_PROVIDER) {
+    if (isBuiltInDownloader(downloader)) {
       const actions = document.createElement("span");
       actions.className = "manager-actions";
       const configure = customActionButton(
