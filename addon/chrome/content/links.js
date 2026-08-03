@@ -56,6 +56,11 @@ const DOWNLOAD_ERROR_MESSAGES = {
   "xdm-launch-path-invalid": "downloadit-error-xdm-path",
   "xdm-launch-failed": "downloadit-error-xdm-launch",
   "xdm-start-timeout": "downloadit-error-xdm-start-timeout",
+  "uget-unavailable": "downloadit-error-uget-unavailable",
+  "uget-launch-path-invalid": "downloadit-error-uget-path",
+  "uget-launch-failed": "downloadit-error-uget-launch",
+  "uget-submit-failed": "downloadit-error-uget-submit",
+  "uget-partial-failure": "downloadit-error-uget-partial",
 };
 
 const TYPE_MESSAGE_IDS = {

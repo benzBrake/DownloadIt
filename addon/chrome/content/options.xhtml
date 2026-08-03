@@ -528,6 +528,42 @@
                 <span id="xdm-test-state" role="status"></span>
               </div>
             </div>
+
+            <div data-built-in-protocol-fields="uget">
+              <div class="protocol-status-line">
+                <span id="uget-status-dot" class="manager-dot is-error" aria-hidden="true"></span>
+                <span class="protocol-status-copy">
+                  <strong data-l10n-id="downloadit-uget-title"></strong>
+                  <span id="uget-status" data-l10n-id="downloadit-uget-status-unavailable"></span>
+                </span>
+                <span id="uget-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
+              </div>
+
+              <label class="toggle-row compact-toggle" for="uget-enabled">
+                <input id="uget-enabled" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-l10n-id="downloadit-uget-enabled-title"></strong>
+                  <small data-l10n-id="downloadit-uget-enabled-help"></small>
+                </span>
+              </label>
+
+              <div class="editor-field">
+                <label for="uget-launch-path" data-l10n-id="downloadit-uget-path-label"></label>
+                <div class="input-action-row">
+                  <input id="uget-launch-path" type="text" readonly="readonly" />
+                  <button id="browse-uget-path" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
+                  <button id="edit-uget-path" class="icon-button" type="button" data-l10n-id="downloadit-edit-uget-path" data-l10n-attrs="title,aria-label">&#x270e;</button>
+                  <button id="clear-uget-path" class="text-button" type="button" data-l10n-id="downloadit-clear"></button>
+                </div>
+                <p class="field-help" data-l10n-id="downloadit-uget-path-help"></p>
+              </div>
+
+              <div class="connection-row">
+                <button id="test-uget" class="secondary-button" type="button" data-l10n-id="downloadit-uget-test"></button>
+                <span id="uget-test-state" role="status"></span>
+              </div>
+            </div>
           </section>
 
           <section id="tool-editor-custom" class="tool-editor-panel" role="tabpanel" aria-labelledby="tool-kind-custom" hidden="hidden">

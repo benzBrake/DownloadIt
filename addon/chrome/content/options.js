@@ -19,6 +19,7 @@ const {
   DOWNLOADER_CAPABILITY_KEYS,
   getCustomDownloaderCapabilities,
   JDOWNLOADER_PROVIDER,
+  UGET_PROVIDER,
   validateCustomDownloaderDocument,
   XDM_PROVIDER,
 } = ChromeUtils.importESModule(
@@ -152,6 +153,11 @@ const CUSTOM_ERROR_MESSAGES = {
   "xdm-launch-path-invalid": "downloadit-error-xdm-path",
   "xdm-launch-failed": "downloadit-error-xdm-launch",
   "xdm-start-timeout": "downloadit-error-xdm-start-timeout",
+  "uget-unavailable": "downloadit-error-uget-unavailable",
+  "uget-launch-path-invalid": "downloadit-error-uget-path",
+  "uget-launch-failed": "downloadit-error-uget-launch",
+  "uget-submit-failed": "downloadit-error-uget-submit",
+  "uget-partial-failure": "downloadit-error-uget-partial",
   "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
 };
 
@@ -159,6 +165,7 @@ const BUILT_IN_PROTOCOL_MESSAGE_IDS = {
   jdownloader: "downloadit-jdownloader-title",
   abdm: "downloadit-abdm-title",
   xdm: "downloadit-xdm-title",
+  uget: "downloadit-uget-title",
 };
 
 const MIRROR_ERROR_MESSAGES = {
@@ -499,6 +506,30 @@ function bindEvents() {
     "click",
     testXDM,
   );
+  document.getElementById("uget-enabled").addEventListener(
+    "change",
+    renderUGetEditorState,
+  );
+  document.getElementById("uget-launch-path").addEventListener(
+    "input",
+    renderUGetEditorState,
+  );
+  document.getElementById("browse-uget-path").addEventListener(
+    "click",
+    browseUGetPath,
+  );
+  document.getElementById("clear-uget-path").addEventListener(
+    "click",
+    clearUGetPath,
+  );
+  document.getElementById("edit-uget-path").addEventListener(
+    "click",
+    enableUGetPathInput,
+  );
+  document.getElementById("test-uget").addEventListener(
+    "click",
+    testUGet,
+  );
   document.getElementById("custom-aria2-autostart").addEventListener(
     "change",
     renderEditorType,
@@ -734,7 +765,8 @@ function draftDownloaders() {
       !downloader.custom &&
       downloader.ref?.provider !== JDOWNLOADER_PROVIDER &&
       downloader.ref?.provider !== ABDM_PROVIDER &&
-      downloader.ref?.provider !== XDM_PROVIDER
+      downloader.ref?.provider !== XDM_PROVIDER &&
+      downloader.ref?.provider !== UGET_PROVIDER
     );
   const jDownloaderDraft =
     state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER];
@@ -760,6 +792,14 @@ function draftDownloaders() {
       downloader => downloader.ref?.provider === "native",
     );
     detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, xdm);
+  }
+  const uGetDraft = state.draft?.builtInProtocols?.[UGET_PROVIDER];
+  if (uGetDraft?.enabled) {
+    const uGet = state.service.createUGetDescriptor(uGetDraft);
+    const nativeIndex = detected.findIndex(
+      downloader => downloader.ref?.provider === "native",
+    );
+    detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, uGet);
   }
   const snapshotCustom = new Map(
     (state.snapshot?.downloaders || [])
@@ -1873,6 +1913,12 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   xdmLaunchPath.value = xdm?.launchPath || "";
   xdmLaunchPath.readOnly = true;
   document.getElementById("xdm-test-state").textContent = "";
+  const uGet = state.draft.builtInProtocols[UGET_PROVIDER];
+  document.getElementById("uget-enabled").checked = Boolean(uGet?.enabled);
+  const uGetLaunchPath = document.getElementById("uget-launch-path");
+  uGetLaunchPath.value = uGet?.launchPath || "";
+  uGetLaunchPath.readOnly = true;
+  document.getElementById("uget-test-state").textContent = "";
   document.getElementById("custom-name").value = downloader.name;
   document.getElementById("custom-enabled").checked = downloader.enabled;
   document.getElementById("custom-start-hidden").checked =
@@ -1905,7 +1951,9 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
       ? document.getElementById("test-abdm")
       : builtInProtocol === XDM_PROVIDER
         ? document.getElementById("test-xdm")
-      : document.getElementById("test-jdownloader")
+        : builtInProtocol === UGET_PROVIDER
+          ? document.getElementById("test-uget")
+          : document.getElementById("test-jdownloader")
     : document.getElementById("custom-name");
   initialFocus.focus();
 }
@@ -2000,6 +2048,7 @@ function renderDownloadToolEditor() {
   renderJDownloaderEditorState();
   renderABDMEditorState();
   renderXDMEditorState();
+  renderUGetEditorState();
 }
 
 function renderJDownloaderEditorState() {
@@ -2169,6 +2218,17 @@ function saveDownloadToolEditor() {
           enabled: document.getElementById("xdm-enabled").checked,
           launchPath: document.getElementById("xdm-launch-path").value,
         });
+      } else if (protocol === UGET_PROVIDER) {
+        const enabled = document.getElementById("uget-enabled").checked;
+        settings = enabled
+          ? state.service.normalizeUGetSettings({
+              enabled: true,
+              launchPath: document.getElementById("uget-launch-path").value,
+            })
+          : {
+              enabled: false,
+              launchPath: state.draft.builtInProtocols[UGET_PROVIDER].launchPath,
+            };
       } else {
         throw new Error(`Unsupported built-in protocol: ${protocol}`);
       }
@@ -2325,6 +2385,49 @@ function renderXDMEditorState() {
   );
 }
 
+function renderUGetEditorState() {
+  if (!state.editor) {
+    return;
+  }
+  const protocol = getBuiltInProtocolSnapshot(UGET_PROVIDER);
+  const locks = protocol?.locks || {};
+  const enabled = document.getElementById("uget-enabled");
+  const launchPath = document.getElementById("uget-launch-path");
+  const browse = document.getElementById("browse-uget-path");
+  const edit = document.getElementById("edit-uget-path");
+  const clear = document.getElementById("clear-uget-path");
+  const test = document.getElementById("test-uget");
+  const lock = document.getElementById("uget-lock");
+  const status = document.getElementById("uget-status");
+  const statusDot = document.getElementById("uget-status-dot");
+
+  enabled.disabled = Boolean(locks.enabled);
+  launchPath.disabled = Boolean(locks.launchPath);
+  browse.disabled = launchPath.disabled;
+  edit.disabled = launchPath.disabled;
+  clear.disabled = launchPath.disabled || !launchPath.value;
+  test.disabled = !state.service || !enabled.checked || !launchPath.value;
+  lock.hidden = !Object.values(locks).some(Boolean);
+
+  let available = false;
+  try {
+    available = state.service.createUGetDescriptor({
+      ...state.draft.builtInProtocols[UGET_PROVIDER],
+      enabled: enabled.checked,
+      launchPath: launchPath.value,
+    }).available;
+  } catch {}
+  statusDot.className = `manager-dot ${available ? "is-ready" : "is-error"}`;
+  setLocalized(
+    status,
+    available
+      ? "downloadit-uget-status-ready"
+      : enabled.checked
+        ? "downloadit-uget-status-unavailable"
+        : "downloadit-uget-status-disabled",
+  );
+}
+
 async function removeBuiltInDownloader(id) {
   const protocol = BUILT_IN_PROTOCOLS.find(entry => entry.id === id);
   const settings = state.draft?.builtInProtocols?.[id];
@@ -2342,7 +2445,9 @@ async function removeBuiltInDownloader(id) {
     ? state.service.createABDMDescriptor(settings).key
     : id === XDM_PROVIDER
       ? state.service.createXDMDescriptor(settings).key
-      : state.service.createJDownloaderDescriptor(settings).key;
+      : id === UGET_PROVIDER
+        ? state.service.createUGetDescriptor(settings).key
+        : state.service.createJDownloaderDescriptor(settings).key;
   settings.enabled = false;
   if (state.draft.defaultManager === removedKey) {
     const fallback = draftDownloaders().find(downloader => downloader.available);
@@ -2454,6 +2559,22 @@ async function browseABDMPath() {
   renderABDMEditorState();
 }
 
+async function browseUGetPath() {
+  const linux = state.snapshot?.platform === "linux";
+  const path = await browseLocalFile("uget-launch-path", {
+    titleId: "downloadit-browse-uget-title",
+    filterId: linux ? "" : "downloadit-uget-file-filter",
+    filter: linux ? "" : "*.exe",
+    application: false,
+    absolute: true,
+    includeAllFiles: linux,
+  });
+  if (path == null || !state.editor) {
+    return;
+  }
+  renderUGetEditorState();
+}
+
 function clearJDownloaderPath() {
   const protocol = getBuiltInProtocolSnapshot(JDOWNLOADER_PROVIDER);
   if (!state.editor || protocol?.locks?.launchPath) {
@@ -2481,6 +2602,15 @@ function clearABDMPath() {
   renderABDMEditorState();
 }
 
+function clearUGetPath() {
+  const protocol = getBuiltInProtocolSnapshot(UGET_PROVIDER);
+  if (!state.editor || protocol?.locks?.launchPath) {
+    return;
+  }
+  document.getElementById("uget-launch-path").value = "";
+  renderUGetEditorState();
+}
+
 function enableXDMPathInput() {
   const protocol = getBuiltInProtocolSnapshot(XDM_PROVIDER);
   if (!state.editor || protocol?.locks?.launchPath) {
@@ -2498,6 +2628,17 @@ function enableABDMPathInput() {
     return;
   }
   const input = document.getElementById("abdm-launch-path");
+  input.readOnly = false;
+  input.focus();
+  input.select();
+}
+
+function enableUGetPathInput() {
+  const protocol = getBuiltInProtocolSnapshot(UGET_PROVIDER);
+  if (!state.editor || protocol?.locks?.launchPath) {
+    return;
+  }
+  const input = document.getElementById("uget-launch-path");
   input.readOnly = false;
   input.focus();
   input.select();
@@ -2666,6 +2807,28 @@ async function testXDM() {
   } catch (error) {
     output.className = "is-error";
     setLocalized(output, "downloadit-xdm-test-failed", {
+      error: await formatLocalizedError(error),
+    });
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function testUGet() {
+  const button = document.getElementById("test-uget");
+  const output = document.getElementById("uget-test-state");
+  button.disabled = true;
+  output.className = "";
+  setLocalized(output, "downloadit-uget-testing");
+  try {
+    await state.service.testUGetConfiguration({
+      launchPath: document.getElementById("uget-launch-path").value,
+    });
+    output.className = "is-success";
+    setLocalized(output, "downloadit-uget-test-success");
+  } catch (error) {
+    output.className = "is-error";
+    setLocalized(output, "downloadit-uget-test-failed", {
       error: await formatLocalizedError(error),
     });
   } finally {

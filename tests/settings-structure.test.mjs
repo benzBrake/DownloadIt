@@ -288,6 +288,8 @@ test("built-in provider settings and guarded local protocols are wired end to en
     "downloadit.abdm.apiKey",
     "downloadit.xdm.enabled",
     "downloadit.xdm.launchPath",
+    "downloadit.uget.enabled",
+    "downloadit.uget.launchPath",
     "downloadit.jdownloader.enabled",
     "downloadit.jdownloader.endpoint",
     "downloadit.jdownloader.launchPath",
@@ -300,8 +302,10 @@ test("built-in provider settings and guarded local protocols are wired end to en
   assert.match(service, /provider: JDOWNLOADER_PROVIDER/);
   assert.match(service, /provider: ABDM_PROVIDER/);
   assert.match(service, /provider: XDM_PROVIDER/);
+  assert.match(service, /provider: UGET_PROVIDER/);
   assert.match(service, /downloadViaABDM/);
   assert.match(service, /downloadViaXDM/);
+  assert.match(service, /downloadViaUGet/);
   assert.match(service, /GET/);
   assert.match(service, /queues/);
   assert.match(service, /add/);
@@ -328,6 +332,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
   assert.doesNotMatch(service, /channel\.setRequestHeader\(\s*"Referer"/);
   assert.match(service, /application\/x-www-form-urlencoded; charset=UTF-8/);
   assert.match(downloaders, /JDOWNLOADER_PROVIDER = "jdownloader"/);
+  assert.match(downloaders, /UGET_PROVIDER = "uget"/);
   assert.match(downloaders, /BUILT_IN_PROTOCOLS = Object\.freeze/);
   assert.match(downloaders, /taskStart: true/);
   assert.match(downloaders, /hostname === "::1"/);
@@ -339,6 +344,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
   assert.match(script, /createJDownloaderDescriptor\(jDownloaderDraft\)/);
   assert.match(script, /provider !== XDM_PROVIDER/);
   assert.match(script, /createXDMDescriptor\(xdmDraft\)/);
+  assert.match(script, /createUGetDescriptor\(uGetDraft\)/);
   assert.match(
     script,
     /provider === ABDM_PROVIDER \|\|\s*downloader\.ref\?\.provider === XDM_PROVIDER/,
@@ -388,6 +394,11 @@ test("built-in provider settings and guarded local protocols are wired end to en
     "xdm-launch-path-invalid",
     "xdm-launch-failed",
     "xdm-start-timeout",
+    "uget-unavailable",
+    "uget-launch-path-invalid",
+    "uget-launch-failed",
+    "uget-submit-failed",
+    "uget-partial-failure",
   ];
   for (const relativePath of [
     "addon/chrome/content/options.js",
@@ -414,6 +425,9 @@ test("built-in provider settings and guarded local protocols are wired end to en
       "xdm:xdm",
       "downloadit.xdm.enabled",
       "downloadit.xdm.launchPath",
+      "uget:uget",
+      "downloadit.uget.enabled",
+      "downloadit.uget.launchPath",
       "downloadit.jdownloader.enabled",
       "downloadit.jdownloader.endpoint",
       "downloadit.jdownloader.launchPath",
@@ -463,6 +477,13 @@ test("settings dialog exposes a unified download-tool editor", () => {
     "browse-xdm-path",
     "clear-xdm-path",
     "edit-xdm-path",
+    "uget-enabled",
+    "uget-status",
+    "test-uget",
+    "uget-launch-path",
+    "browse-uget-path",
+    "clear-uget-path",
+    "edit-uget-path",
     "abdm-launch-path",
     "browse-abdm-path",
     "clear-abdm-path",
@@ -482,10 +503,13 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(markup, /id="tool-editor-custom"[^>]+hidden="hidden"/);
   assert.match(markup, /data-built-in-protocol-fields="jdownloader"/);
   assert.match(markup, /data-built-in-protocol-fields="xdm"/);
+  assert.match(markup, /data-built-in-protocol-fields="uget"/);
   assert.match(markup, /id="xdm-launch-path"[^>]+readonly="readonly"/);
   assert.match(markup, /id="abdm-launch-path"[^>]+readonly="readonly"/);
   assert.match(script, /function enableXDMPathInput\(\)/);
   assert.match(script, /function enableABDMPathInput\(\)/);
+  assert.match(script, /function enableUGetPathInput\(\)/);
+  assert.match(script, /async function browseUGetPath\(\)/);
   assert.match(script, /async function browseABDMPath\(\)/);
   assert.match(
     markup,
@@ -517,7 +541,9 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(service, /builtInProtocols: this\.getBuiltInProtocols\(\)/);
   assert.match(service, /builtInProtocols\[JDOWNLOADER_PROVIDER\]/);
   assert.match(service, /builtInProtocols\[XDM_PROVIDER\]/);
+  assert.match(service, /builtInProtocols\[UGET_PROVIDER\]/);
   assert.match(script, /createXDMDescriptor/);
+  assert.match(script, /createUGetDescriptor/);
   assert.match(script, /normalizeXDMSettings/);
   assert.match(script, /configurationPath: state\.service\.normalizeCustomFilePathForStorage/);
   assert.match(downloaders, /`--conf-path=\$\{configurationPath\}`/);

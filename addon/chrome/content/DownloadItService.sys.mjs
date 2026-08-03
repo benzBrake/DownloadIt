@@ -49,6 +49,7 @@ import {
   buildAria2Request,
   buildAria2StartupArguments,
   buildABDMRequest,
+  buildUGetArguments,
   buildXDMRequest,
   buildJDownloaderRequest,
   BUILT_IN_PROTOCOLS,
@@ -63,6 +64,7 @@ import {
   FLASHGOT_PROVIDER,
   getCustomDownloaderCapabilities,
   getABDMCapabilities,
+  getUGetCapabilities,
   getXDMCapabilities,
   getFlashGotDownloaderCapabilities,
   getJDownloaderCapabilities,
@@ -91,6 +93,8 @@ import {
   XDM_DOWNLOADER_ID,
   XDM_ENDPOINT,
   XDM_PROVIDER,
+  UGET_DOWNLOADER_ID,
+  UGET_PROVIDER,
 } from "./DownloadItDownloaders.sys.mjs";
 
 const { classes: Cc, interfaces: Ci } = Components;
@@ -204,6 +208,8 @@ const PREF_ABDM_API_KEY = "downloadit.abdm.apiKey";
 const PREF_ABDM_LAUNCH_PATH = "downloadit.abdm.launchPath";
 const PREF_XDM_ENABLED = "downloadit.xdm.enabled";
 const PREF_XDM_LAUNCH_PATH = "downloadit.xdm.launchPath";
+const PREF_UGET_ENABLED = "downloadit.uget.enabled";
+const PREF_UGET_LAUNCH_PATH = "downloadit.uget.launchPath";
 const PREF_JDOWNLOADER_ENABLED = "downloadit.jdownloader.enabled";
 const PREF_JDOWNLOADER_ENDPOINT = "downloadit.jdownloader.endpoint";
 const PREF_JDOWNLOADER_LAUNCH_PATH = "downloadit.jdownloader.launchPath";
@@ -432,6 +438,15 @@ export class DownloadItService {
         refresh: () => this.refreshXDM(),
       },
       {
+        provider: UGET_PROVIDER,
+        listDownloaders: () => this.listUGetDownloaders(),
+        getDownloader: id => id === UGET_DOWNLOADER_ID
+          ? this.listUGetDownloaders()[0] || null
+          : null,
+        download: (id, task) => this.downloadViaUGet(id, task),
+        refresh: () => this.refreshUGet(),
+      },
+      {
         provider: CUSTOM_PROVIDER,
         listDownloaders: () => this.listCustomDownloaders(),
         getDownloader: id => this.listCustomDownloaders().find(
@@ -627,6 +642,39 @@ export class DownloadItService {
 
   listXDMDownloaders() {
     const downloader = this.createXDMDescriptor();
+    return downloader.enabled && downloader.available ? [downloader] : [];
+  }
+
+  createUGetDescriptor(settingsOverride = null) {
+    const currentSettings = this.getUGetSettings();
+    const settings = settingsOverride
+      ? { ...currentSettings, ...settingsOverride }
+      : currentSettings;
+    let available = false;
+    let unavailableReason = settings.enabled ? "uget-unavailable" : "disabled";
+    try {
+      const normalized = this.normalizeUGetSettings(settings);
+      available = normalized.enabled;
+      if (!normalized.enabled) {
+        unavailableReason = "disabled";
+      }
+    } catch (error) {
+      unavailableReason = error?.code || "uget-unavailable";
+    }
+    return this.createDownloaderDescriptor({
+      ref: createDownloaderRef(UGET_PROVIDER, UGET_DOWNLOADER_ID),
+      name: "uGet",
+      type: "uget",
+      custom: false,
+      enabled: Boolean(settings.enabled),
+      available,
+      unavailableReason: available ? "" : unavailableReason,
+      capabilities: getUGetCapabilities(),
+    });
+  }
+
+  listUGetDownloaders() {
+    const downloader = this.createUGetDescriptor();
     return downloader.enabled && downloader.available ? [downloader] : [];
   }
 
@@ -1070,6 +1118,45 @@ export class DownloadItService {
     return true;
   }
 
+  getUGetSettings() {
+    return {
+      enabled: this.isUGetEnabled(),
+      launchPath: Services.prefs.getStringPref(PREF_UGET_LAUNCH_PATH, ""),
+    };
+  }
+
+  getUGetLocks() {
+    return {
+      enabled: Services.prefs.prefIsLocked(PREF_UGET_ENABLED),
+      launchPath: Services.prefs.prefIsLocked(PREF_UGET_LAUNCH_PATH),
+    };
+  }
+
+  normalizeUGetSettings(value = {}) {
+    const enabled = value.enabled !== false;
+    const launchPath = this.normalizeLoopbackLaunchPath(
+      value.launchPath,
+      "uget-launch-path-invalid",
+    );
+    if (enabled && (!launchPath || !this.isLocalExecutable(launchPath))) {
+      throw new DownloadItError("uget-launch-path-invalid");
+    }
+    return { enabled, launchPath };
+  }
+
+  clearUGetConfiguration() {
+    if (
+      !Services.prefs.prefIsLocked(PREF_UGET_LAUNCH_PATH) &&
+      Services.prefs.prefHasUserValue(PREF_UGET_LAUNCH_PATH)
+    ) {
+      Services.prefs.clearUserPref(PREF_UGET_LAUNCH_PATH);
+    }
+  }
+
+  isUGetEnabled() {
+    return Services.prefs.getBoolPref(PREF_UGET_ENABLED, false);
+  }
+
   getBuiltInProtocolSettings(id) {
     if (id === JDOWNLOADER_PROVIDER) {
       return {
@@ -1087,6 +1174,12 @@ export class DownloadItService {
       return {
         settings: this.getXDMSettings(),
         locks: this.getXDMLocks(),
+      };
+    }
+    if (id === UGET_PROVIDER) {
+      return {
+        settings: this.getUGetSettings(),
+        locks: this.getUGetLocks(),
       };
     }
     throw new Error(`Unsupported built-in protocol: ${id}`);
@@ -1481,6 +1574,10 @@ export class DownloadItService {
     return this.probeXDM();
   }
 
+  async refreshUGet() {
+    return this.getUGetSettings().enabled ? [] : null;
+  }
+
   async testLoopbackProviderConfiguration(
     settings,
     { probe, ensureRunning, unavailableCode },
@@ -1598,6 +1695,35 @@ export class DownloadItService {
       probe: options => this.probeXDM(options),
       ensureRunning: (value, options) => this.ensureXDMRunning(value, options),
       unavailableCode: "xdm-unavailable",
+    });
+  }
+
+  async testUGetConfiguration({ launchPath } = {}) {
+    const settings = this.normalizeUGetSettings({
+      ...this.getUGetSettings(),
+      ...(launchPath === undefined ? {} : { launchPath }),
+      enabled: true,
+    });
+    return new Promise((resolve, reject) => {
+      let process = null;
+      try {
+        process = this.startDetachedProcess(
+          settings.launchPath,
+          ["--version"],
+          () => {
+            if (process?.exitValue === 0) {
+              resolve({ launchPath: settings.launchPath });
+            } else {
+              reject(new DownloadItError("uget-launch-failed"));
+            }
+          },
+          true,
+        );
+      } catch (error) {
+        reject(new DownloadItError("uget-launch-failed", {
+          error: error?.message || String(error),
+        }));
+      }
     });
   }
 
@@ -2069,6 +2195,8 @@ export class DownloadItService {
       abdmLocked: this.getABDMLocks(),
       xdm: this.getXDMSettings(),
       xdmLocked: this.getXDMLocks(),
+      uget: this.getUGetSettings(),
+      ugetLocked: this.getUGetLocks(),
       jdownloader: this.getJDownloaderSettings(),
       jdownloaderLocked: this.getJDownloaderLocks(),
       idmBridgeEnabled: Services.prefs.getBoolPref(
@@ -2121,6 +2249,7 @@ export class DownloadItService {
     builtInProtocols = null,
     abdm = null,
     xdm = null,
+    uget = null,
     jdownloader = null,
     idmBridgeEnabled = null,
     autoCaptureRules = null,
@@ -2217,6 +2346,24 @@ export class DownloadItService {
             launchPath: currentXDM.launchPath,
           }
         : this.normalizeXDMSettings(requestedXDMInput);
+    const currentUGet = this.getUGetSettings();
+    const builtInUGet = builtInProtocols &&
+      typeof builtInProtocols === "object" &&
+      !Array.isArray(builtInProtocols)
+      ? builtInProtocols[UGET_PROVIDER]
+      : null;
+    const requestedUGetInput = builtInUGet ?? uget;
+    const requestedUGet = requestedUGetInput == null
+      ? {
+          enabled: currentUGet.enabled,
+          launchPath: currentUGet.launchPath,
+        }
+      : requestedUGetInput.enabled === false
+        ? {
+            enabled: false,
+            launchPath: currentUGet.launchPath,
+          }
+        : this.normalizeUGetSettings(requestedUGetInput);
     const currentIDMBridgeEnabled = Services.prefs.getBoolPref(
       PREF_IDM_BRIDGE,
       false,
@@ -2254,6 +2401,8 @@ export class DownloadItService {
         ? this.createABDMDescriptor(requestedABDM)
       : requestedRef?.provider === XDM_PROVIDER
         ? this.createXDMDescriptor(requestedXDM)
+      : requestedRef?.provider === UGET_PROVIDER
+        ? this.createUGetDescriptor(requestedUGet)
       : manager
         ? this.resolveDownloader(manager, requestedCustomDownloaders)
         : null;
@@ -2277,6 +2426,9 @@ export class DownloadItService {
     const configuredXDMInvalidated =
       configuredDefaultRef?.provider === XDM_PROVIDER &&
       !requestedXDM.enabled;
+    const configuredUGetInvalidated =
+      configuredDefaultRef?.provider === UGET_PROVIDER &&
+      !requestedUGet.enabled;
     const defaultManagerLocked = Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER);
     if (
       defaultManagerLocked &&
@@ -2285,7 +2437,8 @@ export class DownloadItService {
         configuredCustomInvalidated ||
         configuredJDownloaderInvalidated ||
         configuredABDMInvalidated ||
-        configuredXDMInvalidated
+        configuredXDMInvalidated ||
+        configuredUGetInvalidated
       )
     ) {
       throw new Error("The default download manager preference is locked");
@@ -2318,6 +2471,12 @@ export class DownloadItService {
     for (const key of ["enabled", "launchPath"]) {
       if (xdmLocks[key] && requestedXDM[key] !== currentXDM[key]) {
         throw new Error(`The Xtreme Download Manager ${key} preference is locked`);
+      }
+    }
+    const uGetLocks = this.getUGetLocks();
+    for (const key of ["enabled", "launchPath"]) {
+      if (uGetLocks[key] && requestedUGet[key] !== currentUGet[key]) {
+        throw new Error(`The uGet ${key} preference is locked`);
       }
     }
     if (
@@ -2355,12 +2514,16 @@ export class DownloadItService {
         configuredCustomInvalidated ||
         configuredJDownloaderInvalidated ||
         configuredABDMInvalidated ||
-        configuredXDMInvalidated
+        configuredXDMInvalidated ||
+        configuredUGetInvalidated
       ) {
         nextDefault = [
           ...this.listFlashGotDownloaders(),
           ...this.listABDMDownloaders(),
           ...this.listXDMDownloaders(),
+          ...(requestedUGet.enabled
+            ? [this.createUGetDescriptor(requestedUGet)]
+            : []),
           ...this.listCustomDownloaders(effectiveCustomDownloaders),
           ...(requestedJDownloader.enabled
             ? [this.createJDownloaderDescriptor(requestedJDownloader)]
@@ -2402,6 +2565,16 @@ export class DownloadItService {
       Services.prefs.setStringPref(PREF_XDM_LAUNCH_PATH, requestedXDM.launchPath);
       this.xdmOnline = false;
       this.xdmProbePromise = null;
+    }
+    if (requestedUGet.enabled !== currentUGet.enabled) {
+      Services.prefs.setBoolPref(PREF_UGET_ENABLED, requestedUGet.enabled);
+    }
+    if (!requestedUGet.enabled) {
+      if (currentUGet.enabled) {
+        this.clearUGetConfiguration();
+      }
+    } else if (requestedUGet.launchPath !== currentUGet.launchPath) {
+      Services.prefs.setStringPref(PREF_UGET_LAUNCH_PATH, requestedUGet.launchPath);
     }
     if (!requestedABDM.enabled) {
       if (currentABDM.enabled) {
@@ -2851,6 +3024,9 @@ export class DownloadItService {
         }
         if (protocol.id === XDM_PROVIDER) {
           return this.getXDMSettings().enabled;
+        }
+        if (protocol.id === UGET_PROVIDER) {
+          return this.getUGetSettings().enabled;
         }
       } catch {}
       return false;
@@ -3905,6 +4081,64 @@ export class DownloadItService {
       throw new DownloadItError("xdm-http-error", { status: response.status });
     }
     return { succeeded: job.links.length, failed: 0 };
+  }
+
+  async downloadViaUGet(managerId, job) {
+    if (managerId !== UGET_DOWNLOADER_ID) {
+      throw new DownloadItError("uget-submit-failed");
+    }
+    let settings;
+    try {
+      const currentSettings = this.getUGetSettings();
+      if (!currentSettings.enabled) {
+        throw new DownloadItError("uget-unavailable");
+      }
+      settings = this.normalizeUGetSettings(currentSettings);
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "uget-launch-path-invalid",
+        error?.args || {},
+      );
+    }
+
+    let directory = "";
+    try {
+      directory = await Downloads.getPreferredDownloadsDirectory();
+    } catch {}
+    let argumentLists;
+    try {
+      argumentLists = buildUGetArguments(job, { directory });
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "uget-submit-failed",
+        error?.args || {},
+      );
+    }
+    return this.launchUGetProcesses(settings.launchPath, argumentLists);
+  }
+
+  async launchUGetProcesses(executablePath, argumentLists) {
+    let started = 0;
+    let failed = 0;
+    for (const argumentsList of argumentLists) {
+      try {
+        this.startDetachedProcess(executablePath, argumentsList, null, true);
+        started++;
+      } catch (error) {
+        failed++;
+        console.error("DownloadIt: uGet process launch failed", error);
+      }
+    }
+    if (!started) {
+      throw new DownloadItError("uget-launch-failed");
+    }
+    if (failed) {
+      throw new DownloadItError("uget-partial-failure", {
+        succeeded: started,
+        failed,
+      });
+    }
+    return { succeeded: started, failed: 0 };
   }
 
   async downloadViaJDownloader(

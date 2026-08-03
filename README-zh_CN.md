@@ -19,6 +19,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 通过 JDownloader 的本地 FlashGot 端点直接集成，不经过 `FlashGot.exe`。
 - 通过 AB Download Manager 的本地 HTTP API 直接集成，不经过 `FlashGot.exe`。
 - 通过 Xtreme Download Manager 的内置回环 API 直接集成，不经过 `FlashGot.exe`。
+- 通过跨平台静默命令行接口直接集成 uGet，不经过 `FlashGot.exe`。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
@@ -52,6 +53,7 @@ DownloadIt 后台服务
         ├── jdownloader provider ── 回环 HTTP `/flashgot`
         ├── abdm provider ── 回环 HTTP `/queues` 和 `/add`
         ├── xdm provider ── 回环 HTTP `/sync`、`/download` 和 `/link`
+        ├── uget provider ── uGet 静默命令行 ── Firefox 原生进程 API
         ├── 自定义命令 provider ── Firefox 原生进程 API
         └── 自定义 aria2 provider ── JSON-RPC
 ```
@@ -77,6 +79,7 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 | JDownloader 端点与可选本地启动 | 支持 | 支持 |
 | AB Download Manager 回环 API | 支持 | 支持 |
 | Xtreme Download Manager 回环 API | 支持 | 支持 |
+| uGet 静默命令行 provider | 支持 | 支持 |
 | FlashGot 下载器发现与任务提交 | 支持 | 不使用 |
 | 部署包内 `FlashGot.exe` | 启用 | 跳过 |
 
@@ -159,7 +162,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
-下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager 和 Xtreme Download Manager 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径。配置的路径只会在明确测试连接或提交下载而对应本地 API 离线时启动下载器。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
+下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager、Xtreme Download Manager 和 uGet 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径；uGet 只有在明确启用并为当前系统配置绝对启动器路径后才可选择。回环 provider 只会在明确测试或提交时启动配置的程序；uGet 会为每个任务直接调用静默命令行，不会探测后台 API。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
@@ -172,6 +175,8 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.abdm.launchPath` | 字符串 | 可选的 AB Download Manager 启动器绝对路径。本地 API 离线时，DownloadIt 只会在明确测试连接或提交下载时使用该路径。 |
 | `downloadit.xdm.enabled` | 布尔值 | 启用 Xtreme Download Manager 回环 provider。它探测固定的 `http://127.0.0.1:8597/sync` 端点；默认值为 `true`。 |
 | `downloadit.xdm.launchPath` | 字符串 | 可选的 XDM 启动器或 JAR 绝对路径。Linux 下的 JAR 会使用系统 Java 运行；本地 API 离线时，DownloadIt 只会在明确测试连接或提交下载时使用该路径。 |
+| `downloadit.uget.enabled` | 布尔值 | 启用 uGet 静默命令行 provider。新安装默认禁用，直到用户配置 uGet。 |
+| `downloadit.uget.launchPath` | 字符串 | 当前系统上的 uGet 启动器绝对路径。DownloadIt 会对每个提交的链接使用 `--quiet` 调用它。 |
 | `downloadit.jdownloader.enabled` | 布尔值 | 控制是否已配置并显示 JDownloader 内建协议集成。新安装默认为 `false`；已有 JDownloader 偏好或将 JDownloader 设为默认工具的旧配置会迁移为启用状态，直到用户明确移除。 |
 | `downloadit.jdownloader.endpoint` | 字符串 | JDownloader FlashGot 端点；默认值为 `http://127.0.0.1:9666/flashgot`。 |
 | `downloadit.jdownloader.launchPath` | 字符串 | 可选的 JDownloader Windows `.exe`、Linux 可执行启动器或 `.jar` 绝对路径；手动值优先于检测结果。 |
@@ -241,6 +246,12 @@ UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发�
 
 单个任务通过 `POST /download` 发送 JSON，批量任务通过 `POST /link` 发送数组。DownloadIt 会转发每个 URL、Cookie、User-Agent 与 Referer，并为单个任务转发建议文件名。XDM 不接收调用方指定目录、POST 请求正文或 DownloadIt 的任务启动偏好，因此带 POST 正文的任务会在提交前被拒绝。
 
+### uGet provider
+
+`uget:uget` provider 通过 Firefox 原生进程 API 直接调用配置的 uGet 可执行文件。它只接受当前系统上的启动器绝对路径，并且必须由用户明确启用和配置后才会启用。设置页测试会使用 `--version` 调用启动器；由于 uGet 没有 DownloadIt 可用的本地 API，后台刷新不会启动 uGet，也不会尝试进程发现。
+
+每个链接都会作为独立的 `uget --quiet` 进程提交。DownloadIt 会按需将 Firefox 首选下载目录、文件名、Referer、User-Agent、Cookie 和非空 POST 正文分别以 `--option=value` 形式传递，并保持 URL 不变地放在最后。因此批量任务会为每个链接启动一次 uGet 命令。该 provider 报告支持 POST、Cookie、批量和目录，但不读取 `downloadit.autoStartTasks`；uGet 命令行没有按任务控制启动状态的开关。进程成功启动即视为 uGet 已接受任务；进程 API 边界之外的后续下载失败不由 Firefox 获取。
+
 ### IDM 本地协议兼容
 
 在“请求与隐私”中启用后，DownloadIt 会识别 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等兼容扩展客户端使用的 IDM 本地 HTTP 请求格式：`POST http://127.0.0.1:1001/client/<id>?seq=<seq>`。它要求请求来自 Firefox 扩展 principal，并校验按字节声明长度的 `MSG#` 请求体，再把请求重定向到 DownloadIt 自己的临时回环监听器。任务会提交给当前默认下载器，下载器接受或拒绝任务后，请求客户端会收到预期的序号响应。
@@ -296,7 +307,7 @@ addon/
     ├── DownloadItPanelView.sys.mjs      # 原生工具栏面板行为
     ├── DownloadItContextMenu.sys.mjs    # Firefox 右键菜单
     ├── DownloadItDownloadDialog.sys.mjs # Firefox 原生下载弹窗集成
-    ├── DownloadItDownloaders.sys.mjs    # provider 引用、JDownloader/ABDM/XDM/aria2 协议、自定义 schema 与模板
+    ├── DownloadItDownloaders.sys.mjs    # provider 引用、JDownloader/ABDM/XDM/uGet/aria2 协议、自定义 schema 与模板
     ├── DownloadItMirrors.sys.mjs        # 镜像适配器注册表、设置校验与任务改写
     ├── DownloadItGitHubMirror.sys.mjs   # GitHub 文件 URL 适配器
     ├── DownloadItIDMBridge.sys.mjs      # Firefox 请求 hook 和回环响应桥

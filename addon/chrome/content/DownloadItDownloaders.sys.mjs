@@ -11,6 +11,8 @@ export const ABDM_DEFAULT_ENDPOINT = "http://127.0.0.1:15151/";
 export const XDM_PROVIDER = "xdm";
 export const XDM_DOWNLOADER_ID = "xdm";
 export const XDM_ENDPOINT = "http://127.0.0.1:8597/";
+export const UGET_PROVIDER = "uget";
+export const UGET_DOWNLOADER_ID = "uget";
 export const NATIVE_PROVIDER = "native";
 export const NATIVE_DOWNLOADER_ID = "firefox";
 
@@ -34,6 +36,13 @@ export const BUILT_IN_PROTOCOLS = Object.freeze([
     provider: XDM_PROVIDER,
     downloaderId: XDM_DOWNLOADER_ID,
     name: "Xtreme Download Manager",
+    singleton: true,
+  }),
+  Object.freeze({
+    id: UGET_PROVIDER,
+    provider: UGET_PROVIDER,
+    downloaderId: UGET_DOWNLOADER_ID,
+    name: "uGet",
     singleton: true,
   }),
 ]);
@@ -201,6 +210,63 @@ export function getXDMCapabilities() {
     batch: true,
     directory: false,
     taskStart: false,
+  });
+}
+
+export class UGetConfigError extends Error {
+  constructor(code, args = {}) {
+    super(code);
+    this.name = "UGetConfigError";
+    this.code = code;
+    this.args = args;
+  }
+}
+
+export function getUGetCapabilities() {
+  return normalizeDownloaderCapabilities({
+    post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+    taskStart: false,
+  });
+}
+
+function uGetOptionValue(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
+}
+
+export function buildUGetArguments(job, { directory = "" } = {}) {
+  const links = Array.isArray(job?.links) ? job.links : [];
+  if (!links.length) {
+    throw new UGetConfigError("uget-submit-failed");
+  }
+
+  const folder = uGetOptionValue(directory);
+  const referer = uGetOptionValue(job.referer);
+  const userAgent = uGetOptionValue(job.useragent);
+  return links.map(link => {
+    const url = String(link?.url || "").trim();
+    if (!url) {
+      throw new UGetConfigError("uget-submit-failed");
+    }
+    const argumentsList = ["--quiet"];
+    const append = (flag, value) => {
+      if (value) {
+        argumentsList.push(`${flag}=${value}`);
+      }
+    };
+    append("--folder", folder);
+    append("--filename", uGetOptionValue(link.filename || link.desc));
+    append("--http-referer", referer);
+    append("--http-user-agent", userAgent);
+    append("--http-cookie-data", uGetOptionValue(link.cookies));
+    const postData = String(link.postdata || "");
+    if (postData) {
+      append("--http-post-data", postData);
+    }
+    argumentsList.push(url);
+    return argumentsList;
   });
 }
 

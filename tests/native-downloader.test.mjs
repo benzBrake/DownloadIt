@@ -944,9 +944,14 @@ test("built-in protocol settings use a UI view while persisting through provider
     id: "xdm",
     ref: { provider: "xdm", id: "xdm" },
     singleton: true,
+  }, {
+    id: "uget",
+    ref: { provider: "uget", id: "uget" },
+    singleton: true,
   }]);
   assert.equal(initial.builtInProtocols[0].settings.enabled, false);
   assert.equal(initial.builtInProtocols[1].settings.enabled, true);
+  assert.equal(initial.builtInProtocols[3].settings.enabled, false);
   assert.equal(service.listJDownloaderDownloaders().length, 0);
 
   const snapshot = await service.applySettings({
@@ -2196,6 +2201,137 @@ test("XDM accepts an absolute manual launch path without Firefox file enumeratio
     () => service.normalizeXDMSettings({ launchPath: "xdman-app" }),
     error => error.code === "xdm-launch-path-invalid",
   );
+});
+
+test("uGet uses a configured launcher for one quiet process per link", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+  service.isLocalExecutable = path => [
+    "C:\\uGet\\uget.exe",
+    "C:\\uGet\\other-uget.exe",
+  ].includes(path);
+  assert.equal(service.getUGetSettings().enabled, false);
+  preferenceValues.set("downloadit.uget.launchPath", "C:\\uGet\\uget.exe");
+  assert.equal(service.getUGetSettings().enabled, false);
+  preferenceValues.delete("downloadit.uget.launchPath");
+  const snapshot = await service.applySettings({
+    uget: { enabled: true, launchPath: "C:\\uGet\\uget.exe" },
+  });
+  assert.equal(preferenceValues.get("downloadit.uget.enabled"), true);
+  assert.equal(
+    preferenceValues.get("downloadit.uget.launchPath"),
+    "C:\\uGet\\uget.exe",
+  );
+  assert.equal(snapshot.uget.enabled, true);
+  assert.equal(service.listUGetDownloaders().length, 1);
+
+  const launches = [];
+  service.startDetachedProcess = (...args) => launches.push(args);
+  downloadsMock.getPreferredDownloadsDirectory = async () => "D:\\Downloads";
+  try {
+    assert.deepEqual(await service.downloadViaUGet("uget", {
+      referer: "https://example.com/page",
+      useragent: "Firefox Test",
+      links: [{
+        url: "https://example.com/one.zip",
+        filename: "one.zip",
+        cookies: "session=1",
+      }, {
+        url: "https://example.com/two.zip",
+        postdata: "key=value",
+      }],
+    }), { succeeded: 2, failed: 0 });
+    assert.deepEqual(launches, [[
+      "C:\\uGet\\uget.exe",
+      [
+        "--quiet",
+        "--folder=D:\\Downloads",
+        "--filename=one.zip",
+        "--http-referer=https://example.com/page",
+        "--http-user-agent=Firefox Test",
+        "--http-cookie-data=session=1",
+        "https://example.com/one.zip",
+      ],
+      null,
+      true,
+    ], [
+      "C:\\uGet\\uget.exe",
+      [
+        "--quiet",
+        "--folder=D:\\Downloads",
+        "--http-referer=https://example.com/page",
+        "--http-user-agent=Firefox Test",
+        "--http-post-data=key=value",
+        "https://example.com/two.zip",
+      ],
+      null,
+      true,
+    ]]);
+    assert.equal(
+      launches.flatMap(([, argumentsList]) => argumentsList).includes("--set-offline"),
+      false,
+    );
+  } finally {
+    delete downloadsMock.getPreferredDownloadsDirectory;
+  }
+
+  let versionLaunch;
+  service.startDetachedProcess = (path, argumentsList, onExit, startHidden) => {
+    versionLaunch = { path, argumentsList, startHidden };
+    const process = { exitValue: 0 };
+    Promise.resolve().then(onExit);
+    return process;
+  };
+  await assert.doesNotReject(
+    service.testUGetConfiguration({ launchPath: "C:\\uGet\\uget.exe" }),
+  );
+  assert.deepEqual(versionLaunch, {
+    path: "C:\\uGet\\uget.exe",
+    argumentsList: ["--version"],
+    startHidden: true,
+  });
+
+  service.startDetachedProcess = (_path, argumentsList) => {
+    if (argumentsList.at(-1).endsWith("two.zip")) {
+      throw new Error("launch failed");
+    }
+  };
+  await assert.rejects(
+    service.downloadViaUGet("uget", {
+      links: [
+        { url: "https://example.com/one.zip" },
+        { url: "https://example.com/two.zip" },
+      ],
+    }),
+    error => error.code === "uget-partial-failure" &&
+      error.args.succeeded === 1 && error.args.failed === 1,
+  );
+
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "uget", id: "uget" }),
+  );
+  const disabled = await service.applySettings({ uget: { enabled: false } });
+  assert.equal(preferenceValues.get("downloadit.uget.enabled"), false);
+  assert.equal(preferenceValues.has("downloadit.uget.launchPath"), false);
+  assert.deepEqual(JSON.parse(preferenceValues.get("downloadit.defaultDM")), {
+    provider: "native",
+    id: "firefox",
+  });
+  assert.deepEqual(disabled.defaultDownloader.ref, {
+    provider: "native",
+    id: "firefox",
+  });
+
+  preferenceLocks.add("downloadit.uget.launchPath");
+  await assert.rejects(
+    service.applySettings({
+      uget: { enabled: true, launchPath: "C:\\uGet\\other-uget.exe" },
+    }),
+    /uGet launchPath preference is locked/i,
+  );
+  preferenceLocks.clear();
 });
 
 test("XDM connection tests use a selected path only after an offline result", async () => {

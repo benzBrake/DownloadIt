@@ -8,6 +8,7 @@ import {
   ABDMConfigError,
   buildAria2Request,
   buildABDMRequest,
+  buildUGetArguments,
   buildXDMRequest,
   buildAria2StartupArguments,
   buildJDownloaderRequest,
@@ -22,6 +23,7 @@ import {
   expandCommandTemplate,
   getCustomDownloaderCapabilities,
   getABDMCapabilities,
+  getUGetCapabilities,
   getXDMCapabilities,
   getFlashGotDownloaderCapabilities,
   getJDownloaderCapabilities,
@@ -50,6 +52,8 @@ import {
   XDM_DOWNLOADER_ID,
   XDM_ENDPOINT,
   XDM_PROVIDER,
+  UGET_DOWNLOADER_ID,
+  UGET_PROVIDER,
 } from "../addon/chrome/content/DownloadItDownloaders.sys.mjs";
 
 test("downloader capabilities are normalized as tri-state metadata", () => {
@@ -391,6 +395,58 @@ test("Xtreme Download Manager uses its fixed local browser protocol", () => {
   );
 });
 
+test("uGet builds one quiet CLI invocation per link", () => {
+  assert.equal(UGET_PROVIDER, "uget");
+  assert.equal(UGET_DOWNLOADER_ID, "uget");
+  assert.deepEqual(getUGetCapabilities(), {
+    post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+    taskStart: false,
+  });
+  const job = {
+    referer: "https://example.com/page\r\nignored",
+    useragent: "Firefox Test",
+    links: [{
+      url: "https://ftp.mozilla.org/pub/firefox/releases/153.0b1/win64/zh-CN/Firefox%20Setup%20153.0b1.exe",
+      cookies: "session=1",
+      filename: "Firefox Setup 153.0b1.exe",
+      postdata: "",
+    }, {
+      url: "https://example.com/post.bin",
+      desc: "POST file",
+      cookies: "session=2",
+      postdata: "key=value",
+    }],
+  };
+  assert.deepEqual(buildUGetArguments(job, { directory: "C:\\Downloads" }), [
+    [
+      "--quiet",
+      "--folder=C:\\Downloads",
+      "--filename=Firefox Setup 153.0b1.exe",
+      "--http-referer=https://example.com/page ignored",
+      "--http-user-agent=Firefox Test",
+      "--http-cookie-data=session=1",
+      "https://ftp.mozilla.org/pub/firefox/releases/153.0b1/win64/zh-CN/Firefox%20Setup%20153.0b1.exe",
+    ],
+    [
+      "--quiet",
+      "--folder=C:\\Downloads",
+      "--filename=POST file",
+      "--http-referer=https://example.com/page ignored",
+      "--http-user-agent=Firefox Test",
+      "--http-cookie-data=session=2",
+      "--http-post-data=key=value",
+      "https://example.com/post.bin",
+    ],
+  ]);
+  assert.throws(
+    () => buildUGetArguments({ links: [{ url: "" }] }),
+    error => error.code === "uget-submit-failed",
+  );
+});
+
 test("built-in protocol catalog keeps singleton provider identity in code", () => {
   assert.deepEqual(BUILT_IN_PROTOCOLS, [{
     id: "jdownloader",
@@ -410,11 +466,18 @@ test("built-in protocol catalog keeps singleton provider identity in code", () =
     downloaderId: "xdm",
     name: "Xtreme Download Manager",
     singleton: true,
+  }, {
+    id: "uget",
+    provider: "uget",
+    downloaderId: "uget",
+    name: "uGet",
+    singleton: true,
   }]);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS), true);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[0]), true);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[1]), true);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[2]), true);
+  assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[3]), true);
 });
 
 test("JDownloader request bodies preserve aligned fields and task-start policy", () => {

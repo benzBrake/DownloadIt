@@ -19,6 +19,7 @@ The project is currently being migrated. It supports Windows and Linux, and the 
 - Supports JDownloader directly through its loopback FlashGot endpoint without routing requests through `FlashGot.exe`.
 - Supports AB Download Manager directly through its loopback HTTP API without routing requests through `FlashGot.exe`.
 - Supports Xtreme Download Manager directly through its built-in loopback API without routing requests through `FlashGot.exe`.
+- Supports uGet directly through its cross-platform quiet command-line interface without routing requests through `FlashGot.exe`.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
@@ -52,6 +53,7 @@ DownloadIt background service
         ├── jdownloader provider ── loopback HTTP `/flashgot`
         ├── abdm provider ── loopback HTTP `/queues` and `/add`
         ├── xdm provider ── loopback HTTP `/sync`, `/download`, and `/link`
+        ├── uget provider ── uGet quiet command line ── native Firefox process API
         ├── custom command provider ── native Firefox process API
         └── custom aria2 provider ── JSON-RPC
 ```
@@ -77,6 +79,7 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 | JDownloader endpoint and optional local startup | Supported | Supported |
 | AB Download Manager loopback API | Supported | Supported |
 | Xtreme Download Manager loopback API | Supported | Supported |
+| uGet quiet command-line provider | Supported | Supported |
 | FlashGot manager discovery and task submission | Supported | Not used |
 | Packaged `FlashGot.exe` deployment | Enabled | Skipped |
 
@@ -159,7 +162,7 @@ The discovered-tool list in settings shows capability metadata for the active Do
 
 Open the settings page from the toolbar panel, from “DownloadIt Settings” in the context menu, or from the extension settings in `about:addons`.
 
-The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader, AB Download Manager, and Xtreme Download Manager are singletons: configuring one reopens its entry. Removing a built-in protocol disables it and clears its namespaced settings. AB Download Manager and XDM become selectable when their local service responds or an absolute launcher path is configured; XDM also accepts a JAR path. A configured path starts the downloader only for an explicit connection test or a submitted download when its local API is offline. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
+The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader, AB Download Manager, Xtreme Download Manager, and uGet are singletons: configuring one reopens its entry. Removing a built-in protocol disables it and clears its namespaced settings. AB Download Manager and XDM become selectable when their local service responds or an absolute launcher path is configured; XDM also accepts a JAR path. uGet becomes selectable only after it is enabled and an absolute launcher path is configured for the current system. Loopback providers start configured launchers only for explicit tests or submissions; uGet directly invokes its quiet CLI for each task and does not probe a background API. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
 
 | Preference | Type | Description |
 | --- | --- | --- |
@@ -172,6 +175,8 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.abdm.launchPath` | String | Optional absolute path to an AB Download Manager launcher. When the API is offline, this path is used only for an explicit connection test or a submitted download. |
 | `downloadit.xdm.enabled` | Boolean | Enables the Xtreme Download Manager loopback provider. It probes the fixed `http://127.0.0.1:8597/sync` endpoint; the default is `true`. |
 | `downloadit.xdm.launchPath` | String | Optional absolute path to an XDM launcher or JAR. Linux JAR paths are run with the system Java runtime; when the API is offline, this path is used only for an explicit connection test or a submitted download. |
+| `downloadit.uget.enabled` | Boolean | Enables the uGet quiet command-line provider. New installations remain disabled until uGet is configured. |
+| `downloadit.uget.launchPath` | String | Absolute path to the uGet launcher for the current system. DownloadIt invokes it with `--quiet` once per submitted link. |
 | `downloadit.jdownloader.enabled` | Boolean | Controls whether the JDownloader built-in-protocol integration is configured and shown. New installations default to `false`; existing JDownloader preferences or a JDownloader default selection are treated as an enabled legacy configuration until explicitly removed. |
 | `downloadit.jdownloader.endpoint` | String | JDownloader FlashGot endpoint. The default is `http://127.0.0.1:9666/flashgot`. |
 | `downloadit.jdownloader.launchPath` | String | Optional absolute path to a JDownloader Windows `.exe`, Linux executable launcher, or `.jar`; a manual value overrides detected installation data. |
@@ -241,6 +246,12 @@ The `xdm:xdm` provider talks directly to Xtreme Download Manager's fixed local H
 
 A single task is sent as JSON to `POST /download`; a batch is sent as an array to `POST /link`. DownloadIt forwards each URL, cookie, User-Agent, and Referer, and forwards the suggested filename for single tasks. XDM does not receive caller-selected directories, POST request bodies, or DownloadIt's task-start preference, so POST tasks are rejected before submission.
 
+### uGet provider
+
+The `uget:uget` provider invokes the configured uGet executable directly through Firefox's native process API. It accepts only an absolute launcher path for the current system and is disabled until the user explicitly enables and configures it. The settings test runs the launcher with `--version`; background refresh does not start uGet or attempt process discovery because uGet does not expose a DownloadIt-compatible local API.
+
+Each link is submitted as a separate `uget --quiet` process. DownloadIt conditionally passes the preferred Firefox download directory, filename, Referer, User-Agent, Cookie, and non-empty POST body as individual `--option=value` arguments, then appends the URL unchanged. A batch therefore creates one uGet CLI invocation per link. The provider reports POST, Cookie, batch, and directory capabilities, but it does not consume `downloadit.autoStartTasks`; uGet's CLI has no per-task start switch. A successful process launch is treated as acceptance by uGet; later downloader failures are outside Firefox's process API boundary.
+
 ### IDM local protocol compatibility
 
 When enabled under **Request & privacy**, DownloadIt recognizes the IDM local HTTP request form used by compatible extension clients such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift): `POST http://127.0.0.1:1001/client/<id>?seq=<seq>`. It requires a Firefox extension principal and validates the byte-length-prefixed `MSG#` payload, then redirects the request to a temporary loopback listener owned by DownloadIt. The task is submitted to the current default downloader, and the requesting client receives the expected sequence response after the downloader accepts or rejects the task.
@@ -296,7 +307,7 @@ addon/
     ├── DownloadItPanelView.sys.mjs      # Native toolbar panel behavior
     ├── DownloadItContextMenu.sys.mjs    # Firefox context menu
     ├── DownloadItDownloadDialog.sys.mjs # Firefox native download prompt integration
-    ├── DownloadItDownloaders.sys.mjs    # Provider references, JDownloader/ABDM/XDM/aria2 protocols, custom schema, and templates
+    ├── DownloadItDownloaders.sys.mjs    # Provider references, JDownloader/ABDM/XDM/uGet/aria2 protocols, custom schema, and templates
     ├── DownloadItMirrors.sys.mjs        # Mirror adapter registry, settings validation, and task rewriting
     ├── DownloadItGitHubMirror.sys.mjs   # GitHub file-URL adapter
     ├── DownloadItIDMBridge.sys.mjs      # Firefox request hook and loopback response bridge
