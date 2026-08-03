@@ -224,6 +224,9 @@ function createSettingsService(platform = "windows") {
   service.abdmProbePromise = null;
   service.abdmProbeEndpoint = "";
   service.abdmProbeApiKey = "";
+  service.xdmOnline = false;
+  service.xdmProbePromise = null;
+  service.xdmStartupPromise = null;
   service.jDownloaderOnline = false;
   service.jDownloaderProbePromise = null;
   service.jDownloaderProbeEndpoint = "";
@@ -346,7 +349,7 @@ test("Linux hides FlashGot cache and falls back to Firefox without deleting pref
     await service.refreshManagers({ persistDefault: false }),
     ["Firefox"],
   );
-  assert.deepEqual(refreshes, []);
+  assert.deepEqual(refreshes, ["xdm"]);
   const snapshot = service.readSettings();
   assert.equal(snapshot.detectedManagerCount, 0);
   assert.equal(snapshot.availableManagerCount, 1);
@@ -936,6 +939,10 @@ test("built-in protocol settings use a UI view while persisting through provider
     id: "abdm",
     ref: { provider: "abdm", id: "abdm" },
     singleton: true,
+  }, {
+    id: "xdm",
+    ref: { provider: "xdm", id: "xdm" },
+    singleton: true,
   }]);
   assert.equal(initial.builtInProtocols[0].settings.enabled, false);
   assert.equal(initial.builtInProtocols[1].settings.enabled, true);
@@ -1170,7 +1177,7 @@ test("manager refresh skips disabled built-in protocols", async () => {
     await service.refreshManagers({ persistDefault: false }),
     ["JDownloader", "External", "Custom", "Firefox"],
   );
-  assert.deepEqual(refreshes, ["flashgot"]);
+  assert.deepEqual(refreshes, ["xdm", "flashgot"]);
 });
 
 test("manager refresh probes enabled built-ins without waiting or failing FlashGot", async () => {
@@ -1202,13 +1209,14 @@ test("manager refresh probes enabled built-ins without waiting or failing FlashG
   const builtInRefresh = service.builtInRefreshPromise;
   assert.ok(builtInRefresh);
   assert.deepEqual(await managerRefresh, ["External"]);
-  assert.deepEqual(refreshes, ["jdownloader", "flashgot"]);
+  assert.deepEqual(refreshes, ["jdownloader", "xdm", "flashgot"]);
   assert.equal(service.builtInRefreshPromise, builtInRefresh);
 
   rejectJDownloader(new Error("offline"));
   const results = await builtInRefresh;
   assert.equal(results[0].status, "rejected");
   assert.equal(results[0].reason.message, "offline");
+  assert.equal(results[1].status, "fulfilled");
   assert.equal(service.builtInRefreshPromise, null);
 });
 
@@ -1425,6 +1433,98 @@ test("Linux requires execute permission and does not assign startHidden", () => 
     assert.equal(windows.isLocalExecutable("C:\\Tools\\curl.exe"), true);
     windows.startDetachedProcess("C:\\Tools\\curl.exe", [], null, false);
     assert.equal(hiddenAssignments, 1);
+  } finally {
+    localFileFactory = () => ({});
+    processFactory = () => ({});
+  }
+});
+
+test("Linux shell fallback keeps custom executable paths and arguments isolated", () => {
+  const executablePath = "/opt/Download Manager/xdm; touch not-run";
+  const shellChecks = [];
+  let launch = null;
+  localFileFactory = () => ({
+    initWithPath(path) {
+      this.path = path;
+    },
+    exists() {
+      return this.path === "/bin/sh";
+    },
+    isFile() {
+      return this.path === "/bin/sh";
+    },
+    isExecutable() {
+      return this.path === "/bin/sh";
+    },
+  });
+  processFactory = () => ({
+    init(file) {
+      this.executablePath = file.path;
+    },
+    run(blocking, argumentsList, count) {
+      shellChecks.push({
+        executablePath: this.executablePath,
+        blocking,
+        argumentsList,
+        count,
+      });
+      this.exitValue = 0;
+    },
+    runwAsync(argumentsList, count) {
+      launch = {
+        executablePath: this.executablePath,
+        argumentsList,
+        count,
+      };
+    },
+  });
+
+  try {
+    const service = createService("linux");
+    const [descriptor] = service.listCustomDownloaders({
+      version: 1,
+      downloaders: [{
+        id: "00000000-0000-4000-8000-000000000000",
+        name: "Fallback command",
+        enabled: true,
+        type: "command",
+        command: { executablePath, argumentsTemplate: "[URL]" },
+      }],
+    });
+    assert.equal(descriptor.available, true);
+    assert.deepEqual(shellChecks, [{
+      executablePath: "/bin/sh",
+      blocking: true,
+      argumentsList: [
+        "-c",
+        'test -f "$1" && test -x "$1"',
+        "downloadit-path-test",
+        executablePath,
+      ],
+      count: 4,
+    }]);
+
+    const argument = "$(touch still-not-run) value";
+    service.startDetachedProcess(executablePath, ["--output", argument]);
+    assert.equal(shellChecks.length, 2);
+    assert.deepEqual(shellChecks[1].argumentsList, [
+      "-c",
+      'test -f "$1" && test -x "$1"',
+      "downloadit-path-test",
+      executablePath,
+    ]);
+    assert.deepEqual(launch, {
+      executablePath: "/bin/sh",
+      argumentsList: [
+        "-c",
+        'exec "$@"',
+        "downloadit-launch",
+        executablePath,
+        "--output",
+        argument,
+      ],
+      count: 6,
+    });
   } finally {
     localFileFactory = () => ({});
     processFactory = () => ({});
@@ -1845,6 +1945,264 @@ test("ABDM submission uses API key, task headers, and silentStart", async () => 
     }),
     error => error.code === "abdm-post-unsupported",
   );
+});
+
+test("XDM probes enabled local state and submits its browser payload", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+  let requestCount = 0;
+  let finishProbe;
+  service.sendXDMRequest = async (...args) => {
+    requestCount += 1;
+    assert.deepEqual(args, ["GET", "sync", null, 3000]);
+    return new Promise(resolve => {
+      finishProbe = resolve;
+    });
+  };
+  const first = service.probeXDM();
+  const second = service.probeXDM();
+  assert.equal(requestCount, 1);
+  finishProbe({ status: 200, text: '{"enabled":true}' });
+  assert.deepEqual(await first, { enabled: true });
+  assert.deepEqual(await second, { enabled: true });
+  assert.equal(service.xdmOnline, true);
+  assert.equal(service.xdmProbePromise, null);
+  assert.equal(service.createXDMDescriptor().available, true);
+
+  service.sendXDMRequest = async () => ({ status: 200, text: '{"enabled":false}' });
+  await assert.rejects(
+    service.probeXDM(),
+    error => error.code === "xdm-disabled" && service.xdmOnline === false,
+  );
+  service.sendXDMRequest = async () => ({ status: 200, text: "{}" });
+  await assert.rejects(
+    service.probeXDM(),
+    error => error.code === "xdm-response-invalid",
+  );
+
+  let request;
+  service.probeXDM = async () => ({ enabled: true });
+  service.sendXDMRequest = async (...args) => {
+    request = args;
+    return { status: 201, text: "" };
+  };
+  assert.deepEqual(await service.downloadViaXDM("xdm", {
+    referer: "https://example.com/page",
+    useragent: "Firefox Test",
+    links: [{
+      url: "https://example.com/file.zip",
+      filename: "file.zip",
+      cookies: "session=1",
+      postdata: "",
+    }],
+  }), { succeeded: 1, failed: 0 });
+  assert.equal(request[0], "POST");
+  assert.equal(request[1], "download");
+  assert.deepEqual(JSON.parse(request[2]), {
+    url: "https://example.com/file.zip",
+    cookie: "session=1",
+    requestHeaders: {
+      "User-Agent": ["Firefox Test"],
+      Referer: ["https://example.com/page"],
+    },
+    responseHeaders: {},
+    filename: "file.zip",
+  });
+  await assert.rejects(
+    service.downloadViaXDM("xdm", {
+      links: [{ url: "https://example.com/file.zip", postdata: "a=1" }],
+    }),
+    error => error.code === "xdm-post-unsupported",
+  );
+});
+
+test("XDM starts a selected executable after an unavailable probe", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  service.xdmStartupPromise = null;
+  service.isLocalFile = path => path === "C:\\XDM\\xdman.exe";
+  assert.equal(service.createXDMDescriptor({
+    enabled: true,
+    launchPath: "C:\\XDM\\xdman.exe",
+  }).available, true);
+  let launch;
+  service.startDetachedProcess = (...args) => {
+    launch = args;
+  };
+  let probeCount = 0;
+  service.probeXDM = async () => {
+    probeCount++;
+    return { enabled: true };
+  };
+  const delays = [];
+  await service.ensureXDMRunning({
+    enabled: true,
+    launchPath: "C:\\XDM\\xdman.exe",
+  }, {
+    delay: async milliseconds => delays.push(milliseconds),
+  });
+  assert.deepEqual(launch, [
+    "C:\\XDM\\xdman.exe",
+    [],
+    null,
+    false,
+    { validateFile: false },
+  ]);
+  assert.deepEqual(delays, [1000]);
+  assert.equal(probeCount, 1);
+  assert.equal(service.xdmStartupPromise, null);
+});
+
+test("XDM accepts an absolute manual launch path without Firefox file enumeration", () => {
+  const service = createSettingsService("linux");
+  service.isLocalFile = () => false;
+  const settings = service.normalizeXDMSettings({
+    enabled: true,
+    launchPath: "/opt/xdman/xdm-app",
+  });
+  assert.equal(settings.launchPath, "/opt/xdman/xdm-app");
+  assert.equal(service.createXDMDescriptor(settings).available, true);
+  assert.throws(
+    () => service.normalizeXDMSettings({ launchPath: "xdman-app" }),
+    error => error.code === "xdm-launch-path-invalid",
+  );
+});
+
+test("XDM connection tests use a selected path only after an offline result", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  service.isLocalFile = () => true;
+  let probeCount = 0;
+  service.probeXDM = async () => {
+    probeCount++;
+    if (probeCount === 1) {
+      throw new DownloadItError("xdm-unavailable");
+    }
+    return { enabled: true };
+  };
+  let startupSettings;
+  service.ensureXDMRunning = async settings => {
+    startupSettings = settings;
+  };
+  const status = await service.testXDMConfiguration({
+    launchPath: "C:\\XDM\\xdman.exe",
+  });
+  assert.deepEqual(status, { enabled: true });
+  assert.equal(probeCount, 2);
+  assert.equal(startupSettings.launchPath, "C:\\XDM\\xdman.exe");
+});
+
+test("XDM resolves a Linux JAR through Java", () => {
+  const service = createSettingsService("linux");
+  const jarPath = "/opt/apps/net.sourceforge.xdman/files/xdman/xdman.jar";
+  service.isLocalFile = path => path === jarPath;
+  service.getLocalFile = path => ({
+    path,
+    leafName: "xdman.jar",
+    parent: {
+      path: "/opt/apps/net.sourceforge.xdman/files/xdman",
+      clone() {
+        return {
+          append() {},
+          path: "/opt/apps/net.sourceforge.xdman/files/xdman/xdman",
+        };
+      },
+    },
+  });
+  service.existingExecutablePath = path =>
+    path === "/usr/bin/java" ? path : "";
+  environmentValues.set("PATH", "/usr/bin");
+  assert.deepEqual(service.resolveXDMLaunch({
+    enabled: true,
+    launchPath: jarPath,
+  }), {
+    executablePath: "/usr/bin/java",
+    argumentsList: ["-jar", jarPath],
+  });
+  environmentValues.delete("PATH");
+});
+
+test("XDM enable preference honors locks and replaces its default", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "xdm", id: "xdm" }),
+  );
+  const service = createSettingsService();
+  service.xdmOnline = true;
+  const snapshot = await service.applySettings({ xdm: { enabled: false } });
+  assert.equal(preferenceValues.get("downloadit.xdm.enabled"), false);
+  assert.equal(snapshot.xdm.enabled, false);
+  assert.deepEqual(snapshot.defaultDownloader.ref, {
+    provider: "native",
+    id: "firefox",
+  });
+
+  preferenceLocks.add("downloadit.xdm.enabled");
+  await assert.rejects(
+    service.applySettings({ xdm: { enabled: true } }),
+    /Xtreme Download Manager enabled preference is locked/i,
+  );
+  preferenceLocks.clear();
+});
+
+test("XDM XHR uses the fixed loopback API with privileged request protections", async () => {
+  const listeners = new Map();
+  const headers = new Map();
+  const channel = {
+    loadFlags: 0,
+    loadInfo: { allowDeprecatedSystemRequests: false, httpsOnlyStatus: 0 },
+    redirectionLimit: 1,
+    allowSTS: true,
+    QueryInterface(interfaceId) {
+      assert.equal(interfaceId, interfacesMock.nsIHttpChannel);
+      return this;
+    },
+    setTRRMode(mode) {
+      this.trrMode = mode;
+    },
+  };
+  xmlHttpRequestFactory = () => ({
+    channel,
+    responseText: "ready",
+    status: 200,
+    open(method, endpoint, asynchronous) {
+      assert.equal(method, "POST");
+      assert.equal(endpoint, "http://127.0.0.1:8597/download");
+      assert.equal(asynchronous, true);
+    },
+    setRequestHeader(name, value) {
+      headers.set(name, value);
+    },
+    addEventListener(name, listener) {
+      listeners.set(name, listener);
+    },
+    send(body) {
+      assert.equal(body, "{}");
+      listeners.get("load")();
+    },
+  });
+  try {
+    const service = createService();
+    assert.deepEqual(
+      await service.sendXDMRequest("POST", "download", "{}"),
+      { status: 200, text: "ready" },
+    );
+    assert.equal(channel.loadFlags, 15);
+    assert.equal(channel.trrMode, interfacesMock.nsIRequest.TRR_DISABLED_MODE);
+    assert.equal(
+      channel.loadInfo.httpsOnlyStatus,
+      interfacesMock.nsILoadInfo.HTTPS_ONLY_EXEMPT,
+    );
+    assert.equal(channel.loadInfo.allowDeprecatedSystemRequests, true);
+    assert.equal(channel.redirectionLimit, 0);
+    assert.equal(channel.allowSTS, false);
+    assert.equal(headers.get("Content-Type"), "application/json; charset=UTF-8");
+  } finally {
+    xmlHttpRequestFactory = () => ({});
+  }
 });
 
 test("ABDM XHR bypasses cache, disables redirects, and sends X-Api-Key", async () => {

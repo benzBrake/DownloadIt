@@ -20,6 +20,7 @@ const {
   getCustomDownloaderCapabilities,
   JDOWNLOADER_PROVIDER,
   validateCustomDownloaderDocument,
+  XDM_PROVIDER,
 } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItDownloaders.sys.mjs",
 );
@@ -139,12 +140,22 @@ const CUSTOM_ERROR_MESSAGES = {
   "abdm-response-invalid": "downloadit-error-abdm-response",
   "abdm-submit-failed": "downloadit-error-abdm-submit",
   "abdm-post-unsupported": "downloadit-error-abdm-post",
+  "xdm-unavailable": "downloadit-error-xdm-unavailable",
+  "xdm-disabled": "downloadit-error-xdm-disabled",
+  "xdm-http-error": "downloadit-error-xdm-http",
+  "xdm-response-invalid": "downloadit-error-xdm-response",
+  "xdm-submit-failed": "downloadit-error-xdm-submit",
+  "xdm-post-unsupported": "downloadit-error-xdm-post",
+  "xdm-launch-path-invalid": "downloadit-error-xdm-path",
+  "xdm-launch-failed": "downloadit-error-xdm-launch",
+  "xdm-start-timeout": "downloadit-error-xdm-start-timeout",
   "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
 };
 
 const BUILT_IN_PROTOCOL_MESSAGE_IDS = {
   jdownloader: "downloadit-jdownloader-title",
   abdm: "downloadit-abdm-title",
+  xdm: "downloadit-xdm-title",
 };
 
 const MIRROR_ERROR_MESSAGES = {
@@ -425,6 +436,18 @@ function bindEvents() {
     "click",
     clearJDownloaderPath,
   );
+  document.getElementById("browse-xdm-path").addEventListener(
+    "click",
+    browseXDMPath,
+  );
+  document.getElementById("clear-xdm-path").addEventListener(
+    "click",
+    clearXDMPath,
+  );
+  document.getElementById("edit-xdm-path").addEventListener(
+    "click",
+    enableXDMPathInput,
+  );
   document.getElementById("test-jdownloader").addEventListener(
     "click",
     testJDownloader,
@@ -444,6 +467,18 @@ function bindEvents() {
   document.getElementById("test-abdm").addEventListener(
     "click",
     testABDM,
+  );
+  document.getElementById("xdm-enabled").addEventListener(
+    "change",
+    renderXDMEditorState,
+  );
+  document.getElementById("xdm-launch-path").addEventListener(
+    "input",
+    renderXDMEditorState,
+  );
+  document.getElementById("test-xdm").addEventListener(
+    "click",
+    testXDM,
   );
   document.getElementById("custom-aria2-autostart").addEventListener(
     "change",
@@ -679,7 +714,8 @@ function draftDownloaders() {
     .filter(downloader =>
       !downloader.custom &&
       downloader.ref?.provider !== JDOWNLOADER_PROVIDER &&
-      downloader.ref?.provider !== ABDM_PROVIDER
+      downloader.ref?.provider !== ABDM_PROVIDER &&
+      downloader.ref?.provider !== XDM_PROVIDER
     );
   const jDownloaderDraft =
     state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER];
@@ -697,6 +733,14 @@ function draftDownloaders() {
       downloader => downloader.ref?.provider === "native",
     );
     detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, abdm);
+  }
+  const xdmDraft = state.draft?.builtInProtocols?.[XDM_PROVIDER];
+  if (xdmDraft?.enabled) {
+    const xdm = state.service.createXDMDescriptor(xdmDraft);
+    const nativeIndex = detected.findIndex(
+      downloader => downloader.ref?.provider === "native",
+    );
+    detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, xdm);
   }
   const snapshotCustom = new Map(
     (state.snapshot?.downloaders || [])
@@ -884,7 +928,8 @@ function renderManagers() {
     row.append(dot, identity);
 
     if (downloader.ref?.provider === JDOWNLOADER_PROVIDER ||
-        downloader.ref?.provider === ABDM_PROVIDER) {
+        downloader.ref?.provider === ABDM_PROVIDER ||
+        downloader.ref?.provider === XDM_PROVIDER) {
       const builtInBadge = document.createElement("span");
       builtInBadge.className = "manager-badge is-built-in";
       setLocalized(builtInBadge, "downloadit-manager-built-in");
@@ -910,7 +955,8 @@ function renderManagers() {
       row.append(status);
     }
     if (downloader.ref?.provider === JDOWNLOADER_PROVIDER ||
-        downloader.ref?.provider === ABDM_PROVIDER) {
+        downloader.ref?.provider === ABDM_PROVIDER ||
+        downloader.ref?.provider === XDM_PROVIDER) {
       const actions = document.createElement("span");
       actions.className = "manager-actions";
       const configure = customActionButton(
@@ -1776,12 +1822,11 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   const builtInProtocol = kind === "builtin" && BUILT_IN_PROTOCOLS.some(
     protocol => protocol.id === id,
   ) ? id : BUILT_IN_PROTOCOLS[0]?.id || "";
-  const builtInEnabled = Boolean(
-    state.draft?.builtInProtocols?.[builtInProtocol]?.enabled,
-  );
   state.editor = {
     kind,
-    editingKind: id || (kind === "builtin" && builtInEnabled) ? kind : "",
+    // A new built-in entry must keep the protocol picker enabled. Existing
+    // singleton entries are locked to their protocol while being configured.
+    editingKind: id ? kind : "",
     existingId: existing?.id || "",
     builtInProtocol,
     downloader,
@@ -1800,6 +1845,12 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   document.getElementById("abdm-endpoint").value = abdm?.endpoint || "";
   document.getElementById("abdm-api-key").value = abdm?.apiKey || "";
   document.getElementById("abdm-test-state").textContent = "";
+  const xdm = state.draft.builtInProtocols[XDM_PROVIDER];
+  document.getElementById("xdm-enabled").checked = Boolean(xdm?.enabled);
+  const xdmLaunchPath = document.getElementById("xdm-launch-path");
+  xdmLaunchPath.value = xdm?.launchPath || "";
+  xdmLaunchPath.readOnly = true;
+  document.getElementById("xdm-test-state").textContent = "";
   document.getElementById("custom-name").value = downloader.name;
   document.getElementById("custom-enabled").checked = downloader.enabled;
   document.getElementById("custom-start-hidden").checked =
@@ -1830,6 +1881,8 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   const initialFocus = kind === "builtin"
     ? builtInProtocol === ABDM_PROVIDER
       ? document.getElementById("test-abdm")
+      : builtInProtocol === XDM_PROVIDER
+        ? document.getElementById("test-xdm")
       : document.getElementById("test-jdownloader")
     : document.getElementById("custom-name");
   initialFocus.focus();
@@ -1924,6 +1977,7 @@ function renderDownloadToolEditor() {
   renderEditorType();
   renderJDownloaderEditorState();
   renderABDMEditorState();
+  renderXDMEditorState();
 }
 
 function renderJDownloaderEditorState() {
@@ -2086,13 +2140,18 @@ function saveDownloadToolEditor() {
               endpoint: state.draft.builtInProtocols[ABDM_PROVIDER].endpoint,
               apiKey: state.draft.builtInProtocols[ABDM_PROVIDER].apiKey,
             };
+      } else if (protocol === XDM_PROVIDER) {
+        settings = state.service.normalizeXDMSettings({
+          enabled: document.getElementById("xdm-enabled").checked,
+          launchPath: document.getElementById("xdm-launch-path").value,
+        });
       } else {
         throw new Error(`Unsupported built-in protocol: ${protocol}`);
       }
       state.draft.builtInProtocols[protocol] = {
         ...state.draft.builtInProtocols[protocol],
         ...settings,
-        enabled: true,
+        enabled: protocol === XDM_PROVIDER ? settings.enabled : true,
       };
       closeDownloadToolEditor();
       clearFeedback();
@@ -2185,6 +2244,49 @@ function renderABDMEditorState() {
   );
 }
 
+function renderXDMEditorState() {
+  if (!state.editor) {
+    return;
+  }
+  const protocol = getBuiltInProtocolSnapshot(XDM_PROVIDER);
+  const locks = protocol?.locks || {};
+  const enabled = document.getElementById("xdm-enabled");
+  const launchPath = document.getElementById("xdm-launch-path");
+  const browse = document.getElementById("browse-xdm-path");
+  const edit = document.getElementById("edit-xdm-path");
+  const clear = document.getElementById("clear-xdm-path");
+  const test = document.getElementById("test-xdm");
+  const lock = document.getElementById("xdm-lock");
+  const status = document.getElementById("xdm-status");
+  const statusDot = document.getElementById("xdm-status-dot");
+
+  enabled.disabled = Boolean(locks.enabled);
+  launchPath.disabled = Boolean(locks.launchPath);
+  browse.disabled = launchPath.disabled;
+  edit.disabled = launchPath.disabled;
+  clear.disabled = launchPath.disabled || !launchPath.value;
+  test.disabled = !state.service || !enabled.checked;
+  lock.hidden = !Object.values(locks).some(Boolean);
+
+  const descriptor = state.service.createXDMDescriptor({
+    ...state.draft.builtInProtocols[XDM_PROVIDER],
+    enabled: enabled.checked,
+    launchPath: launchPath.value,
+  });
+  const available = descriptor.available;
+  statusDot.className = `manager-dot ${available ? "is-ready" : "is-error"}`;
+  setLocalized(
+    status,
+    available
+      ? state.service.xdmOnline
+        ? "downloadit-xdm-status-ready"
+        : "downloadit-xdm-status-startable"
+      : enabled.checked
+        ? "downloadit-xdm-status-unavailable"
+        : "downloadit-xdm-status-disabled",
+  );
+}
+
 async function removeBuiltInDownloader(id) {
   const protocol = BUILT_IN_PROTOCOLS.find(entry => entry.id === id);
   const settings = state.draft?.builtInProtocols?.[id];
@@ -2200,7 +2302,9 @@ async function removeBuiltInDownloader(id) {
   }
   const removedKey = id === ABDM_PROVIDER
     ? state.service.createABDMDescriptor(settings).key
-    : state.service.createJDownloaderDescriptor(settings).key;
+    : id === XDM_PROVIDER
+      ? state.service.createXDMDescriptor(settings).key
+      : state.service.createJDownloaderDescriptor(settings).key;
   settings.enabled = false;
   if (state.draft.defaultManager === removedKey) {
     const fallback = draftDownloaders().find(downloader => downloader.available);
@@ -2270,14 +2374,30 @@ async function browseJDownloaderPath() {
       ? "downloadit-jdownloader-jar-file-filter"
       : "downloadit-jdownloader-file-filter",
     filter: linux ? "*.jar" : "*.exe;*.jar",
-    application: linux,
+    application: false,
     absolute: true,
-    includeAllFiles: false,
+    includeAllFiles: linux,
   });
   if (path == null || !state.editor) {
     return;
   }
   renderJDownloaderEditorState();
+}
+
+async function browseXDMPath() {
+  const linux = state.snapshot?.platform === "linux";
+  const path = await browseLocalFile("xdm-launch-path", {
+    titleId: "downloadit-browse-xdm-title",
+    filterId: linux ? "" : "downloadit-xdm-file-filter",
+    filter: linux ? "" : "*.exe;*.jar",
+    application: false,
+    absolute: true,
+    includeAllFiles: linux,
+  });
+  if (path == null || !state.editor) {
+    return;
+  }
+  renderXDMEditorState();
 }
 
 function clearJDownloaderPath() {
@@ -2287,6 +2407,26 @@ function clearJDownloaderPath() {
   }
   document.getElementById("jdownloader-launch-path").value = "";
   renderJDownloaderEditorState();
+}
+
+function clearXDMPath() {
+  const protocol = getBuiltInProtocolSnapshot(XDM_PROVIDER);
+  if (!state.editor || protocol?.locks?.launchPath) {
+    return;
+  }
+  document.getElementById("xdm-launch-path").value = "";
+  renderXDMEditorState();
+}
+
+function enableXDMPathInput() {
+  const protocol = getBuiltInProtocolSnapshot(XDM_PROVIDER);
+  if (!state.editor || protocol?.locks?.launchPath) {
+    return;
+  }
+  const input = document.getElementById("xdm-launch-path");
+  input.readOnly = false;
+  input.focus();
+  input.select();
 }
 
 async function browseAria2Configuration() {
@@ -2429,6 +2569,28 @@ async function testABDM() {
   } catch (error) {
     output.className = "is-error";
     setLocalized(output, "downloadit-abdm-test-failed", {
+      error: await formatLocalizedError(error),
+    });
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function testXDM() {
+  const button = document.getElementById("test-xdm");
+  const output = document.getElementById("xdm-test-state");
+  button.disabled = true;
+  output.className = "";
+  setLocalized(output, "downloadit-xdm-testing");
+  try {
+    await state.service.testXDMConfiguration({
+      launchPath: document.getElementById("xdm-launch-path").value,
+    });
+    output.className = "is-success";
+    setLocalized(output, "downloadit-xdm-test-success");
+  } catch (error) {
+    output.className = "is-error";
+    setLocalized(output, "downloadit-xdm-test-failed", {
       error: await formatLocalizedError(error),
     });
   } finally {

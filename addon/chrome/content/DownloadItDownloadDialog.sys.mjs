@@ -61,6 +61,15 @@ const DOWNLOAD_ERROR_MESSAGES = {
   "abdm-response-invalid": "downloadit-error-abdm-response",
   "abdm-submit-failed": "downloadit-error-abdm-submit",
   "abdm-post-unsupported": "downloadit-error-abdm-post",
+  "xdm-unavailable": "downloadit-error-xdm-unavailable",
+  "xdm-disabled": "downloadit-error-xdm-disabled",
+  "xdm-http-error": "downloadit-error-xdm-http",
+  "xdm-response-invalid": "downloadit-error-xdm-response",
+  "xdm-submit-failed": "downloadit-error-xdm-submit",
+  "xdm-post-unsupported": "downloadit-error-xdm-post",
+  "xdm-launch-path-invalid": "downloadit-error-xdm-path",
+  "xdm-launch-failed": "downloadit-error-xdm-launch",
+  "xdm-start-timeout": "downloadit-error-xdm-start-timeout",
 };
 
 function bindingAbortedResult () {

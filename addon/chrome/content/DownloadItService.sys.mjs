@@ -49,6 +49,7 @@ import {
   buildAria2Request,
   buildAria2StartupArguments,
   buildABDMRequest,
+  buildXDMRequest,
   buildJDownloaderRequest,
   BUILT_IN_PROTOCOLS,
   cloneCustomDownloaderDocument,
@@ -62,6 +63,7 @@ import {
   FLASHGOT_PROVIDER,
   getCustomDownloaderCapabilities,
   getABDMCapabilities,
+  getXDMCapabilities,
   getFlashGotDownloaderCapabilities,
   getJDownloaderCapabilities,
   getJDownloaderReferer,
@@ -86,6 +88,9 @@ import {
   stringifyCustomDownloaderDocument,
   validateJDownloaderLaunchPath,
   validateCustomDownloaderDocument,
+  XDM_DOWNLOADER_ID,
+  XDM_ENDPOINT,
+  XDM_PROVIDER,
 } from "./DownloadItDownloaders.sys.mjs";
 
 const { classes: Cc, interfaces: Ci } = Components;
@@ -152,6 +157,39 @@ function getAbsolutePathPlatform(value) {
   return path.startsWith("/") ? "linux" : "";
 }
 
+const LINUX_SHELL_PATH = "/bin/sh";
+const LINUX_SHELL_FILE_TEST = 'test -f "$1"';
+const LINUX_SHELL_EXECUTABLE_TEST = 'test -f "$1" && test -x "$1"';
+const LINUX_SHELL_EXEC = 'exec "$@"';
+const LINUX_SHELL_TEST_ARG0 = "downloadit-path-test";
+const LINUX_SHELL_EXEC_ARG0 = "downloadit-launch";
+
+function isRegularLocalFile(file) {
+  try {
+    try {
+      file.normalize();
+    } catch {}
+    return file.exists() && file.isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isExecutableLocalFile(file, platform) {
+  try {
+    if (!isRegularLocalFile(file)) {
+      return false;
+    }
+    if (platform !== "linux") {
+      return true;
+    }
+    return file.isExecutable() ||
+      (Number(file.permissions) & 0o111) !== 0;
+  } catch {
+    return false;
+  }
+}
+
 const PREF_DEFAULT_MANAGER = "downloadit.defaultDM";
 const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
 const PREF_OMIT_COOKIES = "downloadit.omitCookies";
@@ -163,6 +201,8 @@ const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
 const PREF_ABDM_ENABLED = "downloadit.abdm.enabled";
 const PREF_ABDM_ENDPOINT = "downloadit.abdm.endpoint";
 const PREF_ABDM_API_KEY = "downloadit.abdm.apiKey";
+const PREF_XDM_ENABLED = "downloadit.xdm.enabled";
+const PREF_XDM_LAUNCH_PATH = "downloadit.xdm.launchPath";
 const PREF_JDOWNLOADER_ENABLED = "downloadit.jdownloader.enabled";
 const PREF_JDOWNLOADER_ENDPOINT = "downloadit.jdownloader.endpoint";
 const PREF_JDOWNLOADER_LAUNCH_PATH = "downloadit.jdownloader.launchPath";
@@ -175,6 +215,9 @@ const JDOWNLOADER_REQUEST_TIMEOUT_MS = 3000;
 const JDOWNLOADER_RETRY_DELAY_MS = 8000;
 const JDOWNLOADER_MAX_STARTUP_PROBES = 6;
 const ABDM_REQUEST_TIMEOUT_MS = 3000;
+const XDM_REQUEST_TIMEOUT_MS = 3000;
+const XDM_RETRY_DELAY_MS = 1000;
+const XDM_MAX_STARTUP_PROBES = 10;
 
 const BROWSER_WINDOW_URL = "chrome://browser/content/browser.xhtml";
 const SETTINGS_URL = "chrome://downloadit/content/options.xhtml";
@@ -301,6 +344,9 @@ export class DownloadItService {
     this.abdmProbePromise = null;
     this.abdmProbeEndpoint = "";
     this.abdmProbeApiKey = "";
+    this.xdmOnline = false;
+    this.xdmProbePromise = null;
+    this.xdmStartupPromise = null;
     this.jDownloaderOnline = false;
     this.jDownloaderProbePromise = null;
     this.jDownloaderProbeEndpoint = "";
@@ -371,6 +417,15 @@ export class DownloadItService {
         download: (id, task, runtimeContext, options) =>
           this.downloadViaABDM(id, task, options),
         refresh: () => this.refreshABDM(),
+      },
+      {
+        provider: XDM_PROVIDER,
+        listDownloaders: () => this.listXDMDownloaders(),
+        getDownloader: id => id === XDM_DOWNLOADER_ID
+          ? this.listXDMDownloaders()[0] || null
+          : null,
+        download: (id, task) => this.downloadViaXDM(id, task),
+        refresh: () => this.refreshXDM(),
       },
       {
         provider: CUSTOM_PROVIDER,
@@ -527,6 +582,41 @@ export class DownloadItService {
     return downloader.enabled && downloader.available ? [downloader] : [];
   }
 
+  createXDMDescriptor(settingsOverride = null) {
+    const currentSettings = this.getXDMSettings();
+    const settings = settingsOverride
+      ? { ...currentSettings, ...settingsOverride }
+      : currentSettings;
+    let available = false;
+    let unavailableReason = settings.enabled ? "xdm-unavailable" : "disabled";
+    try {
+      const normalized = this.normalizeXDMSettings(settings);
+      available = normalized.enabled && (
+        this.xdmOnline || Boolean(normalized.launchPath)
+      );
+      if (!normalized.enabled) {
+        unavailableReason = "disabled";
+      }
+    } catch (error) {
+      unavailableReason = error?.code || "xdm-unavailable";
+    }
+    return this.createDownloaderDescriptor({
+      ref: createDownloaderRef(XDM_PROVIDER, XDM_DOWNLOADER_ID),
+      name: "Xtreme Download Manager",
+      type: "xdm",
+      custom: false,
+      enabled: Boolean(settings.enabled),
+      available,
+      unavailableReason: available ? "" : unavailableReason,
+      capabilities: getXDMCapabilities(),
+    });
+  }
+
+  listXDMDownloaders() {
+    const downloader = this.createXDMDescriptor();
+    return downloader.enabled && downloader.available ? [downloader] : [];
+  }
+
   listFlashGotDownloaders() {
     if (!this.platformDefinition?.flashGotSupported) {
       return [];
@@ -622,9 +712,11 @@ export class DownloadItService {
 
   isLocalFile(path) {
     try {
-      const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
-      file.initWithPath(this.resolveExecutablePath(path));
-      return file.exists() && file.isFile();
+      const resolvedPath = this.resolveExecutablePath(path);
+      if (isRegularLocalFile(this.getLocalFile(resolvedPath))) {
+        return true;
+      }
+      return this.runLinuxPathTest(resolvedPath, LINUX_SHELL_FILE_TEST);
     } catch {
       return false;
     }
@@ -761,14 +853,56 @@ export class DownloadItService {
 
   isLocalExecutable(path) {
     try {
-      const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
-      file.initWithPath(this.resolveExecutablePath(path));
-      if (!file.exists() || !file.isFile()) {
-        return false;
+      const resolvedPath = this.resolveExecutablePath(path);
+      if (isExecutableLocalFile(
+        this.getLocalFile(resolvedPath),
+        this.platformDefinition?.id,
+      )) {
+        return true;
       }
-      return this.platformDefinition?.id === "linux"
-        ? file.isExecutable()
-        : true;
+      return this.runLinuxPathTest(
+        resolvedPath,
+        LINUX_SHELL_EXECUTABLE_TEST,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  getLinuxShellFile() {
+    if (this.platformDefinition?.id !== "linux") {
+      return null;
+    }
+    try {
+      const shell = this.getLocalFile(LINUX_SHELL_PATH);
+      return isExecutableLocalFile(shell, "linux") ? shell : null;
+    } catch {
+      return null;
+    }
+  }
+
+  runLinuxPathTest(path, command) {
+    if (
+      this.platformDefinition?.id !== "linux" ||
+      getAbsolutePathPlatform(path) !== "linux"
+    ) {
+      return false;
+    }
+    const shell = this.getLinuxShellFile();
+    if (!shell) {
+      return false;
+    }
+    try {
+      const process = Cc["@mozilla.org/process/util;1"].createInstance(Ci.nsIProcess);
+      process.init(shell);
+      const argumentsList = [
+        "-c",
+        command,
+        LINUX_SHELL_TEST_ARG0,
+        path,
+      ];
+      process.run(true, argumentsList, argumentsList.length);
+      return process.exitValue === 0;
     } catch {
       return false;
     }
@@ -860,6 +994,60 @@ export class DownloadItService {
     return true;
   }
 
+  getXDMSettings() {
+    return {
+      enabled: this.isXDMEnabled(),
+      launchPath: Services.prefs.getStringPref(PREF_XDM_LAUNCH_PATH, ""),
+      online: this.xdmOnline,
+    };
+  }
+
+  getXDMLocks() {
+    return {
+      enabled: Services.prefs.prefIsLocked(PREF_XDM_ENABLED),
+      launchPath: Services.prefs.prefIsLocked(PREF_XDM_LAUNCH_PATH),
+    };
+  }
+
+  normalizeXDMSettings(value = {}) {
+    const launchPath = String(value.launchPath || "").trim();
+    const launchPathPlatform = getAbsolutePathPlatform(launchPath);
+    if (
+      launchPath &&
+      (
+        !launchPathPlatform ||
+        launchPathPlatform !== this.platformDefinition?.id
+      )
+    ) {
+      throw new DownloadItError("xdm-launch-path-invalid");
+    }
+    return {
+      enabled: value.enabled !== false,
+      launchPath,
+    };
+  }
+
+  clearXDMConfiguration() {
+    if (
+      !Services.prefs.prefIsLocked(PREF_XDM_LAUNCH_PATH) &&
+      Services.prefs.prefHasUserValue(PREF_XDM_LAUNCH_PATH)
+    ) {
+      Services.prefs.clearUserPref(PREF_XDM_LAUNCH_PATH);
+    }
+    this.xdmOnline = false;
+    this.xdmProbePromise = null;
+  }
+
+  isXDMEnabled() {
+    if (
+      Services.prefs.prefHasUserValue(PREF_XDM_ENABLED) ||
+      Services.prefs.prefIsLocked(PREF_XDM_ENABLED)
+    ) {
+      return Services.prefs.getBoolPref(PREF_XDM_ENABLED, true);
+    }
+    return true;
+  }
+
   getBuiltInProtocolSettings(id) {
     if (id === JDOWNLOADER_PROVIDER) {
       return {
@@ -871,6 +1059,12 @@ export class DownloadItService {
       return {
         settings: this.getABDMSettings(),
         locks: this.getABDMLocks(),
+      };
+    }
+    if (id === XDM_PROVIDER) {
+      return {
+        settings: this.getXDMSettings(),
+        locks: this.getXDMLocks(),
       };
     }
     throw new Error(`Unsupported built-in protocol: ${id}`);
@@ -1035,8 +1229,8 @@ export class DownloadItService {
 
   existingLocalPath(path) {
     try {
-      const file = this.getLocalFile(path);
-      return file.exists() && file.isFile() ? file.path : "";
+      const resolvedPath = this.resolveExecutablePath(path);
+      return this.isLocalFile(resolvedPath) ? resolvedPath : "";
     } catch {
       return "";
     }
@@ -1090,19 +1284,14 @@ export class DownloadItService {
     return homes;
   }
 
-  resolveJDownloaderJarLaunch(jarPath, javaArguments = []) {
+  resolveJavaJarLaunch(
+    jarPath,
+    { siblingExecutableNames = [], javaArguments = [] } = {},
+  ) {
     const jar = this.getLocalFile(jarPath);
     const directory = jar.parent;
-    const executableNames = this.platformDefinition?.id === "linux"
-      ? ["JDownloader2", "JDownloader"]
-      : [
-          jar.leafName.replace(/\.jar$/i, ".exe"),
-          "JDownloader2.exe",
-          "JDownloader 2.exe",
-          "JDownloader.exe",
-        ];
     const seen = new Set();
-    for (const name of executableNames) {
+    for (const name of siblingExecutableNames) {
       const normalizedName = name.toLowerCase();
       if (seen.has(normalizedName)) {
         continue;
@@ -1157,6 +1346,39 @@ export class DownloadItService {
       }
     }
     return null;
+  }
+
+  resolveJDownloaderJarLaunch(jarPath, javaArguments = []) {
+    const jar = this.getLocalFile(jarPath);
+    const siblingExecutableNames = this.platformDefinition?.id === "linux"
+      ? ["JDownloader2", "JDownloader"]
+      : [
+          jar.leafName.replace(/\.jar$/i, ".exe"),
+          "JDownloader2.exe",
+          "JDownloader 2.exe",
+          "JDownloader.exe",
+        ];
+    return this.resolveJavaJarLaunch(jarPath, {
+      siblingExecutableNames,
+      javaArguments,
+    });
+  }
+
+  resolveXDMLaunch(settings = this.getXDMSettings()) {
+    const normalized = this.normalizeXDMSettings(settings);
+    if (!normalized.launchPath) {
+      return null;
+    }
+    if (!/\.jar$/i.test(normalized.launchPath)) {
+      return { executablePath: normalized.launchPath, argumentsList: [] };
+    }
+    const jar = this.getLocalFile(normalized.launchPath);
+    const siblingExecutableNames = this.platformDefinition?.id === "linux"
+      ? ["xdman", "XDM"]
+      : [jar.leafName.replace(/\.jar$/i, ".exe"), "xdman.exe"];
+    return this.resolveJavaJarLaunch(normalized.launchPath, {
+      siblingExecutableNames,
+    });
   }
 
   resolveJDownloaderLaunch(
@@ -1218,6 +1440,143 @@ export class DownloadItService {
       endpoint: settings.endpoint,
       apiKey: settings.apiKey,
     });
+  }
+
+  async refreshXDM() {
+    if (!this.getXDMSettings().enabled) {
+      this.xdmOnline = false;
+      return null;
+    }
+    this.xdmOnline = false;
+    return this.probeXDM();
+  }
+
+  async testXDMConfiguration({ launchPath } = {}) {
+    const settings = this.normalizeXDMSettings({
+      ...this.getXDMSettings(),
+      ...(launchPath === undefined ? {} : { launchPath }),
+    });
+    try {
+      return await this.probeXDM({ persist: false, updateState: true });
+    } catch (error) {
+      if (error?.code !== "xdm-unavailable" || !settings.launchPath) {
+        throw error;
+      }
+      await this.ensureXDMRunning(settings);
+      return this.probeXDM({ persist: false, updateState: true });
+    }
+  }
+
+  async ensureXDMRunning(
+    settings = this.normalizeXDMSettings(this.getXDMSettings()),
+    {
+      delay = milliseconds => new Promise(resolve =>
+        setTimeoutPromise(resolve, milliseconds)
+      ),
+      maxProbes = XDM_MAX_STARTUP_PROBES,
+    } = {},
+  ) {
+    if (!settings.launchPath) {
+      throw new DownloadItError("xdm-unavailable");
+    }
+    if (this.xdmStartupPromise) {
+      return this.xdmStartupPromise;
+    }
+    const promise = (async () => {
+      let launch;
+      try {
+        launch = this.resolveXDMLaunch(settings);
+      } catch (error) {
+        throw new DownloadItError("xdm-launch-failed", {
+          error: error?.message || String(error),
+        });
+      }
+      if (!launch) {
+        throw new DownloadItError("xdm-launch-failed");
+      }
+      try {
+        this.startDetachedProcess(
+          launch.executablePath,
+          launch.argumentsList,
+          null,
+          false,
+          { validateFile: false },
+        );
+      } catch (error) {
+        throw new DownloadItError("xdm-launch-failed", {
+          error: error?.message || String(error),
+        });
+      }
+      for (let attempt = 0; attempt < maxProbes; attempt++) {
+        await delay(XDM_RETRY_DELAY_MS);
+        try {
+          await this.probeXDM();
+          return true;
+        } catch (error) {
+          if (error?.code !== "xdm-unavailable") {
+            throw error;
+          }
+        }
+      }
+      throw new DownloadItError("xdm-start-timeout");
+    })().finally(() => {
+      this.xdmStartupPromise = null;
+    });
+    this.xdmStartupPromise = promise;
+    return promise;
+  }
+
+  async probeXDM({ persist = true, updateState = true } = {}) {
+    const isConfigured = () => this.getXDMSettings().enabled;
+    const shareProbe = persist && updateState && isConfigured();
+    if (shareProbe && this.xdmProbePromise) {
+      return this.xdmProbePromise;
+    }
+
+    const probe = (async () => {
+      const response = await this.sendXDMRequest(
+        "GET",
+        "sync",
+        null,
+        XDM_REQUEST_TIMEOUT_MS,
+      );
+      if (response.status !== 200) {
+        throw new DownloadItError("xdm-http-error", { status: response.status });
+      }
+      let status;
+      try {
+        status = JSON.parse(response.text || "");
+      } catch {
+        throw new DownloadItError("xdm-response-invalid");
+      }
+      if (!status || typeof status !== "object" ||
+          typeof status.enabled !== "boolean") {
+        throw new DownloadItError("xdm-response-invalid");
+      }
+      if (!status.enabled) {
+        throw new DownloadItError("xdm-disabled");
+      }
+      if (updateState && isConfigured()) {
+        this.xdmOnline = true;
+      }
+      return status;
+    })().catch(error => {
+      if (updateState && isConfigured()) {
+        this.xdmOnline = false;
+      }
+      throw error;
+    });
+
+    if (!shareProbe) {
+      return probe;
+    }
+    const sharedProbe = probe.finally(() => {
+      if (this.xdmProbePromise === sharedProbe) {
+        this.xdmProbePromise = null;
+      }
+    });
+    this.xdmProbePromise = sharedProbe;
+    return sharedProbe;
   }
 
   async testABDMConfiguration({ endpoint, apiKey } = {}) {
@@ -1400,6 +1759,62 @@ export class DownloadItService {
     });
   }
 
+  sendXDMRequest(
+    method,
+    path,
+    body = null,
+    timeoutMs = XDM_REQUEST_TIMEOUT_MS,
+  ) {
+    return new Promise((resolve, reject) => {
+      let request;
+      try {
+        const endpoint = new URL(String(path || ""), XDM_ENDPOINT);
+        if (endpoint.origin !== new URL(XDM_ENDPOINT).origin ||
+            endpoint.search || endpoint.hash) {
+          throw new Error("Invalid XDM endpoint");
+        }
+        request = this.createPrivilegedXMLHttpRequest();
+        request.open(method, endpoint.href, true);
+        request.timeout = timeoutMs;
+        const channel = request.channel.QueryInterface(Ci.nsIHttpChannel);
+        channel.loadFlags |= Ci.nsIRequest.LOAD_BYPASS_CACHE |
+          Ci.nsIRequest.INHIBIT_CACHING |
+          Ci.nsIRequest.LOAD_ANONYMOUS |
+          Ci.nsIChannel.LOAD_BYPASS_URL_CLASSIFIER;
+        channel.setTRRMode(Ci.nsIRequest.TRR_DISABLED_MODE);
+        channel.loadInfo.httpsOnlyStatus |= Ci.nsILoadInfo.HTTPS_ONLY_EXEMPT;
+        channel.loadInfo.allowDeprecatedSystemRequests = true;
+        channel.redirectionLimit = 0;
+        channel.allowSTS = false;
+        if (method === "POST") {
+          request.setRequestHeader(
+            "Content-Type",
+            "application/json; charset=UTF-8",
+          );
+        }
+      } catch (error) {
+        reject(new DownloadItError("xdm-unavailable", {
+          error: error?.message || String(error),
+        }));
+        return;
+      }
+      request.addEventListener("load", () => {
+        resolve({ status: request.status, text: request.responseText || "" });
+      }, { once: true });
+      const fail = () => reject(new DownloadItError("xdm-unavailable"));
+      request.addEventListener("error", fail, { once: true });
+      request.addEventListener("abort", fail, { once: true });
+      request.addEventListener("timeout", fail, { once: true });
+      try {
+        request.send(body == null ? null : String(body));
+      } catch (error) {
+        reject(new DownloadItError("xdm-unavailable", {
+          error: error?.message || String(error),
+        }));
+      }
+    });
+  }
+
   async testAria2Configuration(config) {
     validateCustomDownloaderDocument({
       version: 1,
@@ -1437,14 +1852,8 @@ export class DownloadItService {
 
   existingExecutablePath(path) {
     try {
-      const file = this.getLocalFile(path);
-      if (!file.exists() || !file.isFile()) {
-        return "";
-      }
-      if (this.platformDefinition?.id === "linux" && !file.isExecutable()) {
-        return "";
-      }
-      return file.path;
+      const resolvedPath = this.resolveExecutablePath(path);
+      return this.isLocalExecutable(resolvedPath) ? resolvedPath : "";
     } catch {
       return "";
     }
@@ -1555,6 +1964,8 @@ export class DownloadItService {
       builtInProtocols: this.getBuiltInProtocols(),
       abdm: this.getABDMSettings(),
       abdmLocked: this.getABDMLocks(),
+      xdm: this.getXDMSettings(),
+      xdmLocked: this.getXDMLocks(),
       jdownloader: this.getJDownloaderSettings(),
       jdownloaderLocked: this.getJDownloaderLocks(),
       idmBridgeEnabled: Services.prefs.getBoolPref(
@@ -1606,6 +2017,7 @@ export class DownloadItService {
     autoStartTasks = null,
     builtInProtocols = null,
     abdm = null,
+    xdm = null,
     jdownloader = null,
     idmBridgeEnabled = null,
     autoCaptureRules = null,
@@ -1682,6 +2094,24 @@ export class DownloadItService {
             apiKey: currentABDM.apiKey,
           }
         : this.normalizeABDMSettings(requestedABDMInput);
+    const currentXDM = this.getXDMSettings();
+    const builtInXDM = builtInProtocols &&
+      typeof builtInProtocols === "object" &&
+      !Array.isArray(builtInProtocols)
+      ? builtInProtocols[XDM_PROVIDER]
+      : null;
+    const requestedXDMInput = builtInXDM ?? xdm;
+    const requestedXDM = requestedXDMInput == null
+      ? {
+          enabled: currentXDM.enabled,
+          launchPath: currentXDM.launchPath,
+        }
+      : requestedXDMInput.enabled === false
+        ? {
+            enabled: false,
+            launchPath: currentXDM.launchPath,
+          }
+        : this.normalizeXDMSettings(requestedXDMInput);
     const currentIDMBridgeEnabled = Services.prefs.getBoolPref(
       PREF_IDM_BRIDGE,
       false,
@@ -1717,6 +2147,8 @@ export class DownloadItService {
       ? this.createJDownloaderDescriptor(requestedJDownloader)
       : requestedRef?.provider === ABDM_PROVIDER
         ? this.createABDMDescriptor(requestedABDM)
+      : requestedRef?.provider === XDM_PROVIDER
+        ? this.createXDMDescriptor(requestedXDM)
       : manager
         ? this.resolveDownloader(manager, requestedCustomDownloaders)
         : null;
@@ -1737,6 +2169,9 @@ export class DownloadItService {
     const configuredABDMInvalidated =
       configuredDefaultRef?.provider === ABDM_PROVIDER &&
       !requestedABDM.enabled;
+    const configuredXDMInvalidated =
+      configuredDefaultRef?.provider === XDM_PROVIDER &&
+      !requestedXDM.enabled;
     const defaultManagerLocked = Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER);
     if (
       defaultManagerLocked &&
@@ -1744,7 +2179,8 @@ export class DownloadItService {
         (defaultManagerRequested && manager !== configuredDefaultKey) ||
         configuredCustomInvalidated ||
         configuredJDownloaderInvalidated ||
-        configuredABDMInvalidated
+        configuredABDMInvalidated ||
+        configuredXDMInvalidated
       )
     ) {
       throw new Error("The default download manager preference is locked");
@@ -1771,6 +2207,12 @@ export class DownloadItService {
     for (const key of ["enabled", "endpoint", "apiKey"]) {
       if (abdmLocks[key] && requestedABDM[key] !== currentABDM[key]) {
         throw new Error(`The AB Download Manager ${key} preference is locked`);
+      }
+    }
+    const xdmLocks = this.getXDMLocks();
+    for (const key of ["enabled", "launchPath"]) {
+      if (xdmLocks[key] && requestedXDM[key] !== currentXDM[key]) {
+        throw new Error(`The Xtreme Download Manager ${key} preference is locked`);
       }
     }
     if (
@@ -1807,11 +2249,13 @@ export class DownloadItService {
       } else if (
         configuredCustomInvalidated ||
         configuredJDownloaderInvalidated ||
-        configuredABDMInvalidated
+        configuredABDMInvalidated ||
+        configuredXDMInvalidated
       ) {
         nextDefault = [
           ...this.listFlashGotDownloaders(),
           ...this.listABDMDownloaders(),
+          ...this.listXDMDownloaders(),
           ...this.listCustomDownloaders(effectiveCustomDownloaders),
           ...(requestedJDownloader.enabled
             ? [this.createJDownloaderDescriptor(requestedJDownloader)]
@@ -1839,6 +2283,20 @@ export class DownloadItService {
     }
     if (requestedABDM.enabled !== currentABDM.enabled) {
       Services.prefs.setBoolPref(PREF_ABDM_ENABLED, requestedABDM.enabled);
+    }
+    if (requestedXDM.enabled !== currentXDM.enabled) {
+      Services.prefs.setBoolPref(PREF_XDM_ENABLED, requestedXDM.enabled);
+      this.xdmOnline = false;
+      this.xdmProbePromise = null;
+    }
+    if (!requestedXDM.enabled) {
+      if (currentXDM.enabled) {
+        this.clearXDMConfiguration();
+      }
+    } else if (requestedXDM.launchPath !== currentXDM.launchPath) {
+      Services.prefs.setStringPref(PREF_XDM_LAUNCH_PATH, requestedXDM.launchPath);
+      this.xdmOnline = false;
+      this.xdmProbePromise = null;
     }
     if (!requestedABDM.enabled) {
       if (currentABDM.enabled) {
@@ -2275,6 +2733,9 @@ export class DownloadItService {
         }
         if (protocol.id === ABDM_PROVIDER) {
           return this.getABDMSettings().enabled;
+        }
+        if (protocol.id === XDM_PROVIDER) {
+          return this.getXDMSettings().enabled;
         }
       } catch {}
       return false;
@@ -3140,13 +3601,41 @@ export class DownloadItService {
     argumentsList,
     onExit = null,
     startHidden = true,
+    { validateExecutable = true, validateFile = true } = {},
   ) {
-    const executable = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
-    executable.initWithPath(this.resolveExecutablePath(executablePath));
+    const resolvedPath = this.resolveExecutablePath(executablePath);
+    const target = this.getLocalFile(resolvedPath);
+    const targetIsFile = isRegularLocalFile(target);
+    const targetIsExecutable = isExecutableLocalFile(
+      target,
+      this.platformDefinition?.id,
+    );
+    let executable = target;
+    let processArguments = argumentsList;
     if (
-      !executable.exists() ||
-      !executable.isFile() ||
-      (this.platformDefinition?.id === "linux" && !executable.isExecutable())
+      this.platformDefinition?.id === "linux" &&
+      !targetIsExecutable &&
+      (
+        !validateFile ||
+        this.runLinuxPathTest(resolvedPath, LINUX_SHELL_EXECUTABLE_TEST)
+      )
+    ) {
+      const shell = this.getLinuxShellFile();
+      if (shell) {
+        executable = shell;
+        processArguments = [
+          "-c",
+          LINUX_SHELL_EXEC,
+          LINUX_SHELL_EXEC_ARG0,
+          resolvedPath,
+          ...argumentsList,
+        ];
+      }
+    }
+    if (
+      validateFile &&
+      executable === target &&
+      (!targetIsFile || (validateExecutable && !targetIsExecutable))
     ) {
       throw new Error(`Executable not found: ${executablePath}`);
     }
@@ -3155,7 +3644,7 @@ export class DownloadItService {
     if (this.platformDefinition?.processWindowHidingSupported) {
       process.startHidden = Boolean(startHidden);
     }
-    process.runwAsync(argumentsList, argumentsList.length, {
+    process.runwAsync(processArguments, processArguments.length, {
       observe(subject, topic) {
         if (topic !== "process-finished" || process.exitValue !== 0) {
           console.error(
@@ -3228,6 +3717,62 @@ export class DownloadItService {
       throw new DownloadItError("abdm-http-error", {
         status: response.status,
       });
+    }
+    return { succeeded: job.links.length, failed: 0 };
+  }
+
+  async downloadViaXDM(managerId, job) {
+    if (managerId !== XDM_DOWNLOADER_ID) {
+      throw new DownloadItError("xdm-submit-failed");
+    }
+    if (!this.getXDMSettings().enabled) {
+      throw new DownloadItError("xdm-unavailable");
+    }
+
+    let settings;
+    try {
+      settings = this.normalizeXDMSettings(this.getXDMSettings());
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "xdm-launch-path-invalid",
+        error?.args || {},
+      );
+    }
+
+    let payload;
+    try {
+      payload = buildXDMRequest(job);
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "xdm-submit-failed",
+        error?.args || {},
+      );
+    }
+
+    try {
+      await this.probeXDM();
+    } catch (error) {
+      if (error?.code !== "xdm-unavailable" || !settings.launchPath) {
+        throw error;
+      }
+      await this.ensureXDMRunning(settings);
+    }
+    let response;
+    try {
+      response = await this.sendXDMRequest(
+        "POST",
+        payload.path,
+        JSON.stringify(payload.body),
+      );
+    } catch (error) {
+      this.xdmOnline = false;
+      if (error?.code === "xdm-unavailable") {
+        throw new DownloadItError("xdm-submit-failed");
+      }
+      throw error;
+    }
+    if (response.status < 200 || response.status >= 300) {
+      throw new DownloadItError("xdm-http-error", { status: response.status });
     }
     return { succeeded: job.links.length, failed: 0 };
   }

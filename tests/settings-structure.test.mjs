@@ -90,13 +90,14 @@ test("Windows and Linux share one runtime capability matrix and universal XPI", 
   assert.match(service, /availableManagerCount: managers\.length/);
   assert.match(service, /this\.platformDefinition\.flashGotSupported[\s\S]*?this\.deployBinary\(\)/);
   assert.match(service, /if \(!this\.platformDefinition\?\.flashGotSupported\) \{\s*return \[\];/);
-  assert.match(service, /this\.platformDefinition\?\.id === "linux"[\s\S]*?file\.isExecutable\(\)/);
+  assert.match(service, /function isExecutableLocalFile\(file, platform\)/);
+  assert.match(service, /platform !== "linux"[\s\S]*?file\.isExecutable\(\)/);
   assert.match(service, /if \(this\.platformDefinition\?\.processWindowHidingSupported\)/);
   assert.match(markup, /id="custom-start-hidden-row"/);
   assert.match(script, /custom-start-hidden-row"\)\.hidden =\s*!state\.snapshot\?\.processWindowHidingSupported/);
   assert.match(script, /service\.platform === "linux"[\s\S]*?"downloadit-linux"/);
   assert.match(script, /"downloadit-component-not-used"/);
-  assert.match(script, /application: linux/);
+  assert.match(script, /application: false,\s*absolute: true,\s*includeAllFiles: linux/);
 
   for (const locale of ["en-US", "zh-CN"]) {
     const fluent = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
@@ -274,7 +275,7 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /picker\.init\(pickerParent, title, Ci\.nsIFilePicker\.modeOpen\)/);
 });
 
-test("JDownloader provider settings and guarded local protocol are wired end to end", () => {
+test("built-in provider settings and guarded local protocols are wired end to end", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   const script = read("addon/chrome/content/options.js");
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
@@ -285,6 +286,8 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
     "downloadit.abdm.enabled",
     "downloadit.abdm.endpoint",
     "downloadit.abdm.apiKey",
+    "downloadit.xdm.enabled",
+    "downloadit.xdm.launchPath",
     "downloadit.jdownloader.enabled",
     "downloadit.jdownloader.endpoint",
     "downloadit.jdownloader.launchPath",
@@ -296,11 +299,17 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
   }
   assert.match(service, /provider: JDOWNLOADER_PROVIDER/);
   assert.match(service, /provider: ABDM_PROVIDER/);
+  assert.match(service, /provider: XDM_PROVIDER/);
   assert.match(service, /downloadViaABDM/);
+  assert.match(service, /downloadViaXDM/);
   assert.match(service, /GET/);
   assert.match(service, /queues/);
   assert.match(service, /add/);
   assert.match(service, /X-Api-Key/);
+  assert.match(downloaders, /http:\/\/127\.0\.0\.1:8597\//);
+  assert.match(service, /"sync"/);
+  assert.match(downloaders, /"download"/);
+  assert.match(downloaders, /"link"/);
   assert.match(service, /downloadViaJDownloader/);
   assert.match(service, /JDOWNLOADER_RETRY_DELAY_MS = 8000/);
   assert.match(service, /JDOWNLOADER_MAX_STARTUP_PROBES = 6/);
@@ -328,16 +337,26 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
   assert.match(downloaders, /params\.set\("autostart"/);
   assert.match(downloaders, /jdownloader-mixed-post-data/);
   assert.match(script, /createJDownloaderDescriptor\(jDownloaderDraft\)/);
+  assert.match(script, /provider !== XDM_PROVIDER/);
+  assert.match(script, /createXDMDescriptor\(xdmDraft\)/);
+  assert.match(
+    script,
+    /provider === ABDM_PROVIDER \|\|\s*downloader\.ref\?\.provider === XDM_PROVIDER/,
+  );
   assert.match(script, /data-remove-built-in/);
   assert.match(script, /removeBuiltInDownloader/);
   assert.match(service, /refreshConfiguredBuiltInProtocols/);
   assert.match(service, /Promise\.allSettled\(probes\)/);
   assert.match(script, /watchBuiltInRefresh/);
   assert.match(script, /filter: linux \? "\*\.jar" : "\*\.exe;\*\.jar"/);
-  assert.match(script, /application: linux/);
+  assert.match(
+    script,
+    /async function browseXDMPath\(\) \{[\s\S]*?filterId: linux \? "" : "downloadit-xdm-file-filter"[\s\S]*?filter: linux \? "" : "\*\.exe;\*\.jar"/,
+  );
+  assert.match(script, /application: false,\s*absolute: true,\s*includeAllFiles: linux/);
   assert.match(script, /picker\.appendFilters\(Ci\.nsIFilePicker\.filterApps\)/);
   assert.match(script, /picker\.appendFilter\(await document\.l10n\.formatValue\(filterId\), filter\)/);
-  assert.match(script, /includeAllFiles: false/);
+  assert.match(script, /includeAllFiles: linux/);
   assert.match(markup, /id="jdownloader-launch-path"[^>]+readonly="readonly"/);
 
   const errorCodes = [
@@ -357,6 +376,15 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
     "abdm-response-invalid",
     "abdm-submit-failed",
     "abdm-post-unsupported",
+    "xdm-unavailable",
+    "xdm-disabled",
+    "xdm-http-error",
+    "xdm-response-invalid",
+    "xdm-submit-failed",
+    "xdm-post-unsupported",
+    "xdm-launch-path-invalid",
+    "xdm-launch-failed",
+    "xdm-start-timeout",
   ];
   for (const relativePath of [
     "addon/chrome/content/options.js",
@@ -379,6 +407,9 @@ test("JDownloader provider settings and guarded local protocol are wired end to 
       "downloadit.abdm.enabled",
       "downloadit.abdm.endpoint",
       "downloadit.abdm.apiKey",
+      "xdm:xdm",
+      "downloadit.xdm.enabled",
+      "downloadit.xdm.launchPath",
       "downloadit.jdownloader.enabled",
       "downloadit.jdownloader.endpoint",
       "downloadit.jdownloader.launchPath",
@@ -421,6 +452,13 @@ test("settings dialog exposes a unified download-tool editor", () => {
     "browse-aria2-configuration",
     "clear-aria2-configuration",
     "test-aria2",
+    "xdm-enabled",
+    "xdm-status",
+    "test-xdm",
+    "xdm-launch-path",
+    "browse-xdm-path",
+    "clear-xdm-path",
+    "edit-xdm-path",
   ]) {
     assert.match(markup, new RegExp(`id="${id}"`));
   }
@@ -435,6 +473,9 @@ test("settings dialog exposes a unified download-tool editor", () => {
   );
   assert.match(markup, /id="tool-editor-custom"[^>]+hidden="hidden"/);
   assert.match(markup, /data-built-in-protocol-fields="jdownloader"/);
+  assert.match(markup, /data-built-in-protocol-fields="xdm"/);
+  assert.match(markup, /id="xdm-launch-path"[^>]+readonly="readonly"/);
+  assert.match(script, /function enableXDMPathInput\(\)/);
   assert.match(
     markup,
     /<details class="advanced-settings">[\s\S]*?id="jdownloader-endpoint"[\s\S]*?<\/details>/,
@@ -450,6 +491,7 @@ test("settings dialog exposes a unified download-tool editor", () => {
   );
   assert.match(script, /startHidden: document\.getElementById\("custom-start-hidden"\)\.checked/);
   assert.match(script, /function openDownloadToolEditor\(kind = "builtin"/);
+  assert.match(script, /editingKind: id \? kind : ""/);
   assert.match(script, /state\.draft\.builtInProtocols\[protocol\] =/);
   assert.match(script, /enabled: true/);
   assert.match(script, /settings\.enabled = false/);
@@ -462,6 +504,9 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(service, /process\.startHidden = Boolean\(startHidden\)/);
   assert.match(service, /builtInProtocols: this\.getBuiltInProtocols\(\)/);
   assert.match(service, /builtInProtocols\[JDOWNLOADER_PROVIDER\]/);
+  assert.match(service, /builtInProtocols\[XDM_PROVIDER\]/);
+  assert.match(script, /createXDMDescriptor/);
+  assert.match(script, /normalizeXDMSettings/);
   assert.match(script, /configurationPath: state\.service\.normalizeCustomFilePathForStorage/);
   assert.match(downloaders, /`--conf-path=\$\{configurationPath\}`/);
   assert.match(script, /createManagerCapabilities/);

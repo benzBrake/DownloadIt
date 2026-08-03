@@ -8,6 +8,7 @@ import {
   ABDMConfigError,
   buildAria2Request,
   buildABDMRequest,
+  buildXDMRequest,
   buildAria2StartupArguments,
   buildJDownloaderRequest,
   BUILT_IN_PROTOCOLS,
@@ -21,6 +22,7 @@ import {
   expandCommandTemplate,
   getCustomDownloaderCapabilities,
   getABDMCapabilities,
+  getXDMCapabilities,
   getFlashGotDownloaderCapabilities,
   getJDownloaderCapabilities,
   getJDownloaderReferer,
@@ -45,6 +47,9 @@ import {
   tokenizeArguments,
   validateCustomDownloaderDocument,
   validateJDownloaderLaunchPath,
+  XDM_DOWNLOADER_ID,
+  XDM_ENDPOINT,
+  XDM_PROVIDER,
 } from "../addon/chrome/content/DownloadItDownloaders.sys.mjs";
 
 test("downloader capabilities are normalized as tri-state metadata", () => {
@@ -318,6 +323,74 @@ test("AB Download Manager uses an independent loopback JSON protocol", () => {
   );
 });
 
+test("Xtreme Download Manager uses its fixed local browser protocol", () => {
+  assert.equal(XDM_PROVIDER, "xdm");
+  assert.equal(XDM_DOWNLOADER_ID, "xdm");
+  assert.equal(XDM_ENDPOINT, "http://127.0.0.1:8597/");
+  assert.deepEqual(getXDMCapabilities(), {
+    post: false,
+    cookies: true,
+    batch: true,
+    directory: false,
+    taskStart: false,
+  });
+  const job = {
+    referer: "https://example.com/page",
+    useragent: "Firefox Test",
+    links: [{
+      url: "https://example.com/file.zip",
+      cookies: "session=1\r\nnext=2",
+      filename: "file.zip",
+      postdata: "",
+    }],
+  };
+  assert.deepEqual(buildXDMRequest(job), {
+    path: "download",
+    body: {
+      url: "https://example.com/file.zip",
+      cookie: "session=1 next=2",
+      requestHeaders: {
+        "User-Agent": ["Firefox Test"],
+        Referer: ["https://example.com/page"],
+      },
+      responseHeaders: {},
+      filename: "file.zip",
+    },
+  });
+  assert.deepEqual(buildXDMRequest({
+    ...job,
+    links: [job.links[0], {
+      url: "https://example.com/second.zip",
+      cookies: "session=2",
+      desc: "Second file",
+      postdata: "",
+    }],
+  }), {
+    path: "link",
+    body: [{
+      url: "https://example.com/file.zip",
+      cookie: "session=1 next=2",
+      requestHeaders: {
+        "User-Agent": ["Firefox Test"],
+        Referer: ["https://example.com/page"],
+      },
+      responseHeaders: {},
+    }, {
+      url: "https://example.com/second.zip",
+      cookie: "session=2",
+      requestHeaders: {
+        "User-Agent": ["Firefox Test"],
+        Referer: ["https://example.com/page"],
+      },
+      responseHeaders: {},
+    }],
+  });
+  assert.throws(
+    () => buildXDMRequest({ links: [{ url: "https://example.com/a", postdata: "x=1" }] }),
+    error => error.code === "xdm-post-unsupported",
+  );
+});
+
 test("built-in protocol catalog keeps singleton provider identity in code", () => {
   assert.deepEqual(BUILT_IN_PROTOCOLS, [{
     id: "jdownloader",
@@ -331,10 +404,17 @@ test("built-in protocol catalog keeps singleton provider identity in code", () =
     downloaderId: "abdm",
     name: "AB Download Manager",
     singleton: true,
+  }, {
+    id: "xdm",
+    provider: "xdm",
+    downloaderId: "xdm",
+    name: "Xtreme Download Manager",
+    singleton: true,
   }]);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS), true);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[0]), true);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[1]), true);
+  assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS[2]), true);
 });
 
 test("JDownloader request bodies preserve aligned fields and task-start policy", () => {

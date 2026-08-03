@@ -8,6 +8,9 @@ export const JDOWNLOADER_DEFAULT_ENDPOINT =
 export const ABDM_PROVIDER = "abdm";
 export const ABDM_DOWNLOADER_ID = "abdm";
 export const ABDM_DEFAULT_ENDPOINT = "http://127.0.0.1:15151/";
+export const XDM_PROVIDER = "xdm";
+export const XDM_DOWNLOADER_ID = "xdm";
+export const XDM_ENDPOINT = "http://127.0.0.1:8597/";
 export const NATIVE_PROVIDER = "native";
 export const NATIVE_DOWNLOADER_ID = "firefox";
 
@@ -24,6 +27,13 @@ export const BUILT_IN_PROTOCOLS = Object.freeze([
     provider: ABDM_PROVIDER,
     downloaderId: ABDM_DOWNLOADER_ID,
     name: "AB Download Manager",
+    singleton: true,
+  }),
+  Object.freeze({
+    id: XDM_PROVIDER,
+    provider: XDM_PROVIDER,
+    downloaderId: XDM_DOWNLOADER_ID,
+    name: "Xtreme Download Manager",
     singleton: true,
   }),
 ]);
@@ -173,6 +183,72 @@ export function getABDMCapabilities() {
     directory: false,
     taskStart: true,
   });
+}
+
+export class XDMConfigError extends Error {
+  constructor(code, args = {}) {
+    super(code);
+    this.name = "XDMConfigError";
+    this.code = code;
+    this.args = args;
+  }
+}
+
+export function getXDMCapabilities() {
+  return normalizeDownloaderCapabilities({
+    post: false,
+    cookies: true,
+    batch: true,
+    directory: false,
+    taskStart: false,
+  });
+}
+
+function xdmHeaderValue(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
+}
+
+function buildXDMItem(job, link, { includeFilename = false } = {}) {
+  const requestHeaders = {};
+  const cookie = xdmHeaderValue(link.cookies);
+  const referer = xdmHeaderValue(job.referer);
+  const userAgent = xdmHeaderValue(job.useragent);
+  if (userAgent) {
+    requestHeaders["User-Agent"] = [userAgent];
+  }
+  if (referer) {
+    requestHeaders.Referer = [referer];
+  }
+  const item = {
+    url: String(link.url || ""),
+    cookie: cookie || undefined,
+    requestHeaders,
+    responseHeaders: {},
+  };
+  if (includeFilename) {
+    item.filename = xdmHeaderValue(link.filename || link.desc) || undefined;
+  }
+  return item;
+}
+
+export function buildXDMRequest(job) {
+  const links = Array.isArray(job?.links) ? job.links : [];
+  if (!links.length) {
+    throw new XDMConfigError("xdm-submit-failed");
+  }
+  if (links.some(link => String(link.postdata || ""))) {
+    throw new XDMConfigError("xdm-post-unsupported");
+  }
+  if (links.length === 1) {
+    return {
+      path: "download",
+      body: buildXDMItem(job, links[0], { includeFilename: true }),
+    };
+  }
+  return {
+    path: "link",
+    body: links.map(link => buildXDMItem(job, link)),
+  };
 }
 
 export function normalizeABDMEndpoint(value = ABDM_DEFAULT_ENDPOINT) {
