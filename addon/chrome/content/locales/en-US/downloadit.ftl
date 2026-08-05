@@ -516,6 +516,7 @@ downloadit-edit-abdm-path =
     .title = Enter AB Download Manager launcher path manually
     .aria-label = Enter AB Download Manager launcher path manually
 downloadit-edit-xdm-path =
+    Edit
     .title = Enter XDM launcher or JAR path manually
     .aria-label = Enter XDM launcher or JAR path manually
 downloadit-edit-uget-path =

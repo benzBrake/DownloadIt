@@ -506,6 +506,24 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(markup, /data-built-in-protocol-fields="uget"/);
   assert.match(markup, /id="xdm-launch-path"[^>]+readonly="readonly"/);
   assert.match(markup, /id="abdm-launch-path"[^>]+readonly="readonly"/);
+  for (const id of [
+    "browse-jdownloader-path",
+    "clear-jdownloader-path",
+    "browse-xdm-path",
+    "edit-xdm-path",
+    "clear-xdm-path",
+  ]) {
+    assert.match(
+      markup,
+      new RegExp(`id="${id}"[^>]+class="secondary-button path-action-button"`),
+    );
+  }
+  assert.doesNotMatch(
+    markup,
+    /id="edit-xdm-path"[^>]*>[^<]*&#x270e;/,
+  );
+  assert.match(markup, /id="edit-abdm-path"[^>]+class="icon-button"[^>]*>&#x270e;<\/button>/);
+  assert.match(markup, /id="edit-uget-path"[^>]+class="icon-button"[^>]*>&#x270e;<\/button>/);
   assert.match(script, /function enableXDMPathInput\(\)/);
   assert.match(script, /function enableABDMPathInput\(\)/);
   assert.match(script, /function enableUGetPathInput\(\)/);

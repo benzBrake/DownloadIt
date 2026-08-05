@@ -483,6 +483,7 @@ downloadit-edit-abdm-path =
     .title = 手动输入 AB Download Manager 启动器路径
     .aria-label = 手动输入 AB Download Manager 启动器路径
 downloadit-edit-xdm-path =
+    编辑
     .title = 手动输入 XDM 启动器或 JAR 路径
     .aria-label = 手动输入 XDM 启动器或 JAR 路径
 downloadit-edit-uget-path =
