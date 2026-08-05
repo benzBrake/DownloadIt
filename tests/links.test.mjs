@@ -5,8 +5,10 @@ import {
   classifyLinkType,
   createDefaultLinkGroupSettings,
   filterLinkRecords,
+  formatLinkCopyPayload,
   getExtensionOptions,
   getLinkExtension,
+  isMagnetURL,
   LinkSelectionModel,
   PAGE_LINKS_QUERY,
   queryPageLinks,
@@ -24,6 +26,64 @@ test("link extensions prefer download filenames and ignore URL queries", () => {
   assert.equal(getLinkExtension({
     url: "https://example.com/files/no-extension?download=1",
   }), "");
+});
+
+test("magnet links are recognized and filter independently from link types", () => {
+  const model = new LinkSelectionModel([
+    { url: "https://example.com/release.iso", description: "HTTP release" },
+    {
+      url: "magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release",
+      description: "Ubuntu magnet",
+    },
+    { url: "ftp://example.com/release.iso", description: "FTP release" },
+  ]);
+
+  assert.equal(isMagnetURL("MAGNET:?xt=urn:btih:test"), true);
+  assert.equal(isMagnetURL("https://example.com/magnet"), false);
+  assert.equal(model.records[1].isMagnet, true);
+  assert.deepEqual(
+    filterLinkRecords(model.records, { magnetOnly: true }).map(record => record.url),
+    ["magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release"],
+  );
+  assert.deepEqual(
+    filterLinkRecords(model.records, {
+      magnetOnly: true,
+      types: ["other"],
+      search: "ubuntu",
+    }).map(record => record.url),
+    ["magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release"],
+  );
+  model.setVisibleSelected({ magnetOnly: true }, true);
+  assert.deepEqual(model.selectedLinks().map(link => link.url), [
+    "magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release",
+  ]);
+});
+
+test("selected-link copy payloads preserve order and format safely", () => {
+  const links = [
+    {
+      url: "https://example.com/files/report.pdf",
+      description: "Report\tApril\r\n2026",
+    },
+    {
+      url: "magnet:?xt=urn:btih:0123456789abcdef&dn=Readme",
+      description: "Read [this]\\now",
+    },
+  ];
+
+  assert.equal(
+    formatLinkCopyPayload(links),
+    "https://example.com/files/report.pdf\nmagnet:?xt=urn:btih:0123456789abcdef&dn=Readme",
+  );
+  assert.equal(
+    formatLinkCopyPayload(links, "title-url"),
+    "Report April 2026\thttps://example.com/files/report.pdf\nRead [this]\\now\tmagnet:?xt=urn:btih:0123456789abcdef&dn=Readme",
+  );
+  assert.equal(
+    formatLinkCopyPayload(links, "markdown"),
+    "[Report April 2026](<https://example.com/files/report.pdf>)\n[Read \\[this\\]\\\\now](<magnet:?xt=urn:btih:0123456789abcdef&dn=Readme>)",
+  );
+  assert.equal(formatLinkCopyPayload([], "markdown"), "");
 });
 
 test("common extensions map to the supported link type filters", () => {

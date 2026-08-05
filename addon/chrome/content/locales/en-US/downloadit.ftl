@@ -42,6 +42,7 @@ downloadit-links-extensions-selected =
        *[other] { NUMBER($count) } suffixes selected
     }
 downloadit-links-show-all-extensions = Show all suffixes
+downloadit-links-magnet-only = Magnet links only
 downloadit-links-list-region =
     .aria-label = Page links
 downloadit-links-select-visible =
@@ -54,6 +55,17 @@ downloadit-links-loading = Collecting page links...
 downloadit-links-empty = No supported links were found on this page.
 downloadit-links-no-matches = No links match the current filters.
 downloadit-links-clear-selection = Clear selection
+downloadit-links-copy-selected = Copy selected links
+downloadit-links-copy-options =
+    .aria-label = More copy options
+downloadit-links-copy-title-url = Copy title and URL (tab-separated)
+downloadit-links-copy-markdown = Copy as Markdown links
+downloadit-links-copy-success =
+    { $count ->
+        [one] Copied 1 link to the clipboard.
+       *[other] Copied { NUMBER($count) } links to the clipboard.
+    }
+downloadit-links-copy-failed = Could not copy the selected links: { $error }
 downloadit-links-manager-label = Downloader
 downloadit-links-result-count = { NUMBER($visible) } of { NUMBER($total) } shown
 downloadit-links-selection-count = { NUMBER($selected) } of { NUMBER($total) } selected

@@ -69,6 +69,10 @@
             <button id="clear-extension-filter" class="multi-select-clear" type="button" data-l10n-id="downloadit-links-show-all-extensions"></button>
           </div>
         </div>
+        <label class="magnet-filter" for="magnet-filter">
+          <input id="magnet-filter" type="checkbox" />
+          <span data-l10n-id="downloadit-links-magnet-only"></span>
+        </label>
       </section>
 
       <section class="link-pane" data-l10n-id="downloadit-links-list-region" data-l10n-attrs="aria-label">
@@ -105,6 +109,25 @@
         <div class="selection-summary">
           <span id="selection-count"></span>
           <button id="clear-selection" class="text-button" type="button" data-l10n-id="downloadit-links-clear-selection"></button>
+          <div class="copy-split">
+            <button id="copy-selected" class="secondary-button copy-selected" type="button" data-l10n-id="downloadit-links-copy-selected"></button>
+            <button
+              id="copy-selected-options"
+              class="copy-options-button"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="copy-selected-menu"
+              data-l10n-id="downloadit-links-copy-options"
+              data-l10n-attrs="aria-label"
+            >
+              <span class="menu-chevron" aria-hidden="true"></span>
+            </button>
+            <div id="copy-selected-menu" class="copy-menu" role="menu" aria-labelledby="copy-selected" hidden="hidden">
+              <button type="button" role="menuitem" data-copy-format="title-url" data-l10n-id="downloadit-links-copy-title-url"></button>
+              <button type="button" role="menuitem" data-copy-format="markdown" data-l10n-id="downloadit-links-copy-markdown"></button>
+            </div>
+          </div>
         </div>
         <div class="action-controls">
           <label class="manager-field" for="manager">

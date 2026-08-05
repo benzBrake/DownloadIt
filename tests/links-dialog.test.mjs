@@ -16,9 +16,13 @@ test("links dialog exposes filtering, selection, and downloader controls", () =>
     "search",
     "type-filter",
     "extension-filter",
+    "magnet-filter",
     "select-visible",
     "link-list",
     "clear-selection",
+    "copy-selected",
+    "copy-selected-options",
+    "copy-selected-menu",
     "manager",
     "cancel",
     "download",
@@ -38,7 +42,27 @@ test("links dialog exposes filtering, selection, and downloader controls", () =>
   assert.match(markup, /id="extension-filter-menu"[^>]+role="group"/);
   assert.match(markup, /id="type-filter-options"/);
   assert.match(markup, /id="extension-filter-options"/);
+  assert.match(markup, /<button[^>]+id="copy-selected-options"[^>]+aria-haspopup="menu"[^>]+aria-expanded="false"[^>]+aria-controls="copy-selected-menu"/s);
+  assert.match(markup, /id="copy-selected-menu"[^>]+role="menu"/);
+  assert.match(markup, /data-copy-format="title-url"/);
+  assert.match(markup, /data-copy-format="markdown"/);
   assert.doesNotMatch(markup, /<select[^>]+id="(?:type|extension)-filter"/);
+});
+
+test("links dialog filters magnet links and exposes accessible copy actions", () => {
+  const script = read("addon/chrome/content/links.js");
+  const styles = read("addon/chrome/content/links.css");
+
+  assert.match(script, /magnetOnly:\s*false/);
+  assert.match(script, /state\.filters\.magnetOnly\s*=\s*event\.target\.checked/);
+  assert.match(script, /formatLinkCopyPayload\(links, format\)/);
+  assert.match(script, /@mozilla\.org\/widget\/clipboardhelper;1/);
+  assert.match(script, /Ci\.nsIClipboardHelper/);
+  assert.match(script, /copyMenuOpen/);
+  assert.match(script, /handleCopyMenuKeyDown/);
+  assert.match(script, /closeCopyMenu\(\{ restoreFocus: true \}\)/);
+  assert.match(script, /copyDisabled/);
+  assert.match(styles, /\.magnet-filter,\s*\.magnet-filter span\s*\{\s*user-select:\s*none;/s);
 });
 
 test("links dialog submits through the selected manager without persisting it", () => {

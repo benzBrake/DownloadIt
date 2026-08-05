@@ -255,6 +255,14 @@ export function classifyLinkType(link, settings = null) {
   return createExtensionTypeMap(settings).get(getLinkExtension(link)) || "other";
 }
 
+export function isMagnetURL(value) {
+  try {
+    return new URL(String(value || "")).protocol === "magnet:";
+  } catch {
+    return false;
+  }
+}
+
 function createLinkRecordWithTypes(link, index, extensionTypes) {
   const url = String(link?.url || "");
   const description = String(link?.description || "").trim() || url;
@@ -267,6 +275,7 @@ function createLinkRecordWithTypes(link, index, extensionTypes) {
     filename,
     extension,
     type: extensionTypes.get(extension) || "other",
+    isMagnet: isMagnetURL(url),
     searchText: `${description}\n${filename}\n${url}`.toLowerCase(),
   };
   if (Number.isInteger(link?.browsingContextId) && link.browsingContextId > 0) {
@@ -301,6 +310,7 @@ function normalizeFilterValues(values, allowedValues = null) {
 export function filterLinkRecords(records, {
   types = [],
   extensions = [],
+  magnetOnly = false,
   search = "",
 } = {}) {
   const normalizedTypes = normalizeFilterValues(types);
@@ -309,8 +319,42 @@ export function filterLinkRecords(records, {
   return records.filter(record =>
     (normalizedTypes.size === 0 || normalizedTypes.has(record.type)) &&
     (normalizedExtensions.size === 0 || normalizedExtensions.has(record.extension)) &&
+    (!magnetOnly || record.isMagnet) &&
     (!normalizedSearch || record.searchText.includes(normalizedSearch))
   );
+}
+
+function normalizeCopyTitle(value, fallback) {
+  const title = String(value || "").replace(/[\t\r\n]+/g, " ").trim();
+  return title || fallback;
+}
+
+function escapeMarkdownLabel(value) {
+  return String(value || "").replace(/[\\\[\]]/g, "\\$&");
+}
+
+export function formatLinkCopyPayload(links, format = "url") {
+  const entries = [];
+  for (const link of Array.isArray(links) ? links : []) {
+    const url = String(link?.url || "").trim();
+    if (!url) {
+      continue;
+    }
+    entries.push({
+      url,
+      title: normalizeCopyTitle(link?.description, url),
+    });
+  }
+
+  if (format === "title-url") {
+    return entries.map(({ title, url }) => `${title}\t${url}`).join("\n");
+  }
+  if (format === "markdown") {
+    return entries.map(({ title, url }) =>
+      `[${escapeMarkdownLabel(title)}](<${url}>)`
+    ).join("\n");
+  }
+  return entries.map(({ url }) => url).join("\n");
 }
 
 export function getExtensionOptions(records) {

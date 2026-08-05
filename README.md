@@ -12,7 +12,7 @@ The project is currently being migrated. It supports Windows and Linux, and the 
 
 - Adds a DownloadIt item to the context menu for web links.
 - Adds a Downloadit Selection item below it when selected page content contains links.
-- Adds a DownloadIt Links selector for collecting, filtering, and batch-downloading explicit page links from the current document and its frames.
+- Adds a DownloadIt Links selector for collecting, filtering (including magnet links), copying selected links, and batch-downloading explicit page links from the current document and its frames.
 - On Windows, detects download managers supported by `FlashGot.exe` and lets you choose a default tool.
 - Shows POST, cookie, batch, download-directory, and task-start capabilities for each downloader.
 - Provides an always-available Firefox downloader without routing requests through `FlashGot.exe`.
@@ -123,7 +123,7 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.3.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.6.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -135,9 +135,9 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type and suffix filtering, selection state, download-manager parsing, JDownloader, AB Download Manager, and Xtreme Download Manager local protocol validation and request construction, the toolbar PanelView and context-menu insertion point, allow/deny automatic-capture matching and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type, suffix, and magnet filtering, selected-link copy formatting, selection state, download-manager parsing, JDownloader, AB Download Manager, and Xtreme Download Manager local protocol validation and request construction, the toolbar PanelView and context-menu insertion point, allow/deny automatic-capture matching and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
-DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature.
+DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. The independent **Magnet links only** filter also combines with those conditions. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature. Selected links can be copied as newline-separated URLs, tab-separated titles and URLs, or Markdown links without contacting a downloader.
 
 The **Link groups** settings tab can enable or disable each built-in suffix group and edit the suffixes it manages. Custom groups require a display name, a unique kebab-case key, and at least one suffix; enabled custom groups appear in the type filter. A suffix can belong to only one group, including disabled groups, so a group can be enabled later without creating ambiguous classification rules. Suffixes from disabled groups and unmatched suffixes are classified as **Other**.
 

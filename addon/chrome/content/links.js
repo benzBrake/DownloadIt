@@ -9,6 +9,7 @@ const { initializeDownloadItLocalization } = ChromeUtils.importESModule(
 );
 const {
   createDefaultLinkGroupSettings,
+  formatLinkCopyPayload,
   getExtensionOptions,
   LinkSelectionModel,
   queryPageLinks,
@@ -83,6 +84,7 @@ const state = {
   filters: {
     types: new Set(),
     extensions: new Set(),
+    magnetOnly: false,
     search: "",
   },
   loading: true,
@@ -90,6 +92,7 @@ const state = {
   managers: [],
   linkGroups: createDefaultLinkGroupSettings(),
   openFilter: "",
+  copyMenuOpen: false,
 };
 
 function setLocalized(element, id, args = null) {
@@ -153,6 +156,44 @@ function closeFilterMenu({ restoreFocus = false } = {}) {
   return true;
 }
 
+function copyMenuElements() {
+  return {
+    container: document.querySelector(".copy-split"),
+    toggle: document.getElementById("copy-selected-options"),
+    menu: document.getElementById("copy-selected-menu"),
+  };
+}
+
+function closeCopyMenu({ restoreFocus = false } = {}) {
+  if (!state.copyMenuOpen) {
+    return false;
+  }
+  const { toggle, menu } = copyMenuElements();
+  menu.hidden = true;
+  toggle.setAttribute("aria-expanded", "false");
+  state.copyMenuOpen = false;
+  if (restoreFocus) {
+    toggle.focus();
+  }
+  return true;
+}
+
+function openCopyMenu() {
+  if (state.loading || state.busy || state.model.selectedCount === 0) {
+    return;
+  }
+  if (state.copyMenuOpen) {
+    closeCopyMenu({ restoreFocus: true });
+    return;
+  }
+  closeFilterMenu();
+  const { toggle, menu } = copyMenuElements();
+  menu.hidden = false;
+  toggle.setAttribute("aria-expanded", "true");
+  state.copyMenuOpen = true;
+  menu.querySelector("button:not(:disabled)")?.focus();
+}
+
 function openFilterMenu(name) {
   if (state.openFilter === name) {
     closeFilterMenu({ restoreFocus: true });
@@ -183,6 +224,37 @@ function handleFilterMenuKeyDown(event) {
   }
   const { menu } = filterElements(state.openFilter);
   const controls = [...menu.querySelectorAll("input:not(:disabled), button:not(:disabled)")];
+  if (controls.length === 0) {
+    return;
+  }
+  event.preventDefault();
+  const current = controls.indexOf(document.activeElement);
+  let next = 0;
+  if (event.key === "End") {
+    next = controls.length - 1;
+  } else if (event.key === "ArrowUp") {
+    next = current <= 0 ? controls.length - 1 : current - 1;
+  } else if (event.key === "ArrowDown") {
+    next = current < 0 || current === controls.length - 1 ? 0 : current + 1;
+  }
+  controls[next].focus();
+}
+
+function handleCopyMenuKeyDown(event) {
+  if (!state.copyMenuOpen) {
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeCopyMenu({ restoreFocus: true });
+    return;
+  }
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    return;
+  }
+  const { menu } = copyMenuElements();
+  const controls = [...menu.querySelectorAll("button:not(:disabled)")];
   if (controls.length === 0) {
     return;
   }
@@ -233,6 +305,10 @@ function bindEvents() {
     state.filters.search = event.target.value;
     renderLinks();
   });
+  document.getElementById("magnet-filter").addEventListener("change", event => {
+    state.filters.magnetOnly = event.target.checked;
+    renderLinks();
+  });
   document.getElementById("type-filter").addEventListener("click", () => {
     openFilterMenu("types");
   });
@@ -275,6 +351,22 @@ function bindEvents() {
     state.model.clearSelection();
     renderLinks();
   });
+  document.getElementById("copy-selected").addEventListener("click", () => {
+    copySelectedLinks("url");
+  });
+  document.getElementById("copy-selected-options").addEventListener("click", openCopyMenu);
+  document.getElementById("copy-selected-options").addEventListener("keydown", event => {
+    if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      openCopyMenu();
+    }
+  });
+  document.getElementById("copy-selected-menu").addEventListener("click", event => {
+    const item = event.target.closest("button[data-copy-format]");
+    if (item) {
+      copySelectedLinks(item.dataset.copyFormat);
+    }
+  });
   document.getElementById("cancel").addEventListener("click", () => window.close());
   document.getElementById("download").addEventListener("click", submitDownloads);
   document.addEventListener("pointerdown", event => {
@@ -284,6 +376,12 @@ function bindEvents() {
     ) {
       closeFilterMenu();
     }
+    if (
+      state.copyMenuOpen &&
+      !copyMenuElements().container.contains(event.target)
+    ) {
+      closeCopyMenu();
+    }
   });
   document.addEventListener("focusin", event => {
     if (
@@ -292,10 +390,20 @@ function bindEvents() {
     ) {
       closeFilterMenu();
     }
+    if (
+      state.copyMenuOpen &&
+      !copyMenuElements().container.contains(event.target)
+    ) {
+      closeCopyMenu();
+    }
   });
   document.addEventListener("keydown", handleFilterMenuKeyDown);
+  document.addEventListener("keydown", handleCopyMenuKeyDown);
   window.addEventListener("keydown", event => {
-    if (event.key === "Escape" && state.openFilter) {
+    if (event.key === "Escape" && state.copyMenuOpen) {
+      event.preventDefault();
+      closeCopyMenu({ restoreFocus: true });
+    } else if (event.key === "Escape" && state.openFilter) {
       event.preventDefault();
       closeFilterMenu({ restoreFocus: true });
     } else if (event.key === "Escape" && !state.busy) {
@@ -527,6 +635,15 @@ function renderSelectionState(visible = state.model.visible(state.filters)) {
 
   document.getElementById("clear-selection").disabled =
     state.busy || state.model.selectedCount === 0;
+  const copyDisabled = state.loading || state.busy || state.model.selectedCount === 0;
+  document.getElementById("copy-selected").disabled = copyDisabled;
+  document.getElementById("copy-selected-options").disabled = copyDisabled;
+  for (const item of document.querySelectorAll("#copy-selected-menu button")) {
+    item.disabled = copyDisabled;
+  }
+  if (copyDisabled) {
+    closeCopyMenu();
+  }
   document.getElementById("download").disabled = Boolean(
     state.loading ||
     state.busy ||
@@ -537,6 +654,8 @@ function renderSelectionState(visible = state.model.visible(state.filters)) {
     state.busy || state.managers.length === 0;
   document.getElementById("cancel").disabled = state.busy;
   document.getElementById("search").disabled = state.loading || state.busy;
+  document.getElementById("magnet-filter").disabled =
+    state.loading || state.busy || state.model.records.length === 0;
   for (const name of Object.keys(FILTER_CONTROLS)) {
     const { toggle, menu, clear } = filterElements(name);
     toggle.disabled = state.loading || state.busy || state.model.records.length === 0;
@@ -564,6 +683,28 @@ async function formatDownloadError(error) {
     : error?.message || String(error);
 }
 
+function copySelectedLinks(format) {
+  const links = state.model.selectedLinks();
+  if (state.loading || state.busy || links.length === 0) {
+    return;
+  }
+  closeCopyMenu({ restoreFocus: true });
+  try {
+    const payload = formatLinkCopyPayload(links, format);
+    if (!payload) {
+      return;
+    }
+    Cc["@mozilla.org/widget/clipboardhelper;1"]
+      .getService(Ci.nsIClipboardHelper)
+      .copyString(payload);
+    setFeedback("downloadit-links-copy-success", { count: links.length }, "success");
+  } catch (error) {
+    setFeedback("downloadit-links-copy-failed", {
+      error: error?.message || String(error),
+    }, "error");
+  }
+}
+
 async function submitDownloads() {
   const managerKey = document.getElementById("manager").value;
   const links = state.model.selectedLinks();
@@ -573,6 +714,7 @@ async function submitDownloads() {
 
   state.busy = true;
   closeFilterMenu();
+  closeCopyMenu();
   setFeedback("downloadit-links-submitting", { count: links.length }, "busy");
   renderSelectionState();
   const contexts = links.map(link => ({

@@ -137,7 +137,7 @@ h1 {
 
 .filterbar {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(130px, 170px) minmax(130px, 170px);
+  grid-template-columns: minmax(220px, 1fr) minmax(130px, 170px) minmax(130px, 170px) max-content;
   align-items: end;
   gap: 12px;
   padding: 12px 18px;
@@ -180,6 +180,37 @@ h1 {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
+}
+
+.magnet-filter,
+.magnet-filter span {
+  user-select: none;
+}
+
+.magnet-filter {
+  display: inline-flex;
+  align-items: center;
+  align-self: end;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.magnet-filter:hover {
+  border-color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 6%, var(--surface));
+}
+
+.magnet-filter:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 input[type="search"],
@@ -534,10 +565,15 @@ input[type="checkbox"] {
   color: var(--success);
 }
 
+.feedback.is-success {
+  color: var(--success);
+}
+
 .actionbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 18px;
   min-height: 62px;
   padding: 10px 18px;
@@ -557,6 +593,81 @@ input[type="checkbox"] {
   min-width: 190px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.copy-split {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.copy-selected {
+  min-width: 0;
+  border-radius: 4px 0 0 4px;
+  white-space: nowrap;
+}
+
+.copy-options-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+  background: var(--surface);
+}
+
+.copy-options-button:hover:not(:disabled),
+.copy-options-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--focus) 8%, var(--surface));
+}
+
+.copy-options-button .menu-chevron {
+  display: block;
+  margin-top: -3px;
+}
+
+.copy-options-button[aria-expanded="true"] .menu-chevron {
+  margin-top: 3px;
+  transform: rotate(225deg);
+}
+
+.copy-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  min-width: max-content;
+  max-width: min(320px, calc(100vw - 36px));
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px color-mix(in srgb, #000000 20%, transparent);
+}
+
+.copy-menu[hidden] {
+  display: none;
+}
+
+.copy-menu button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.copy-menu button:hover:not(:disabled),
+.copy-menu button:focus-visible {
+  background: color-mix(in srgb, var(--focus) 9%, var(--surface));
 }
 
 .action-controls {
