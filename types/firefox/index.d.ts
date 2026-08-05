@@ -710,6 +710,7 @@ interface WindowActorRegistrationOptions {
   matches?: string[];
   remoteTypes?: string[];
   messageManagerGroups?: string[];
+  safeForUntrustedWebProcess?: boolean;
   parent?: WindowActorSidedOptions;
   child?: WindowActorChildOptions;
 }

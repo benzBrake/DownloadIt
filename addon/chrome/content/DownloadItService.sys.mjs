@@ -253,6 +253,7 @@ function registerLinkCollectorActor() {
     },
     allFrames: true,
     matches: ["<all_urls>"],
+    safeForUntrustedWebProcess: true,
   });
   linkCollectorActorRegistered = true;
 }

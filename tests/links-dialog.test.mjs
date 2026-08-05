@@ -73,6 +73,15 @@ test("page-link collection does not include media source selectors", () => {
   assert.doesNotMatch(actor, /img\[src\]|video\[src\]|audio\[src\]|source\[src\]/);
 });
 
+test("link collector Actor is safe for untrusted web processes", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+
+  assert.match(
+    service,
+    /ChromeUtils\.registerWindowActor\(LINK_COLLECTOR_ACTOR_NAME,\s*\{.*?safeForUntrustedWebProcess:\s*true,/s,
+  );
+});
+
 test("both packaging scripts require the batch-link selector files", () => {
   for (const script of [read("pack.ps1"), read("pack.sh")]) {
     for (const entry of [
