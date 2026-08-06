@@ -6,6 +6,9 @@ import {
   ABDM_DOWNLOADER_ID,
   ABDM_PROVIDER,
   ABDMConfigError,
+  ARIA2NEXT_DEFAULT_RPC_PORT,
+  ARIA2NEXT_DOWNLOADER_ID,
+  ARIA2NEXT_PROVIDER,
   buildAria2Request,
   buildABDMRequest,
   buildUGetArguments,
@@ -23,6 +26,7 @@ import {
   expandCommandTemplate,
   getCustomDownloaderCapabilities,
   getABDMCapabilities,
+  getAria2NextCapabilities,
   getUGetCapabilities,
   getXDMCapabilities,
   getFlashGotDownloaderCapabilities,
@@ -447,6 +451,19 @@ test("uGet builds one quiet CLI invocation per link", () => {
   );
 });
 
+test("Aria2Next capabilities and defaults match the built-in RPC profile", () => {
+  assert.equal(ARIA2NEXT_PROVIDER, "aria2next");
+  assert.equal(ARIA2NEXT_DOWNLOADER_ID, "aria2next");
+  assert.equal(ARIA2NEXT_DEFAULT_RPC_PORT, 6800);
+  assert.deepEqual(getAria2NextCapabilities(), {
+    post: false,
+    cookies: true,
+    batch: true,
+    directory: true,
+    taskStart: false,
+  });
+});
+
 test("built-in protocol catalog keeps singleton provider identity in code", () => {
   assert.deepEqual(BUILT_IN_PROTOCOLS, [{
     id: "jdownloader",
@@ -471,6 +488,12 @@ test("built-in protocol catalog keeps singleton provider identity in code", () =
     provider: "uget",
     downloaderId: "uget",
     name: "uGet",
+    singleton: true,
+  }, {
+    id: "aria2next",
+    provider: "aria2next",
+    downloaderId: "aria2next",
+    name: "Aria2Next",
     singleton: true,
   }]);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS), true);

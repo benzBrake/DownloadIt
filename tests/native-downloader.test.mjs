@@ -55,10 +55,12 @@ const servicesMock = {
   prefs: {
     clearUserPref: name => preferenceValues.delete(name),
     getBoolPref: (name, fallback) => preferenceValues.get(name) ?? fallback,
+    getIntPref: (name, fallback) => preferenceValues.get(name) ?? fallback,
     getStringPref: (name, fallback) => preferenceValues.get(name) ?? fallback,
     prefHasUserValue: name => preferenceValues.has(name),
     prefIsLocked: name => preferenceLocks.has(name),
     setBoolPref: (name, value) => preferenceValues.set(name, value),
+    setIntPref: (name, value) => preferenceValues.set(name, value),
     setStringPref: (name, value) => preferenceValues.set(name, value),
   },
   wm: {
@@ -293,6 +295,95 @@ test("platform capabilities initialize Windows and Linux services independently"
     /supports Windows and Linux only/,
   );
   servicesMock.appinfo.OS = "WINNT";
+});
+
+test("service shutdown waits for the Aria2Next shutdown RPC", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.exitOnClose", true);
+  preferenceValues.set("downloadit.aria2next.rpcPort", 6801);
+  preferenceValues.set("downloadit.aria2next.secret", "shutdown-secret");
+
+  const service = new DownloadItService({ version: "test" });
+  service.idmBridge = { stop() {} };
+  service.unregisterToolbarWidget = () => {};
+  let finishRequest;
+  let request = null;
+  service.sendAria2Request = (config, payload) => {
+    request = { config, payload };
+    return new Promise(resolve => {
+      finishRequest = resolve;
+    });
+  };
+
+  let settled = false;
+  const shutdownPromise = service.shutdown().then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+
+  assert.equal(settled, false);
+  assert.equal(request.config.rpcUrl, "http://127.0.0.1:6801/jsonrpc");
+  assert.equal(request.payload.method, "aria2.shutdown");
+  assert.deepEqual(request.payload.params, ["token:shutdown-secret"]);
+
+  finishRequest({ result: "OK" });
+  await shutdownPromise;
+  assert.equal(settled, true);
+});
+
+test("Aria2Next shutdown kills only its own process when the RPC fails", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.exitOnClose", true);
+
+  const service = new DownloadItService({ version: "test" });
+  service.idmBridge = { stop() {} };
+  service.unregisterToolbarWidget = () => {};
+  let killed = 0;
+  const process = { kill() { killed++; } };
+  service.aria2NextProcess = process;
+  service.sendAria2Request = async () => {
+    throw new Error("network is already shutting down");
+  };
+
+  await service.shutdownAria2NextIfEnabled();
+  assert.equal(killed, 1);
+  assert.equal(service.aria2NextProcess, null);
+  preferenceValues.clear();
+});
+
+test("Aria2Next startup launches after a failed probe without recursive waiting", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.rpcPort", 6800);
+  preferenceValues.set("downloadit.aria2next.downloadDir", "C:\\Downloads");
+
+  const service = createSettingsService();
+  service.deployAria2NextBinary = async () =>
+    "C:\\Profile\\DownloadIt\\aria2-next.exe";
+  const launches = [];
+  service.startDetachedProcess = (...args) => launches.push(args);
+  let probes = 0;
+  service.probeAria2Next = async () => {
+    probes++;
+    if (probes === 1) {
+      throw new DownloadItError("aria2-unavailable");
+    }
+    return { version: "2.5.5" };
+  };
+
+  assert.equal(await service.ensureAria2NextRunning(), true);
+  assert.equal(probes, 2);
+  assert.equal(launches.length, 1);
+  assert.equal(launches[0][0], "C:\\Profile\\DownloadIt\\aria2-next.exe");
+  assert.deepEqual(launches[0][1], [
+    "--enable-rpc=true",
+    "--rpc-listen-all=false",
+    "--rpc-listen-port=6800",
+    "--dir=C:\\Downloads",
+  ]);
+  preferenceValues.clear();
 });
 
 test("Linux hides FlashGot cache and falls back to Firefox without deleting preferences", async () => {
@@ -948,10 +1039,15 @@ test("built-in protocol settings use a UI view while persisting through provider
     id: "uget",
     ref: { provider: "uget", id: "uget" },
     singleton: true,
+  }, {
+    id: "aria2next",
+    ref: { provider: "aria2next", id: "aria2next" },
+    singleton: true,
   }]);
   assert.equal(initial.builtInProtocols[0].settings.enabled, false);
   assert.equal(initial.builtInProtocols[1].settings.enabled, true);
   assert.equal(initial.builtInProtocols[3].settings.enabled, false);
+  assert.equal(initial.builtInProtocols[4].settings.enabled, false);
   assert.equal(service.listJDownloaderDownloaders().length, 0);
 
   const snapshot = await service.applySettings({

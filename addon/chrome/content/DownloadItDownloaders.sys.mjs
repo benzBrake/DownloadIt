@@ -13,6 +13,9 @@ export const XDM_DOWNLOADER_ID = "xdm";
 export const XDM_ENDPOINT = "http://127.0.0.1:8597/";
 export const UGET_PROVIDER = "uget";
 export const UGET_DOWNLOADER_ID = "uget";
+export const ARIA2NEXT_PROVIDER = "aria2next";
+export const ARIA2NEXT_DOWNLOADER_ID = "aria2next";
+export const ARIA2NEXT_DEFAULT_RPC_PORT = 6800;
 export const NATIVE_PROVIDER = "native";
 export const NATIVE_DOWNLOADER_ID = "firefox";
 
@@ -43,6 +46,13 @@ export const BUILT_IN_PROTOCOLS = Object.freeze([
     provider: UGET_PROVIDER,
     downloaderId: UGET_DOWNLOADER_ID,
     name: "uGet",
+    singleton: true,
+  }),
+  Object.freeze({
+    id: ARIA2NEXT_PROVIDER,
+    provider: ARIA2NEXT_PROVIDER,
+    downloaderId: ARIA2NEXT_DOWNLOADER_ID,
+    name: "Aria2Next",
     singleton: true,
   }),
 ]);
@@ -225,6 +235,25 @@ export class UGetConfigError extends Error {
 export function getUGetCapabilities() {
   return normalizeDownloaderCapabilities({
     post: true,
+    cookies: true,
+    batch: true,
+    directory: true,
+    taskStart: false,
+  });
+}
+
+export class Aria2NextConfigError extends Error {
+  constructor(code, args = {}) {
+    super(code);
+    this.name = "Aria2NextConfigError";
+    this.code = code;
+    this.args = args;
+  }
+}
+
+export function getAria2NextCapabilities() {
+  return normalizeDownloaderCapabilities({
+    post: false,
     cookies: true,
     batch: true,
     directory: true,
