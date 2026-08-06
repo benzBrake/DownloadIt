@@ -40,7 +40,7 @@ function shutdown(data, reason) {
   const appShutdown = typeof APP_SHUTDOWN !== "undefined" && reason === APP_SHUTDOWN;
   const pending = startupPromise || Promise.resolve();
 
-  pending.catch(Cu.reportError).then(async () => {
+  return pending.catch(Cu.reportError).then(async () => {
     const currentService = service;
     await currentService?.shutdown();
     if (currentService) {
