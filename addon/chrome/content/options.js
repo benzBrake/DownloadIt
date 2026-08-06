@@ -160,6 +160,7 @@ const CUSTOM_ERROR_MESSAGES = {
   "uget-submit-failed": "downloadit-error-uget-submit",
   "uget-partial-failure": "downloadit-error-uget-partial",
   "aria2next-unavailable": "downloadit-error-aria2next-unavailable",
+  "aria2next-platform-unsupported": "downloadit-error-aria2next-platform",
   "aria2next-port-invalid": "downloadit-error-aria2next-port",
   "aria2next-secret-invalid": "downloadit-error-aria2next-secret",
   "aria2next-args-invalid": "downloadit-error-aria2next-args",
@@ -2565,7 +2566,8 @@ function renderAria2NextEditorState() {
   secret.disabled = Boolean(locks.secret);
   downloadDir.disabled = Boolean(locks.downloadDir);
   extraArgs.disabled = Boolean(locks.extraArgs);
-  test.disabled = !state.service || !enabled.checked;
+  const supported = state.snapshot?.aria2NextSupported !== false;
+  test.disabled = !state.service || !enabled.checked || !supported;
   lock.hidden = !Object.values(locks).some(Boolean);
 
   let available = false;
@@ -2583,11 +2585,13 @@ function renderAria2NextEditorState() {
   statusDot.className = `manager-dot ${available ? "is-ready" : "is-error"}`;
   setLocalized(
     status,
-    available
-      ? "downloadit-aria2next-status-ready"
-      : enabled.checked
-        ? "downloadit-aria2next-status-unavailable"
-        : "downloadit-aria2next-status-disabled",
+    !supported
+      ? "downloadit-aria2next-status-unsupported"
+      : available
+        ? "downloadit-aria2next-status-ready"
+        : enabled.checked
+          ? "downloadit-aria2next-status-unavailable"
+          : "downloadit-aria2next-status-disabled",
     { port: rpcPortValue },
   );
 }
@@ -3065,7 +3069,8 @@ async function testAria2Next() {
       error: await formatLocalizedError(error),
     });
   } finally {
-    button.disabled = false;
+    button.disabled = state.snapshot?.aria2NextSupported === false ||
+      !document.getElementById("aria2next-enabled").checked;
   }
 }
 

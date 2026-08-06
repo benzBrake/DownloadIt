@@ -40,7 +40,7 @@ const interfacesMock = {
   nsIUploadChannel2: Symbol("nsIUploadChannel2"),
 };
 const servicesMock = {
-  appinfo: { name: "Firefox", OS: "WINNT" },
+  appinfo: { name: "Firefox", OS: "WINNT", XPCOMABI: "x86_64-msvc-x64" },
   obs: {
     addObserver() {},
     removeObserver() {},
@@ -170,7 +170,15 @@ const createdBinaryMetadata = !fs.existsSync(binaryMetadataPath);
 if (createdBinaryMetadata) {
   fs.writeFileSync(
     binaryMetadataPath,
-    "export const BINARY_SIZE = 0;\nexport const BINARY_SHA256 = \"\";\n",
+    [
+      "export const BINARY_SIZE = 0;",
+      "export const BINARY_SHA256 = \"\";",
+      "export const ARIA2NEXT_BINARY_METADATA = Object.freeze({",
+      "  windows: Object.freeze({ resourceName: \"aria2-next.exe\", profileName: \"aria2-next.exe\", size: 4555264, sha256: \"554f2f81ca53731dc9e01710cfb16081a34759f3276ff16eb4b12656c1b6e5b9\" }),",
+      "  \"linux-x86_64\": Object.freeze({ resourceName: \"aria2-next-linux-x86_64\", profileName: \"aria2-next\", size: 3852672, sha256: \"b6f2cdadcd34ba16dd7fcb29de4b84c36f893f9b223a9a05157d1892687a45a0\" }),",
+      "});",
+      "",
+    ].join("\n"),
     "utf8",
   );
 }
@@ -259,6 +267,9 @@ test("platform capabilities initialize Windows and Linux services independently"
     ["Linux", LINUX_PLATFORM],
   ]) {
     servicesMock.appinfo.OS = os;
+    servicesMock.appinfo.XPCOMABI = os === "WINNT"
+      ? "x86_64-msvc-x64"
+      : "x86_64-gcc3";
     const service = new DownloadItService({ version: "test" });
     prepareStartupService(service);
     let deployCalls = 0;
@@ -295,6 +306,73 @@ test("platform capabilities initialize Windows and Linux services independently"
     /supports Windows and Linux only/,
   );
   servicesMock.appinfo.OS = "WINNT";
+  servicesMock.appinfo.XPCOMABI = "x86_64-msvc-x64";
+});
+
+test("Aria2Next selects the bundled binary by platform and Linux ABI", () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+
+  servicesMock.appinfo.OS = "WINNT";
+  servicesMock.appinfo.XPCOMABI = "x86_64-msvc-x64";
+  const windows = createSettingsService("windows");
+  assert.deepEqual(windows.getAria2NextBinaryDefinition(), {
+    resourceName: "aria2-next.exe",
+    profileName: "aria2-next.exe",
+    size: 4555264,
+    sha256: "554f2f81ca53731dc9e01710cfb16081a34759f3276ff16eb4b12656c1b6e5b9",
+  });
+  assert.equal(windows.readSettings().aria2NextSupported, true);
+  assert.equal(windows.createAria2NextDescriptor().available, true);
+
+  servicesMock.appinfo.OS = "Linux";
+  servicesMock.appinfo.XPCOMABI = "x86_64-gcc3";
+  const linux = createSettingsService("linux");
+  assert.equal(
+    linux.getAria2NextBinaryDefinition().resourceName,
+    "aria2-next-linux-x86_64",
+  );
+  assert.equal(linux.getAria2NextBinaryDefinition().profileName, "aria2-next");
+  assert.equal(linux.readSettings().aria2NextSupported, true);
+
+  servicesMock.appinfo.XPCOMABI = "aarch64-gcc3";
+  const unsupported = createSettingsService("linux");
+  assert.equal(unsupported.getAria2NextBinaryDefinition(), null);
+  assert.equal(unsupported.readSettings().aria2NextSupported, false);
+  assert.equal(unsupported.createAria2NextDescriptor().available, false);
+  assert.equal(
+    unsupported.createAria2NextDescriptor().unavailableReason,
+    "aria2next-platform-unsupported",
+  );
+
+  servicesMock.appinfo.OS = "WINNT";
+  servicesMock.appinfo.XPCOMABI = "x86_64-msvc-x64";
+  preferenceValues.clear();
+});
+
+test("unsupported Linux ABI rejects Aria2Next enablement but permits disabling", async () => {
+  preferenceValues.clear();
+  servicesMock.appinfo.OS = "Linux";
+  servicesMock.appinfo.XPCOMABI = "aarch64-gcc3";
+  const service = createSettingsService("linux");
+
+  await assert.rejects(
+    service.applySettings({
+      aria2next: { enabled: true, rpcPort: 6800 },
+    }),
+    error => error.code === "aria2next-platform-unsupported",
+  );
+
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  await service.applySettings({ aria2next: { enabled: false } });
+  assert.equal(
+    preferenceValues.get("downloadit.aria2next.enabled"),
+    false,
+  );
+
+  servicesMock.appinfo.OS = "WINNT";
+  servicesMock.appinfo.XPCOMABI = "x86_64-msvc-x64";
+  preferenceValues.clear();
 });
 
 test("service shutdown waits for the Aria2Next shutdown RPC", async () => {
@@ -384,6 +462,94 @@ test("Aria2Next startup launches after a failed probe without recursive waiting"
     "--dir=C:\\Downloads",
   ]);
   preferenceValues.clear();
+});
+
+test("Linux Aria2Next startup uses the ABI-selected profile executable", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.downloadDir", "/home/test/Downloads");
+  servicesMock.appinfo.OS = "Linux";
+  servicesMock.appinfo.XPCOMABI = "x86_64-gcc3";
+
+  const service = createSettingsService("linux");
+  service.deployAria2NextBinary = async () =>
+    "/home/test/.mozilla/firefox/profile/DownloadIt/aria2-next";
+  const launches = [];
+  service.startDetachedProcess = (...args) => launches.push(args);
+  let probes = 0;
+  service.probeAria2Next = async () => {
+    probes++;
+    if (probes === 1) {
+      throw new DownloadItError("aria2-unavailable");
+    }
+    return { version: "2.5.5" };
+  };
+
+  try {
+    assert.equal(await service.ensureAria2NextRunning(), true);
+    assert.equal(launches.length, 1);
+    assert.equal(
+      launches[0][0],
+      "/home/test/.mozilla/firefox/profile/DownloadIt/aria2-next",
+    );
+    assert.equal(launches[0][4], undefined);
+  } finally {
+    servicesMock.appinfo.OS = "WINNT";
+    servicesMock.appinfo.XPCOMABI = "x86_64-msvc-x64";
+    preferenceValues.clear();
+  }
+});
+
+test("Linux Aria2Next deployment replaces an invalid binary and sets mode 0755", async () => {
+  preferenceValues.clear();
+  servicesMock.appinfo.OS = "Linux";
+  servicesMock.appinfo.XPCOMABI = "x86_64-gcc3";
+  const service = createSettingsService("linux");
+  service.addonData = {
+    resourceURI: {
+      resolve: name => `resource://downloadit/${name}`,
+    },
+  };
+  service.readResourceBytes = async uri => {
+    assert.equal(uri, "resource://downloadit/aria2-next-linux-x86_64");
+    return { length: 3852672 };
+  };
+
+  const originalIOUtils = { ...ioUtilsMock };
+  let deployed = false;
+  let writes = 0;
+  let permissions = null;
+  ioUtilsMock.makeDirectory = async () => {};
+  ioUtilsMock.remove = async () => {};
+  ioUtilsMock.stat = async () => ({ size: deployed ? 3852672 : 12 });
+  ioUtilsMock.computeHexDigest = async () =>
+    deployed
+      ? "b6f2cdadcd34ba16dd7fcb29de4b84c36f893f9b223a9a05157d1892687a45a0"
+      : "invalid";
+  ioUtilsMock.write = async (_path, bytes, options) => {
+    assert.equal(bytes.length, 3852672);
+    assert.match(options.tmpPath, /aria2-next\.tmp$/);
+    writes++;
+    deployed = true;
+  };
+  ioUtilsMock.setPermissions = async (path, mode) => {
+    permissions = { path, mode };
+  };
+
+  try {
+    const path = await service.deployAria2NextBinary();
+    assert.equal(path, "C:\\Profile\\DownloadIt\\aria2-next");
+    assert.equal(writes, 1);
+    assert.deepEqual(permissions, { path, mode: 0o755 });
+  } finally {
+    for (const key of Object.keys(ioUtilsMock)) {
+      delete ioUtilsMock[key];
+    }
+    Object.assign(ioUtilsMock, originalIOUtils);
+    servicesMock.appinfo.OS = "WINNT";
+    servicesMock.appinfo.XPCOMABI = "x86_64-msvc-x64";
+    preferenceValues.clear();
+  }
 });
 
 test("Linux hides FlashGot cache and falls back to Firefox without deleting preferences", async () => {

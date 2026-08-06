@@ -15,3 +15,18 @@ Bundled source version: v0.60.1 plus the file-based JSON CLI adaptation.
 Upstream license: GPL-3.0.
 The SHA-256 of the bundled binary is recorded in the generated
 chrome/content/DownloadItBinaryMetadata.sys.mjs file inside each XPI.
+
+Aria2Next
+=========
+
+Aria2Next is based on aria2-next by AnInsomniacy:
+https://github.com/AnInsomniacy/aria2-next
+
+Bundled source version: v2.5.5.
+Upstream license: GPL-2.0. The corresponding license text is included as
+licenses/aria2-next-COPYING in the XPI. The pinned source tree and release
+assets are available at:
+https://github.com/AnInsomniacy/aria2-next/tree/v2.5.5
+https://github.com/AnInsomniacy/aria2-next/releases/tag/v2.5.5
+The SHA-256 of each bundled Aria2Next binary is recorded in the generated
+chrome/content/DownloadItBinaryMetadata.sys.mjs file inside each XPI.

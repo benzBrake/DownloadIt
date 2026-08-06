@@ -34,6 +34,7 @@ import {
 import { githubMirrorAdapter } from "./DownloadItGitHubMirror.sys.mjs";
 import { MirrorAdapterRegistry } from "./DownloadItMirrors.sys.mjs";
 import {
+  ARIA2NEXT_BINARY_METADATA,
   BINARY_SIZE,
   BINARY_SHA256,
 } from "./DownloadItBinaryMetadata.sys.mjs";
@@ -141,8 +142,6 @@ if (!IOUtils || !PathUtils) {
 
 const BINARY_RESOURCE = "FlashGot.exe";
 const BINARY_NAME = "FlashGot.exe";
-const ARIA2NEXT_BINARY_RESOURCE = "aria2-next.exe";
-const ARIA2NEXT_BINARY_NAME = "aria2-next.exe";
 const PROFILE_DIRECTORY = "DownloadIt";
 const CUSTOM_DOWNLOADERS_FILE = "custom-downloaders.json";
 const AUTO_CAPTURE_RULES_FILE = "auto-capture-rules.json";
@@ -716,9 +715,13 @@ export class DownloadItService {
       ? "aria2next-unavailable"
       : "disabled";
     try {
-      const normalized = this.normalizeAria2NextSettings(settings);
-      available = normalized.enabled;
-      if (!normalized.enabled) {
+      if (settings.enabled && !this.isAria2NextSupported()) {
+        unavailableReason = "aria2next-platform-unsupported";
+      } else {
+        const normalized = this.normalizeAria2NextSettings(settings);
+        available = normalized.enabled;
+      }
+      if (!settings.enabled) {
         unavailableReason = "disabled";
       }
     } catch (error) {
@@ -1354,6 +1357,24 @@ export class DownloadItService {
     }
   }
 
+  getAria2NextBinaryDefinition() {
+    const platform = this.platformDefinition?.id;
+    if (platform === "windows") {
+      return ARIA2NEXT_BINARY_METADATA.windows || null;
+    }
+    if (
+      platform === "linux" &&
+      /^x86_64(?:-|$)/i.test(String(Services.appinfo.XPCOMABI || ""))
+    ) {
+      return ARIA2NEXT_BINARY_METADATA["linux-x86_64"] || null;
+    }
+    return null;
+  }
+
+  isAria2NextSupported() {
+    return Boolean(this.getAria2NextBinaryDefinition());
+  }
+
   isAria2NextEnabled() {
     return Services.prefs.getBoolPref(PREF_ARIA2NEXT_ENABLED, false);
   }
@@ -1834,6 +1855,9 @@ export class DownloadItService {
     if (!settings.enabled) {
       throw new DownloadItError("aria2next-unavailable");
     }
+    if (!this.isAria2NextSupported()) {
+      throw new DownloadItError("aria2next-platform-unsupported");
+    }
     const binaryPath = await this.deployAria2NextBinary();
     if (!binaryPath) {
       throw new DownloadItError("aria2next-unavailable");
@@ -1878,7 +1902,6 @@ export class DownloadItService {
           }
         },
         true,
-        { validateFile: false },
       );
       this.aria2NextProcess = process;
       const deadline = Date.now() + (ARIA2NEXT_RETRY_DELAY_MS *
@@ -2523,6 +2546,7 @@ export class DownloadItService {
       ugetLocked: this.getUGetLocks(),
       aria2next: this.getAria2NextSettings(),
       aria2nextLocked: this.getAria2NextLocks(),
+      aria2NextSupported: this.isAria2NextSupported(),
       jdownloader: this.getJDownloaderSettings(),
       jdownloaderLocked: this.getJDownloaderLocks(),
       idmBridgeEnabled: Services.prefs.getBoolPref(
@@ -2717,6 +2741,9 @@ export class DownloadItService {
             exitOnClose: currentAria2Next.exitOnClose,
           }
         : this.normalizeAria2NextSettings(requestedAria2NextInput);
+    if (requestedAria2Next.enabled && !this.isAria2NextSupported()) {
+      throw new DownloadItError("aria2next-platform-unsupported");
+    }
     const currentIDMBridgeEnabled = Services.prefs.getBoolPref(
       PREF_IDM_BRIDGE,
       false,
@@ -4997,21 +5024,29 @@ export class DownloadItService {
   }
 
   async deployAria2NextBinary() {
+    const binary = this.getAria2NextBinaryDefinition();
+    if (!binary) {
+      throw new DownloadItError("aria2next-platform-unsupported");
+    }
     const directory = PathUtils.join(PathUtils.profileDir, PROFILE_DIRECTORY);
-    const destination = PathUtils.join(directory, ARIA2NEXT_BINARY_NAME);
+    const destination = PathUtils.join(directory, binary.profileName);
     await IOUtils.makeDirectory(directory, { ignoreExisting: true });
 
-    let currentBinaryIsValid = false;
-    try {
-      const stat = await IOUtils.stat(destination);
-      currentBinaryIsValid = stat.size > 0;
-    } catch {}
+    let currentBinaryIsValid = await this.isAria2NextBinaryValid(
+      destination,
+      binary,
+    );
 
     if (!currentBinaryIsValid) {
       const source = this.addonData.resourceURI.resolve(
-        ARIA2NEXT_BINARY_RESOURCE,
+        binary.resourceName,
       );
       const bytes = await this.readResourceBytes(source);
+      if (bytes.length !== binary.size) {
+        throw new Error(
+          `Aria2Next resource has an invalid size: ${binary.resourceName}`,
+        );
+      }
       const temporaryDestination = `${destination}.tmp`;
       await IOUtils.remove(temporaryDestination, { ignoreAbsent: true });
       try {
@@ -5021,8 +5056,34 @@ export class DownloadItService {
       } finally {
         await IOUtils.remove(temporaryDestination, { ignoreAbsent: true });
       }
+      currentBinaryIsValid = await this.isAria2NextBinaryValid(
+        destination,
+        binary,
+      );
+      if (!currentBinaryIsValid) {
+        await IOUtils.remove(destination, { ignoreAbsent: true });
+        throw new Error(
+          `Aria2Next resource failed integrity verification: ${binary.resourceName}`,
+        );
+      }
+    }
+    if (this.platformDefinition?.id === "linux") {
+      await IOUtils.setPermissions(destination, 0o755);
     }
     return destination;
+  }
+
+  async isAria2NextBinaryValid(path, binary) {
+    try {
+      const stat = await IOUtils.stat(path);
+      if (stat.size !== binary.size) {
+        return false;
+      }
+      const digest = await IOUtils.computeHexDigest(path, "sha256");
+      return digest.toLowerCase() === binary.sha256;
+    } catch {
+      return false;
+    }
   }
 
   async readResourceBytes(uri) {
