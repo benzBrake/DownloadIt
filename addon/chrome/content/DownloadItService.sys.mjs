@@ -94,6 +94,7 @@ import {
   redactAria2Secret,
   serializeDownloaderRef,
   stringifyCustomDownloaderDocument,
+  tokenizeArguments,
   validateJDownloaderLaunchPath,
   validateCustomDownloaderDocument,
   XDM_DOWNLOADER_ID,
@@ -1311,6 +1312,16 @@ export class DownloadItService {
     const extraArgs = String(value.extraArgs || "").trim();
     if (extraArgs && /[\r\n]/.test(extraArgs)) {
       throw new DownloadItError("aria2next-args-invalid");
+    }
+    try {
+      // Parse on save as well as at launch so quoted argv values are accepted
+      // consistently and an unterminated quote is reported in the settings UI.
+      tokenizeArguments(extraArgs);
+    } catch (error) {
+      throw new DownloadItError(
+        error?.code || "aria2next-args-invalid",
+        error?.args || {},
+      );
     }
     return {
       enabled: value.enabled !== false,

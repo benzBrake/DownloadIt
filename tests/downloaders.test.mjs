@@ -826,6 +826,21 @@ test("Aria2Next startup arguments reject managed overrides", () => {
     "--rpc-secret=secret",
     "--dir=D:\\Downloads",
   ]);
+  assert.deepEqual(
+    buildAria2NextStartupArguments({
+      ...config,
+      extraArgs: '--header="Cookie: session=\\"value with spaces\\"" --user-agent \'DownloadIt Test\'',
+    }),
+    [
+      '--header=Cookie: session="value with spaces"',
+      "--user-agent",
+      "DownloadIt Test",
+      "--enable-rpc=true",
+      "--rpc-listen-all=false",
+      "--rpc-listen-port=6800",
+      "--rpc-secret=secret",
+    ],
+  );
   for (const argument of [
     "--enable-rpc=false",
     "--rpc-listen-all=true",

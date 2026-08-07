@@ -356,6 +356,35 @@ test("Aria2Next selects the bundled binary by platform and Linux ABI", () => {
   preferenceValues.clear();
 });
 
+test("Aria2Next validates quoted extra arguments when settings are saved", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  service.refreshConfiguredBuiltInProtocols = () => {};
+  const extraArgs = '--header="Cookie: session=\\"value with spaces\\""';
+  await service.applySettings({
+    aria2next: {
+      enabled: true,
+      extraArgs,
+    },
+  });
+  assert.equal(
+    preferenceValues.get("downloadit.aria2next.extraArgs"),
+    extraArgs,
+  );
+
+  await assert.rejects(
+    service.applySettings({
+      aria2next: {
+        enabled: true,
+        extraArgs: '--header="unterminated',
+      },
+    }),
+    error => error.code === "command-unterminated-quote",
+  );
+  assert.equal(preferenceValues.get("downloadit.aria2next.extraArgs"), extraArgs);
+  preferenceValues.clear();
+});
+
 test("unsupported Linux ABI rejects Aria2Next enablement but permits disabling", async () => {
   preferenceValues.clear();
   servicesMock.appinfo.OS = "Linux";
