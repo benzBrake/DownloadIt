@@ -275,7 +275,7 @@ UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发�
 
 ### 嵌入式 AriaNg 页面
 
-DownloadIt 将固定的 AriaNg `1.3.14` 标准资源页面作为内部 ID 为 `downloadit-ariang@downloadit.invalid` 的嵌入式 Firefox WebExtension 启动。Firefox 为其分配并持久化 profile 专属 UUID，在父进程和内容进程中注册对应的 `moz-extension://<uuid>/index.html` 来源，并在 DownloadIt 关闭时注销。DownloadIt PanelView 提供“打开 AriaNg”入口，通过可信标签页打开当前 URL；注册成功前入口保持禁用。入口通过内部 `getAriaNgURL()` API 获取 URL，不会硬编码 UUID。
+DownloadIt 将固定的 AriaNg `1.3.14` 标准资源页面作为内部 ID 为 `downloadit-ariang@downloadit.invalid` 的嵌入式 Firefox WebExtension 启动。Firefox 为其分配并持久化 profile 专属 UUID，在父进程和内容进程中注册对应的 `moz-extension://<uuid>/index.html` 来源，并在 DownloadIt 关闭时注销。DownloadIt PanelView 提供“打开 AriaNg”入口，通过可信标签页打开当前 URL；注册成功前入口保持禁用。入口通过内部 `getAriaNgURL()` API 获取 URL，不会硬编码 UUID。启用 Aria2Next 后，AriaNg Actor 会在页面载入时用 DownloadIt 当前的回环配置同步默认 RPC profile，同时保留其他 AriaNg 偏好和额外 RPC profile。
 
 嵌入式 Manifest 只授予 `127.0.0.1` 和 `localhost` 主机权限。CSP 只允许同源脚本，因此标准资源包的外置脚本无需 `unsafe-inline` 或 `unsafe-eval`；打包时会加入 Angular 的 `ng-csp="no-unsafe-eval"` 标记，让它选择兼容 CSP 的表达式解析器。页面仍保留 AriaNg 所需的内联样式，同时把 HTTP 和 WebSocket 连接限制在这些回环主机。该嵌入式页面有意不支持远程 aria2 RPC 主机。
 

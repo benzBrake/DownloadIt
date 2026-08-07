@@ -11,14 +11,25 @@ const modulePath = path.join(
 );
 
 let importCounter = 0;
+let actorHarness = null;
 
 async function loadAriaNgModule(MockExtension) {
+  actorHarness = {
+    registrations: [],
+    unregistrations: [],
+  };
   globalThis.Services = {
     io: {
       newURI: spec => ({ spec }),
     },
   };
   globalThis.ChromeUtils = {
+    registerWindowActor(name, options) {
+      actorHarness.registrations.push({ name, options });
+    },
+    unregisterWindowActor(name) {
+      actorHarness.unregistrations.push(name);
+    },
     importESModule(spec) {
       if (spec.endsWith("/Extension.sys.mjs")) {
         return { Extension: MockExtension };
@@ -75,6 +86,24 @@ test("AriaNg uses a native embedded Extension with a stable internal identity", 
   const url = await ariaNg.startAriaNg(createAddonData(), "ADDON_ENABLE");
   assert.equal(url, "moz-extension://profile-uuid/index.html");
   assert.equal(ariaNg.getAriaNgURL(), url);
+  assert.deepEqual(actorHarness.registrations, [{
+    name: "DownloadItAriaNg",
+    options: {
+      parent: {
+        esModuleURI: "chrome://downloadit/content/DownloadItAriaNgActor.sys.mjs",
+      },
+      child: {
+        esModuleURI: "chrome://downloadit/content/DownloadItAriaNgActor.sys.mjs",
+        events: {
+          DOMContentLoaded: {},
+          load: {},
+        },
+      },
+      allFrames: false,
+      matches: ["moz-extension://profile-uuid/*"],
+      safeForUntrustedWebProcess: true,
+    },
+  }]);
   assert.equal(instances.length, 1);
   assert.equal(instances[0].startupReason, "ADDON_ENABLE");
   assert.deepEqual(instances[0].addonData, {
@@ -98,6 +127,7 @@ test("AriaNg uses a native embedded Extension with a stable internal identity", 
   await ariaNg.stopAriaNg("ADDON_DISABLE");
   await ariaNg.stopAriaNg("ADDON_DISABLE");
   assert.deepEqual(instances[0].shutdownReasons, ["ADDON_DISABLE"]);
+  assert.deepEqual(actorHarness.unregistrations, ["DownloadItAriaNg"]);
   assert.equal(ariaNg.getAriaNgURL(), "");
 });
 
@@ -127,6 +157,8 @@ test("AriaNg startup failure leaves no exposed moz-extension URL", async () => {
     /manifest failed/,
   );
   assert.equal(ariaNg.getAriaNgURL(), "");
+  assert.deepEqual(actorHarness.registrations, []);
+  assert.deepEqual(actorHarness.unregistrations, []);
   await ariaNg.stopAriaNg();
   assert.deepEqual(shutdownReasons, ["ADDON_DISABLE"]);
 });
