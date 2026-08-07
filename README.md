@@ -134,7 +134,7 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.7.1`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.7.2`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -275,7 +275,7 @@ The `aria2next:aria2next` provider deploys the pinned Aria2Next `v2.5.5` binary 
 
 ### Embedded AriaNg page
 
-DownloadIt starts the pinned AriaNg `1.3.14` standard page bundle as an embedded Firefox WebExtension with the internal ID `downloadit-ariang@downloadit.invalid`. Firefox assigns and persists the profile-specific UUID, registers the resulting `moz-extension://<uuid>/index.html` origin in parent and content processes, and unregisters it during DownloadIt shutdown. The DownloadIt PanelView provides an **Open AriaNg** entry that opens the active URL in a trusted tab; it is disabled until registration succeeds. The entry obtains its URL through the internal `getAriaNgURL()` API and does not hardcode the UUID. When Aria2Next is enabled, the AriaNg Actor synchronizes its default RPC profile from DownloadIt's current loopback settings on page load while leaving other AriaNg preferences and extra RPC profiles intact.
+DownloadIt starts the pinned AriaNg `1.3.14` standard page bundle as an embedded Firefox WebExtension with the internal ID `downloadit-ariang@downloadit.invalid`. Firefox assigns and persists the profile-specific UUID, registers the resulting `moz-extension://<uuid>/index.html` origin in parent and content processes, and unregisters it during DownloadIt shutdown. The DownloadIt PanelView shows an **Open AriaNg** entry only when Aria2Next is enabled on a supported platform; it opens the active URL in a trusted tab and is disabled until registration succeeds. The entry obtains its URL through the internal `getAriaNgURL()` API and does not hardcode the UUID. When Aria2Next is enabled, the AriaNg Actor synchronizes its default RPC profile from DownloadIt's current loopback settings on page load while leaving other AriaNg preferences and extra RPC profiles intact.
 
 The embedded manifest grants host access only to `127.0.0.1` and `localhost`. Its CSP permits only same-origin scripts, so the standard bundle's external scripts run without `unsafe-inline` or `unsafe-eval`; packaging adds Angular's `ng-csp="no-unsafe-eval"` marker to select its CSP-compatible expression parser. The page retains inline styles required by AriaNg and limits HTTP and WebSocket connections to those loopback hosts. Remote aria2 RPC hosts are intentionally unsupported by this embedded page.
 
