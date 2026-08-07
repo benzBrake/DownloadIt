@@ -1058,6 +1058,29 @@ export function buildAria2StartupArguments(
   return argumentsList;
 }
 
+export function buildAria2NextStartupArguments(config, downloadDirectory = "") {
+  const extras = tokenizeArguments(config.extraArgs);
+  const managed = extras.find(argument => MANAGED_ARIA2_ARGUMENT.test(argument));
+  if (managed) {
+    throw new CustomDownloaderConfigError("aria2-managed-argument", {
+      argument: managed.split("=", 1)[0],
+    });
+  }
+  const argumentsList = [
+    ...extras,
+    "--enable-rpc=true",
+    "--rpc-listen-all=false",
+    `--rpc-listen-port=${config.rpcPort}`,
+  ];
+  if (config.secret) {
+    argumentsList.push(`--rpc-secret=${config.secret}`);
+  }
+  if (downloadDirectory) {
+    argumentsList.push(`--dir=${downloadDirectory}`);
+  }
+  return argumentsList;
+}
+
 export function buildAria2AddUriCall(link, config, includeToken = true) {
   const url = String(link?.url || "");
   const protocol = new URL(url).protocol;

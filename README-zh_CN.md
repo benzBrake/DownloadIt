@@ -173,7 +173,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
-下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager、Xtreme Download Manager、uGet 和 Aria2Next 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径；uGet 只有在明确启用并为当前系统配置绝对启动器路径后才可选择；Aria2Next 在受支持的平台和 ABI 上启用后即可选择。回环 provider 只会在明确测试或提交时启动配置的程序；uGet 会为每个任务直接调用静默命令行，不会探测后台 API。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
+下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager、Xtreme Download Manager、uGet 和 Aria2Next 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径；uGet 只有在明确启用并为当前系统配置绝对启动器路径后才可选择；Aria2Next 只有在受支持的平台和 ABI 上启用且 `aria2.getVersion` 探测成功后才可选择。回环 provider 只会在明确测试或提交时启动配置的程序；uGet 会为每个任务直接调用静默命令行，不会探测后台 API。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
@@ -275,7 +275,7 @@ UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发�
 
 ### 嵌入式 AriaNg 页面
 
-DownloadIt 将固定的 AriaNg `1.3.14` 标准资源页面作为内部 ID 为 `downloadit-ariang@downloadit.invalid` 的嵌入式 Firefox WebExtension 启动。Firefox 为其分配并持久化 profile 专属 UUID，在父进程和内容进程中注册对应的 `moz-extension://<uuid>/index.html` 来源，并在 DownloadIt 关闭时注销。仅当 Aria2Next 已启用且当前平台受支持时，DownloadIt PanelView 才显示“打开 AriaNg”入口；该入口会在可信标签页打开当前 URL，并在注册成功前保持禁用。入口通过内部 `getAriaNgURL()` API 获取 URL，不会硬编码 UUID。启用 Aria2Next 后，AriaNg Actor 会在页面载入时用 DownloadIt 当前的回环配置同步默认 RPC profile，同时保留其他 AriaNg 偏好和额外 RPC profile。
+DownloadIt 将固定的 AriaNg `1.3.14` 标准资源页面作为内部 ID 为 `downloadit-ariang@downloadit.invalid` 的嵌入式 Firefox WebExtension 启动。Firefox 为其分配并持久化 profile 专属 UUID，在父进程和内容进程中注册对应的 `moz-extension://<uuid>/index.html` 来源，并在 DownloadIt 关闭时注销。只有 Aria2Next 已启用、当前平台受支持且 RPC 探测成功后，DownloadIt PanelView 才显示“打开 AriaNg”入口；该入口会在可信标签页打开当前 URL，并在注册成功前保持禁用。入口通过内部 `getAriaNgURL()` API 获取 URL，不会硬编码 UUID。启用 Aria2Next 后，AriaNg Actor 会在页面载入时用 DownloadIt 当前的回环配置同步默认 RPC profile，同时保留其他 AriaNg 偏好和额外 RPC profile。
 
 嵌入式 Manifest 只授予 `127.0.0.1` 和 `localhost` 主机权限。CSP 只允许同源脚本，因此标准资源包的外置脚本无需 `unsafe-inline` 或 `unsafe-eval`；打包时会加入 Angular 的 `ng-csp="no-unsafe-eval"` 标记，让它选择兼容 CSP 的表达式解析器。页面仍保留 AriaNg 所需的内联样式，同时把 HTTP 和 WebSocket 连接限制在这些回环主机。该嵌入式页面有意不支持远程 aria2 RPC 主机。
 

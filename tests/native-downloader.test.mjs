@@ -230,6 +230,10 @@ function createSettingsService(platform = "windows") {
   service.autoCaptureRuleDocument = { version: 1, rules: [] };
   service.autoCaptureRulesLoadError = null;
   service.autoCaptureRulesWritePromise = Promise.resolve();
+  service.aria2NextStartupPromise = null;
+  service.aria2NextStartupSettings = null;
+  service.aria2NextProcess = null;
+  service.aria2NextOnline = false;
   service.abdmOnline = false;
   service.abdmProbePromise = null;
   service.abdmProbeEndpoint = "";
@@ -316,6 +320,7 @@ test("Aria2Next selects the bundled binary by platform and Linux ABI", () => {
   servicesMock.appinfo.OS = "WINNT";
   servicesMock.appinfo.XPCOMABI = "x86_64-msvc-x64";
   const windows = createSettingsService("windows");
+  windows.aria2NextOnline = true;
   assert.deepEqual(windows.getAria2NextBinaryDefinition(), {
     resourceName: "aria2-next.exe",
     profileName: "aria2-next.exe",
@@ -328,6 +333,7 @@ test("Aria2Next selects the bundled binary by platform and Linux ABI", () => {
   servicesMock.appinfo.OS = "Linux";
   servicesMock.appinfo.XPCOMABI = "x86_64-gcc3";
   const linux = createSettingsService("linux");
+  linux.aria2NextOnline = true;
   assert.equal(
     linux.getAria2NextBinaryDefinition().resourceName,
     "aria2-next-linux-x86_64",
@@ -595,6 +601,241 @@ test("Aria2Next startup launches after a failed probe without recursive waiting"
     "--rpc-listen-port=6800",
     "--dir=C:\\Downloads",
   ]);
+  preferenceValues.clear();
+});
+
+test("Aria2Next startup is shared before binary deployment", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.downloadDir", "C:\\Downloads");
+  const service = createSettingsService();
+  let finishDeployment;
+  let deployments = 0;
+  service.deployAria2NextBinary = () => {
+    deployments++;
+    return new Promise(resolve => {
+      finishDeployment = resolve;
+    });
+  };
+  let launches = 0;
+  service.startDetachedProcess = () => {
+    launches++;
+    return { isRunning: false, kill() {} };
+  };
+  let probes = 0;
+  service.probeAria2Next = async () => {
+    probes++;
+    if (probes === 1) {
+      throw new DownloadItError("aria2-unavailable");
+    }
+    return { version: "2.5.5" };
+  };
+
+  const first = service.ensureAria2NextRunning();
+  const sharedStartup = service.aria2NextStartupPromise;
+  const second = service.ensureAria2NextRunning();
+  assert.ok(sharedStartup);
+  assert.equal(service.aria2NextStartupPromise, sharedStartup);
+  assert.equal(deployments, 1);
+
+  finishDeployment("C:\\Profile\\DownloadIt\\aria2-next.exe");
+  await Promise.all([first, second]);
+  assert.equal(launches, 1);
+  assert.equal(service.aria2NextStartupPromise, null);
+  assert.equal(service.aria2NextOnline, true);
+  preferenceValues.clear();
+});
+
+test("Aria2Next startup failures clear the managed process handle", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.downloadDir", "C:\\Downloads");
+  const service = createSettingsService();
+  service.deployAria2NextBinary = async () =>
+    "C:\\Profile\\DownloadIt\\aria2-next.exe";
+  let killed = 0;
+  service.startDetachedProcess = () => ({
+    isRunning: true,
+    kill() {
+      killed++;
+    },
+  });
+  let probes = 0;
+  service.probeAria2Next = async () => {
+    probes++;
+    if (probes === 1) {
+      throw new DownloadItError("aria2-unavailable");
+    }
+    throw new DownloadItError("aria2next-rpc-error");
+  };
+
+  await assert.rejects(
+    service.ensureAria2NextRunning(),
+    error => error.code === "aria2next-rpc-error",
+  );
+  assert.equal(killed, 1);
+  assert.equal(service.aria2NextProcess, null);
+  assert.equal(service.aria2NextStartupPromise, null);
+  assert.equal(service.aria2NextOnline, false);
+  preferenceValues.clear();
+});
+
+test("disabling Aria2Next waits for startup and shuts down the started process", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.rpcPort", 6803);
+  preferenceValues.set("downloadit.aria2next.secret", "old-secret");
+  preferenceValues.set("downloadit.aria2next.downloadDir", "C:\\Old");
+  const service = createSettingsService();
+  let finishDeployment;
+  service.deployAria2NextBinary = () => new Promise(resolve => {
+    finishDeployment = resolve;
+  });
+  let processStarted = false;
+  let finishReadyProbe;
+  let readyProbeStarted;
+  const readyProbe = new Promise(resolve => {
+    readyProbeStarted = resolve;
+  });
+  const process = { isRunning: false, kill() {} };
+  let launches = 0;
+  service.startDetachedProcess = () => {
+    launches++;
+    processStarted = true;
+    return process;
+  };
+  service.probeAria2Next = async () => {
+    if (!processStarted) {
+      throw new DownloadItError("aria2-unavailable");
+    }
+    readyProbeStarted();
+    return new Promise(resolve => {
+      finishReadyProbe = resolve;
+    });
+  };
+  let shutdownRequest = null;
+  service.sendAria2Request = async (config, payload) => {
+    shutdownRequest = { config, payload };
+    return { result: "OK" };
+  };
+
+  const startup = service.ensureAria2NextRunning();
+  finishDeployment("C:\\Profile\\DownloadIt\\aria2-next.exe");
+  await readyProbe;
+  let disabled = false;
+  const disable = service.applySettings({ aria2next: { enabled: false } })
+    .then(() => {
+      disabled = true;
+    });
+  await Promise.resolve();
+  assert.equal(disabled, false);
+
+  finishReadyProbe({ version: "2.5.5" });
+  await Promise.all([startup, disable]);
+  assert.equal(launches, 1);
+  assert.equal(shutdownRequest.config.rpcUrl, "http://127.0.0.1:6803/jsonrpc");
+  assert.deepEqual(shutdownRequest.payload.params, ["token:old-secret"]);
+  assert.equal(service.aria2NextProcess, null);
+  assert.equal(service.aria2NextOnline, false);
+  assert.equal(preferenceValues.get("downloadit.aria2next.enabled"), false);
+  preferenceValues.clear();
+});
+
+test("changing Aria2Next runtime settings shuts down the old instance before probing the new one", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.rpcPort", 6800);
+  preferenceValues.set("downloadit.aria2next.secret", "old-secret");
+  preferenceValues.set("downloadit.aria2next.downloadDir", "C:\\Old");
+  preferenceValues.set("downloadit.aria2next.extraArgs", "--continue=false");
+  const service = createSettingsService();
+  const oldProcess = { isRunning: false, kill() {} };
+  service.aria2NextProcess = oldProcess;
+  service.aria2NextOnline = true;
+  const shutdowns = [];
+  service.sendAria2Request = async (config, payload) => {
+    if (payload.method === "aria2.shutdown") {
+      shutdowns.push({ config, payload });
+      return { result: "OK" };
+    }
+    throw new Error("unexpected Aria2Next RPC request");
+  };
+  service.deployAria2NextBinary = async () =>
+    "C:\\Profile\\DownloadIt\\aria2-next.exe";
+  let started = false;
+  const launches = [];
+  service.startDetachedProcess = (...args) => {
+    started = true;
+    launches.push(args);
+    return { isRunning: false, kill() {} };
+  };
+  service.probeAria2Next = async () => {
+    if (!started) {
+      throw new DownloadItError("aria2-unavailable");
+    }
+    return { version: "2.5.5" };
+  };
+
+  const snapshot = await service.applySettings({
+    aria2next: {
+      enabled: true,
+      rpcPort: 6804,
+      secret: "new-secret",
+      downloadDir: "C:\\New",
+      extraArgs: "--continue=true",
+    },
+  });
+  assert.equal(snapshot.aria2NextOnline, false);
+  await service.builtInRefreshPromise;
+
+  assert.equal(shutdowns.length, 1);
+  assert.equal(shutdowns[0].config.rpcUrl, "http://127.0.0.1:6800/jsonrpc");
+  assert.deepEqual(shutdowns[0].payload.params, ["token:old-secret"]);
+  assert.equal(launches.length, 1);
+  assert.deepEqual(launches[0][1], [
+    "--continue=true",
+    "--enable-rpc=true",
+    "--rpc-listen-all=false",
+    "--rpc-listen-port=6804",
+    "--rpc-secret=new-secret",
+    "--dir=C:\\New",
+  ]);
+  assert.equal(service.aria2NextOnline, true);
+  assert.equal(service.createAria2NextDescriptor().available, true);
+  preferenceValues.clear();
+});
+
+test("Aria2Next is unavailable until the current configuration passes its RPC probe", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set(
+    "downloadit.defaultDM",
+    JSON.stringify({ provider: "aria2next", id: "aria2next" }),
+  );
+  const service = createSettingsService();
+  service.probeAria2Next = async () => {
+    throw new DownloadItError("aria2next-rpc-error");
+  };
+
+  await assert.rejects(
+    service.refreshAria2Next(),
+    error => error.code === "aria2next-rpc-error",
+  );
+  assert.equal(service.readSettings().aria2NextOnline, false);
+  assert.equal(service.listAria2NextDownloaders().length, 0);
+  assert.deepEqual(service.defaultDownloader.ref, {
+    provider: "native",
+    id: "firefox",
+  });
+
+  service.probeAria2Next = async () => ({ version: "2.5.5" });
+  await service.refreshAria2Next();
+  assert.equal(service.readSettings().aria2NextOnline, true);
+  assert.equal(service.listAria2NextDownloaders().length, 1);
+  assert.deepEqual(service.defaultDownloader.ref, {
+    provider: "aria2next",
+    id: "aria2next",
+  });
   preferenceValues.clear();
 });
 

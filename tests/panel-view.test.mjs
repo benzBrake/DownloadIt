@@ -161,6 +161,7 @@ class MockService {
     locked = false,
     aria2NextEnabled = true,
     aria2NextSupported = true,
+    aria2NextOnline = true,
   } = {}) {
     this.managers = managers ?? [
       {
@@ -184,6 +185,7 @@ class MockService {
     this.ariaNgURL = "moz-extension://profile-uuid/index.html";
     this.aria2NextEnabled = aria2NextEnabled;
     this.aria2NextSupported = aria2NextSupported;
+    this.aria2NextOnline = aria2NextOnline;
   }
 
   get defaultManager() {
@@ -204,6 +206,7 @@ class MockService {
       defaultManagerLocked: this.locked,
       aria2next: { enabled: this.aria2NextEnabled },
       aria2NextSupported: this.aria2NextSupported,
+      aria2NextOnline: this.aria2NextOnline,
     };
   }
 
@@ -351,6 +354,21 @@ test("panel hides AriaNg when the platform does not support Aria2Next", () => {
   assert.equal(controller.ariaNgButton.getAttribute("hidden"), "true");
   controller.handleEvent({ type: "command", target: controller.ariaNgButton });
   assert.deepEqual(ariaNgCalls, []);
+});
+
+test("panel hides AriaNg while an enabled Aria2Next is offline", () => {
+  const service = new MockService({ aria2NextOnline: false });
+  const { controller, ariaNgCalls } = createController(service);
+
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.disabled, true);
+  assert.equal(controller.openAriaNg(), null);
+  assert.deepEqual(ariaNgCalls, []);
+
+  service.aria2NextOnline = true;
+  controller.onViewShowing();
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.disabled, false);
 });
 
 test("panel AriaNg entry is disabled when registration is unavailable", () => {

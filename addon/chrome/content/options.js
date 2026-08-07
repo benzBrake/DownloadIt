@@ -164,6 +164,7 @@ const CUSTOM_ERROR_MESSAGES = {
   "aria2next-port-invalid": "downloadit-error-aria2next-port",
   "aria2next-secret-invalid": "downloadit-error-aria2next-secret",
   "aria2next-args-invalid": "downloadit-error-aria2next-args",
+  "aria2-managed-argument": "downloadit-error-aria2-managed-argument",
   "aria2next-rpc-error": "downloadit-error-aria2next-rpc",
   "aria2next-start-timeout": "downloadit-error-aria2next-start-timeout",
   "aria2next-submit-failed": "downloadit-error-aria2next-submit",
@@ -3057,6 +3058,8 @@ async function testAria2Next() {
           document.getElementById("aria2next-rpc-port").value,
         ) || 6800,
         secret: document.getElementById("aria2next-secret").value,
+        downloadDir: document.getElementById("aria2next-download-dir").value,
+        extraArgs: document.getElementById("aria2next-extra-args").value,
       },
     });
     output.className = "is-success";

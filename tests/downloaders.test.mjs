@@ -10,6 +10,7 @@ import {
   ARIA2NEXT_DOWNLOADER_ID,
   ARIA2NEXT_PROVIDER,
   buildAria2Request,
+  buildAria2NextStartupArguments,
   buildABDMRequest,
   buildUGetArguments,
   buildXDMRequest,
@@ -809,6 +810,34 @@ test("aria2 startup arguments protect DownloadIt-managed RPC options", () => {
     }),
     error => error.code === "aria2-autostart-local-only",
   );
+});
+
+test("Aria2Next startup arguments reject managed overrides", () => {
+  const config = {
+    rpcPort: 6800,
+    secret: "secret",
+    extraArgs: "--continue=true",
+  };
+  assert.deepEqual(buildAria2NextStartupArguments(config, "D:\\Downloads"), [
+    "--continue=true",
+    "--enable-rpc=true",
+    "--rpc-listen-all=false",
+    "--rpc-listen-port=6800",
+    "--rpc-secret=secret",
+    "--dir=D:\\Downloads",
+  ]);
+  for (const argument of [
+    "--enable-rpc=false",
+    "--rpc-listen-all=true",
+    "--rpc-listen-port=1",
+    "--rpc-secret=override",
+    "--dir=C:\\Other",
+  ]) {
+    assert.throws(
+      () => buildAria2NextStartupArguments({ ...config, extraArgs: argument }),
+      error => error.code === "aria2-managed-argument",
+    );
+  }
 });
 
 test("provider registry keeps provider-local IDs separate", async () => {

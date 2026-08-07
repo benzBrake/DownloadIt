@@ -225,7 +225,9 @@ export class DownloadItPanelViewController {
 
   isAria2NextAvailable(snapshot) {
     return Boolean(
-      snapshot?.aria2next?.enabled && snapshot?.aria2NextSupported,
+      snapshot?.aria2next?.enabled &&
+      snapshot?.aria2NextSupported &&
+      snapshot?.aria2NextOnline,
     );
   }
 

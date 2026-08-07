@@ -51,6 +51,7 @@ import {
   ARIA2NEXT_DOWNLOADER_ID,
   ARIA2NEXT_PROVIDER,
   buildAria2Request,
+  buildAria2NextStartupArguments,
   buildAria2StartupArguments,
   buildABDMRequest,
   buildUGetArguments,
@@ -367,7 +368,9 @@ export class DownloadItService {
     this.aria2StartupPromises = new Map();
     this.aria2Processes = new Map();
     this.aria2NextStartupPromise = null;
+    this.aria2NextStartupSettings = null;
     this.aria2NextProcess = null;
+    this.aria2NextOnline = false;
     this.abdmOnline = false;
     this.abdmProbePromise = null;
     this.abdmProbeEndpoint = "";
@@ -706,6 +709,37 @@ export class DownloadItService {
     return downloader.enabled && downloader.available ? [downloader] : [];
   }
 
+  aria2NextRuntimeSettingsEqual(first, second) {
+    return ["rpcPort", "secret", "downloadDir", "extraArgs"].every(
+      key => first?.[key] === second?.[key],
+    );
+  }
+
+  isAria2NextCurrentConfiguration(settings) {
+    if (!settings?.enabled) {
+      return false;
+    }
+    try {
+      const current = this.normalizeAria2NextSettings(
+        this.getAria2NextSettings(),
+      );
+      return current.enabled && this.aria2NextRuntimeSettingsEqual(
+        settings,
+        current,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  markAria2NextOnline(settings) {
+    if (this.isAria2NextCurrentConfiguration(settings)) {
+      this.aria2NextOnline = true;
+      return true;
+    }
+    return false;
+  }
+
   createAria2NextDescriptor(settingsOverride = null) {
     const currentSettings = this.getAria2NextSettings();
     const settings = settingsOverride
@@ -720,7 +754,9 @@ export class DownloadItService {
         unavailableReason = "aria2next-platform-unsupported";
       } else {
         const normalized = this.normalizeAria2NextSettings(settings);
-        available = normalized.enabled;
+        available = normalized.enabled &&
+          this.aria2NextOnline &&
+          this.isAria2NextCurrentConfiguration(normalized);
       }
       if (!settings.enabled) {
         unavailableReason = "disabled";
@@ -1304,6 +1340,16 @@ export class DownloadItService {
     }
   }
 
+  async waitForAria2NextStartup() {
+    const startupPromise = this.aria2NextStartupPromise;
+    if (!startupPromise) {
+      return;
+    }
+    try {
+      await startupPromise;
+    } catch {}
+  }
+
   async shutdownAria2Process(
     config,
     process,
@@ -1363,13 +1409,19 @@ export class DownloadItService {
     settingsOverride = null,
     { force = false } = {},
   ) {
-    const settings = settingsOverride || this.getAria2NextSettings();
+    const settings = settingsOverride || this.aria2NextStartupSettings ||
+      this.getAria2NextSettings();
+    await this.waitForAria2NextStartup();
     const process = this.aria2NextProcess;
     if (!force && (!settings.enabled || !settings.exitOnClose)) {
+      if (!settings.enabled) {
+        this.aria2NextOnline = false;
+      }
       return;
     }
     const config = this.normalizeAria2NextSettings(settings);
     await this.shutdownAria2Process(config, process, "Aria2Next");
+    this.aria2NextOnline = false;
     if (this.aria2NextProcess === process) {
       this.aria2NextProcess = null;
     }
@@ -1904,10 +1956,26 @@ export class DownloadItService {
   }
 
   async refreshAria2Next() {
-    if (!this.getAria2NextSettings().enabled) {
+    const settings = this.normalizeAria2NextSettings(
+      this.getAria2NextSettings(),
+    );
+    if (!settings.enabled) {
+      this.aria2NextOnline = false;
       return null;
     }
-    return this.testAria2NextConfiguration();
+    if (this.isAria2NextCurrentConfiguration(settings)) {
+      this.aria2NextOnline = false;
+    }
+    try {
+      const result = await this.testAria2NextConfiguration({ settings });
+      this.markAria2NextOnline(settings);
+      return result;
+    } catch (error) {
+      if (this.isAria2NextCurrentConfiguration(settings)) {
+        this.aria2NextOnline = false;
+      }
+      throw error;
+    }
   }
 
   async testAria2NextConfiguration({ settings } = {}) {
@@ -1955,70 +2023,103 @@ export class DownloadItService {
     if (!this.isAria2NextSupported()) {
       throw new DownloadItError("aria2next-platform-unsupported");
     }
-    const binaryPath = await this.deployAria2NextBinary();
-    if (!binaryPath) {
-      throw new DownloadItError("aria2next-unavailable");
-    }
     if (this.aria2NextStartupPromise) {
       return this.aria2NextStartupPromise;
     }
-    const promise = (async () => {
+    const startupSettings = { ...settings };
+    let resolveStartup;
+    let rejectStartup;
+    const promise = new Promise((resolve, reject) => {
+      resolveStartup = resolve;
+      rejectStartup = reject;
+    });
+    // Register the shared promise before any deployment work begins so every
+    // caller joins this startup instead of deploying and launching separately.
+    this.aria2NextStartupPromise = promise;
+    this.aria2NextStartupSettings = startupSettings;
+    void (async () => {
+      let process = null;
+      let processExited = false;
+      let binaryPath = "";
       try {
+        binaryPath = await this.deployAria2NextBinary();
+        if (!binaryPath) {
+          throw new DownloadItError("aria2next-unavailable");
+        }
         // Probe directly here. testAria2NextConfiguration delegates an
         // unavailable RPC to this method, so calling it would await this
         // startup promise recursively before the process is launched.
-        await this.probeAria2Next(settings);
-        return true;
-      } catch (error) {
-        if (error?.code !== "aria2-unavailable" && !error?.aria2Unavailable) {
-          throw error;
-        }
-      }
-      const startupArgs = [];
-      startupArgs.push("--enable-rpc=true");
-      startupArgs.push("--rpc-listen-all=false");
-      startupArgs.push(`--rpc-listen-port=${settings.rpcPort}`);
-      if (settings.secret) {
-        startupArgs.push(`--rpc-secret=${settings.secret}`);
-      }
-      const effectiveDir = settings.downloadDir ||
-        await Downloads.getPreferredDownloadsDirectory();
-      if (effectiveDir) {
-        startupArgs.push(`--dir=${effectiveDir}`);
-      }
-      if (settings.extraArgs) {
-        startupArgs.push(...settings.extraArgs.split(/\s+/).filter(Boolean));
-      }
-      let process = null;
-      process = this.startDetachedProcess(
-        binaryPath,
-        startupArgs,
-        () => {
-          if (this.aria2NextProcess === process) {
-            this.aria2NextProcess = null;
-          }
-        },
-        true,
-      );
-      this.aria2NextProcess = process;
-      const deadline = Date.now() + (ARIA2NEXT_RETRY_DELAY_MS *
-        ARIA2NEXT_MAX_STARTUP_PROBES);
-      while (Date.now() <= deadline) {
-        await new Promise(r => setTimeoutPromise(r, ARIA2NEXT_RETRY_DELAY_MS));
         try {
-          await this.probeAria2Next(settings);
-          return true;
+          await this.probeAria2Next(startupSettings);
+          this.markAria2NextOnline(startupSettings);
+          resolveStartup(true);
+          return;
         } catch (error) {
           if (error?.code !== "aria2-unavailable" && !error?.aria2Unavailable) {
             throw error;
           }
         }
+        const effectiveDir = startupSettings.downloadDir ||
+          await Downloads.getPreferredDownloadsDirectory();
+        const startupArgs = buildAria2NextStartupArguments(
+          startupSettings,
+          effectiveDir,
+        );
+        process = this.startDetachedProcess(
+          binaryPath,
+          startupArgs,
+          () => {
+            processExited = true;
+            if (this.aria2NextProcess === process) {
+              this.aria2NextProcess = null;
+              this.aria2NextOnline = false;
+            }
+          },
+          true,
+        );
+        if (process && !processExited) {
+          this.aria2NextProcess = process;
+        }
+        const deadline = Date.now() + (ARIA2NEXT_RETRY_DELAY_MS *
+          ARIA2NEXT_MAX_STARTUP_PROBES);
+        while (Date.now() <= deadline) {
+          await new Promise(r => setTimeoutPromise(r, ARIA2NEXT_RETRY_DELAY_MS));
+          try {
+            await this.probeAria2Next(startupSettings);
+            this.markAria2NextOnline(startupSettings);
+            resolveStartup(true);
+            return;
+          } catch (error) {
+            if (error?.code !== "aria2-unavailable" && !error?.aria2Unavailable) {
+              throw error;
+            }
+          }
+        }
+        throw new DownloadItError("aria2next-start-timeout");
+      } catch (error) {
+        this.aria2NextOnline = false;
+        // Timeout cleanup is intentionally unchanged: the existing process
+        // remains available for a later probe or explicit shutdown.
+        if (error?.code !== "aria2next-start-timeout") {
+          if (process) {
+            try {
+              if (process.isRunning !== false) {
+                process.kill();
+              }
+            } catch {}
+          }
+          if (this.aria2NextProcess === process) {
+            this.aria2NextProcess = null;
+          }
+        }
+        rejectStartup(error);
+      } finally {
+        if (this.aria2NextStartupPromise === promise) {
+          this.aria2NextStartupPromise = null;
+          this.aria2NextStartupSettings = null;
+        }
       }
-      throw new DownloadItError("aria2next-start-timeout");
-    })().finally(() => {
-      this.aria2NextStartupPromise = null;
-    });
-    this.aria2NextStartupPromise = promise;
+    })();
     return promise;
   }
 
@@ -2644,6 +2745,7 @@ export class DownloadItService {
       aria2next: this.getAria2NextSettings(),
       aria2nextLocked: this.getAria2NextLocks(),
       aria2NextSupported: this.isAria2NextSupported(),
+      aria2NextOnline: this.aria2NextOnline,
       jdownloader: this.getJDownloaderSettings(),
       jdownloaderLocked: this.getJDownloaderLocks(),
       idmBridgeEnabled: Services.prefs.getBoolPref(
@@ -3002,8 +3104,31 @@ export class DownloadItService {
       this.customDownloaderDocument = requestedCustomDownloaders;
       this.customDownloaderLoadError = null;
     }
-    if (currentAria2Next.enabled && !requestedAria2Next.enabled) {
-      await this.shutdownAria2NextIfEnabled(currentAria2Next, { force: true });
+    const aria2NextRuntimeChanged = currentAria2Next.enabled &&
+      requestedAria2Next.enabled &&
+      !this.aria2NextRuntimeSettingsEqual(
+        currentAria2Next,
+        requestedAria2Next,
+      );
+    const aria2NextStartupSettings = this.aria2NextStartupSettings;
+    const aria2NextStartupChanged = aria2NextStartupSettings &&
+      !this.aria2NextRuntimeSettingsEqual(
+        aria2NextStartupSettings,
+        requestedAria2Next,
+      );
+    if (
+      (currentAria2Next.enabled &&
+        (!requestedAria2Next.enabled || aria2NextRuntimeChanged)) ||
+      (this.aria2NextStartupPromise &&
+        (!requestedAria2Next.enabled || aria2NextStartupChanged))
+    ) {
+      this.aria2NextOnline = false;
+      await this.shutdownAria2NextIfEnabled(
+        currentAria2Next.enabled
+          ? currentAria2Next
+          : aria2NextStartupSettings,
+        { force: true },
+      );
     }
     if (!defaultManagerLocked) {
       let nextDefault = null;
@@ -3088,6 +3213,7 @@ export class DownloadItService {
       );
     }
     if (!requestedAria2Next.enabled) {
+      this.aria2NextOnline = false;
       if (currentAria2Next.enabled) {
         this.clearAria2NextConfiguration();
       }
@@ -4754,6 +4880,7 @@ export class DownloadItService {
     if (result.failed) {
       throw new DownloadItError("aria2next-partial-failure", result);
     }
+    this.markAria2NextOnline(settings);
     return result;
   }
 
