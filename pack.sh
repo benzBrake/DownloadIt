@@ -14,13 +14,52 @@ binary_metadata_path="${addon_directory}/chrome/content/DownloadItBinaryMetadata
 generated_metadata_created=false
 ariang_repository="mayswind/AriaNg"
 ariang_version="1.3.14"
-ariang_release_name="AriaNg-1.3.14-AllInOne.zip"
-ariang_archive_size=701921
-ariang_archive_hash="65bc5ed3573ef05313ea953a5c5363c8b33a4996849b2986c78660eab1a9edb2"
-ariang_index_size=2321502
-ariang_index_hash="ca2b51e09757159a4664b41423d5a8edb1c539e1a4700f568bfa1588bd896646"
+ariang_release_name="AriaNg-1.3.14.zip"
+ariang_archive_size=1126362
+ariang_archive_hash="e00db79b4cabac70f71c2673a6d454c8a92bfa9aa1f37bb00b01b7505f956805"
+ariang_index_size=11418
+ariang_index_hash="76b9dfe56ac19ff5d11578e7e07634601739628716623a95acf389b03a80c1f1"
 ariang_license_size=1097
 ariang_license_hash="cbfd5dc92e3fd24a52362a439a12f4584868bbb5bb28faaed37abd2d972fc9d7"
+ariang_asset_paths=(
+    "css/aria-ng-f90ba723d9.min.css"
+    "css/bootstrap-3.4.1.min.css"
+    "css/plugins-ccac6fc3fc.min.css"
+    "js/angular-packages-1.6.10.min.js"
+    "js/aria-ng-a5324ae04a.min.js"
+    "js/bootstrap-3.4.1.min.js"
+    "js/echarts-common-3.8.5.min.js"
+    "js/jquery-3.3.1.min.js"
+    "js/moment-with-locales-2.29.4.min.js"
+    "js/plugins-b3cb190423.min.js"
+    "fonts/fontawesome-webfont.woff2"
+)
+ariang_asset_sizes=(
+    34711
+    121412
+    167377
+    217156
+    282451
+    39680
+    401142
+    88145
+    61737
+    123750
+    77160
+)
+ariang_asset_hashes=(
+    "a03e4b77b1725f2e428a12f331c0120d280597161258f1cabd67dc124ff5bcd9"
+    "c28eb8900abce3c478234e62390838556d839c10b7073b2ba42bcbae20d6e2fc"
+    "a373cdf8d64be9b1938cefdfa03fd43f5ba794c51b7de783806dd16b988203ee"
+    "629638fb36f6f74049c6350651ab0815c8517248720f12084b117d3d96aefbd9"
+    "d8ff216c8c5c8a845e8382430b68c8195dc82745808a9a9df2f5f1278bd1140e"
+    "9ee2fcff6709e4d0d24b09ca0fc56aade12b4961ed9c43fd13b03248bfb57afe"
+    "b2d40b7e8c9b925f00213bbe9944ae765f5637f1657921b744a5f3946c98c4c1"
+    "0925e8ad7bd971391a8b1e98be8e87a6971919eb5b60c196485941c3c1df089a"
+    "908ac76e9f34dc138359de91d570ce3ec972246fb892ffc2638c9a0339d94012"
+    "a3dae6fd4117844fc189201acaf85ff841ebf29f7c0dd680c8fa6ef36e9ccf96"
+    "2adefcbc041e7d18fcf2d417879dc5a09997aa64d675b7a3c4b6ce33da13f3fe"
+)
 ariang_directory="${addon_directory}/ariang"
 ariang_index_path="${ariang_directory}/index.html"
 ariang_license_path="${addon_directory}/licenses/ariang-LICENSE"
@@ -50,6 +89,17 @@ required_entries=(
     "aria2-next-linux-x86_64"
     "ariang/index.html"
     "ariang/manifest.json"
+    "ariang/css/aria-ng-f90ba723d9.min.css"
+    "ariang/css/bootstrap-3.4.1.min.css"
+    "ariang/css/plugins-ccac6fc3fc.min.css"
+    "ariang/js/angular-packages-1.6.10.min.js"
+    "ariang/js/aria-ng-a5324ae04a.min.js"
+    "ariang/js/bootstrap-3.4.1.min.js"
+    "ariang/js/echarts-common-3.8.5.min.js"
+    "ariang/js/jquery-3.3.1.min.js"
+    "ariang/js/moment-with-locales-2.29.4.min.js"
+    "ariang/js/plugins-b3cb190423.min.js"
+    "ariang/fonts/fontawesome-webfont.woff2"
     "licenses/aria2-next-COPYING"
     "licenses/ariang-LICENSE"
     "chrome/content/DownloadItBinaryMetadata.sys.mjs"
@@ -244,7 +294,6 @@ download_and_verify_aria2next_asset() {
 download_and_verify_ariang() {
     local archive_path="${temporary_directory}/${ariang_release_name}"
     local archive_entries_path="${temporary_directory}/ariang-archive-entries.txt"
-    local temporary_index_path="${temporary_directory}/ariang-index.html"
     local temporary_license_path="${temporary_directory}/ariang-LICENSE"
     local archive_actual_size
     local archive_hash_output
@@ -252,16 +301,42 @@ download_and_verify_ariang() {
     local index_actual_size
     local index_hash_output
     local index_actual_hash
+    local script_tag_count
+    local script_src_count
     local license_actual_size
     local license_hash_output
     local license_actual_hash
-    local index_entry_count=0
-    local license_entry_count=0
     local entry
+    local required_entry
+    local asset_index
+    local asset_path
+    local asset_size
+    local asset_hash_output
+    local asset_hash
     local github_cli
     local -a archive_entries=()
+    local ariang_asset_ready=false
 
-    if [[ ! -f "${ariang_index_path}" ]]; then
+    if [[ -f "${ariang_index_path}" ]]; then
+        if index_actual_size="$(stat -c '%s' "${ariang_index_path}")" && \
+            index_hash_output="$(sha256sum "${ariang_index_path}")"; then
+            index_actual_hash="${index_hash_output%% *}"
+            if [[ "${index_actual_size}" == "${ariang_index_size}" && "${index_actual_hash}" == "${ariang_index_hash}" ]]; then
+                ariang_asset_ready=true
+                for asset_index in "${!ariang_asset_paths[@]}"; do
+                    asset_path="${ariang_directory}/${ariang_asset_paths[asset_index]}"
+                    if [[ ! -f "${asset_path}" ]] || \
+                        [[ "$(stat -c '%s' "${asset_path}")" != "${ariang_asset_sizes[asset_index]}" ]] || \
+                        [[ "$(sha256sum "${asset_path}" | cut -d ' ' -f 1)" != "${ariang_asset_hashes[asset_index]}" ]]; then
+                        ariang_asset_ready=false
+                        break
+                    fi
+                done
+            fi
+        fi
+    fi
+
+    if [[ "${ariang_asset_ready}" != true ]]; then
         if command -v ghp > /dev/null 2>&1; then
             github_cli="ghp"
         elif command -v gh > /dev/null 2>&1; then
@@ -298,29 +373,23 @@ download_and_verify_ariang() {
             die "Unable to inspect the AriaNg archive"
         fi
         mapfile -t archive_entries < "${archive_entries_path}"
-        if [[ "${#archive_entries[@]}" -ne 2 ]]; then
-            die "The AriaNg archive must contain only index.html and LICENSE at its root"
-        fi
         for entry in "${archive_entries[@]}"; do
             case "${entry}" in
-                index.html)
-                    index_entry_count=$((index_entry_count + 1))
-                    ;;
-                LICENSE)
-                    license_entry_count=$((license_entry_count + 1))
-                    ;;
-                *)
-                    die "The AriaNg archive contains an unexpected entry: ${entry}"
+                /*|../*|*/../*|*../)
+                    die "The AriaNg archive contains an unsafe entry: ${entry}"
                     ;;
             esac
         done
-        if [[ "${index_entry_count}" -ne 1 || "${license_entry_count}" -ne 1 ]]; then
-            die "The AriaNg archive must contain one index.html and one LICENSE"
-        fi
+        for required_entry in \
+            index.html \
+            css/aria-ng-f90ba723d9.min.css \
+            js/aria-ng-a5324ae04a.min.js \
+            fonts/fontawesome-webfont.woff2; do
+            if ! grep -Fxq "${required_entry}" "${archive_entries_path}"; then
+                die "The AriaNg archive is missing required entry: ${required_entry}"
+            fi
+        done
 
-        if ! unzip -p "${archive_path}" "index.html" > "${temporary_index_path}"; then
-            die "Unable to extract index.html from the AriaNg archive"
-        fi
         if ! unzip -p "${archive_path}" "LICENSE" > "${temporary_license_path}"; then
             die "Unable to extract LICENSE from the AriaNg archive"
         fi
@@ -337,8 +406,16 @@ download_and_verify_ariang() {
         fi
 
         mkdir -p -- "${ariang_directory}"
-        mv -- "${temporary_index_path}" "${ariang_index_path}"
-        printf '[OK] Extracted %s\n' "${ariang_index_path}"
+        if ! unzip -oq "${archive_path}" -d "${ariang_directory}"; then
+            die "Unable to extract AriaNg assets"
+        fi
+        if ! grep -Fq '<html ng-app="ariaNg">' "${ariang_index_path}"; then
+            die "AriaNg index does not contain the expected Angular application root"
+        fi
+        if ! sed -i 's#<html ng-app="ariaNg">#<html ng-app="ariaNg" ng-csp="no-unsafe-eval">#' "${ariang_index_path}"; then
+            die "Unable to apply the CSP-safe Angular marker"
+        fi
+        printf '[OK] Extracted AriaNg assets to %s\n' "${ariang_directory}"
     fi
 
     if ! index_actual_size="$(stat -c '%s' "${ariang_index_path}")"; then
@@ -354,6 +431,23 @@ download_and_verify_ariang() {
     if [[ "${index_actual_hash}" != "${ariang_index_hash}" ]]; then
         die "AriaNg index has invalid SHA-256: ${ariang_index_path}"
     fi
+    script_tag_count="$(grep -Eio '<script[[:space:]][^>]*>' "${ariang_index_path}" | wc -l)"
+    script_src_count="$(grep -Eio '<script[[:space:]][^>]*src[[:space:]]*=[^>]*>' "${ariang_index_path}" | wc -l)"
+    if [[ "${script_tag_count}" -eq 0 || "${script_tag_count}" -ne "${script_src_count}" ]]; then
+        die "AriaNg index contains an inline script, which is blocked by the extension CSP"
+    fi
+    if [[ "${script_src_count}" -eq 0 ]]; then
+        die "AriaNg index does not contain external script tags"
+    fi
+    for asset_index in "${!ariang_asset_paths[@]}"; do
+        asset_path="${ariang_directory}/${ariang_asset_paths[asset_index]}"
+        asset_size="$(stat -c '%s' "${asset_path}")"
+        asset_hash_output="$(sha256sum "${asset_path}")"
+        asset_hash="${asset_hash_output%% *}"
+        if [[ "${asset_size}" != "${ariang_asset_sizes[asset_index]}" || "${asset_hash}" != "${ariang_asset_hashes[asset_index]}" ]]; then
+            die "AriaNg asset has invalid integrity: ${asset_path}"
+        fi
+    done
 
     if ! license_actual_size="$(stat -c '%s' "${ariang_license_path}")"; then
         die "Unable to read the size of ${ariang_license_path}"
@@ -370,7 +464,7 @@ download_and_verify_ariang() {
     printf '[INFO] AriaNg index SHA-256: %s\n' "${index_actual_hash}"
 }
 
-for command_name in curl grep mktemp sed sha256sum stat unzip zip; do
+for command_name in curl cut grep mktemp sed sha256sum stat unzip wc zip; do
     require_command "${command_name}"
 done
 

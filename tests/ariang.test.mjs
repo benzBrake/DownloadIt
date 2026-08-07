@@ -146,8 +146,10 @@ test("AriaNg manifest grants only loopback RPC access", () => {
     "*://127.0.0.1/*",
     "*://localhost/*",
   ]);
-  assert.ok(manifest.content_security_policy.includes("'unsafe-inline'"));
-  assert.ok(manifest.content_security_policy.includes("'unsafe-eval'"));
+  assert.match(manifest.content_security_policy, /script-src 'self';/);
+  assert.doesNotMatch(manifest.content_security_policy, /script-src[^;]*'unsafe-inline'/);
+  assert.doesNotMatch(manifest.content_security_policy, /script-src[^;]*'unsafe-eval'/);
+  assert.ok(manifest.content_security_policy.includes("style-src 'self' 'unsafe-inline'"));
   assert.ok(manifest.content_security_policy.includes("connect-src http://127.0.0.1:*"));
   assert.ok(manifest.content_security_policy.includes("ws://localhost:*"));
   assert.doesNotMatch(manifest.content_security_policy, /connect-src\s+\*/);
@@ -167,7 +169,7 @@ test("AriaNg registration delegates policy and process setup to Firefox", () => 
   assert.doesNotMatch(source, /userChrome|BootstrapLoader|UcCompatApi/);
 });
 
-test("AriaNg packaging pins and verifies the All-In-One release", () => {
+test("AriaNg packaging pins and verifies the standard release", () => {
   const packPowerShell = fs.readFileSync(
     path.join(projectRoot, "pack.ps1"),
     "utf8",
@@ -191,11 +193,14 @@ test("AriaNg packaging pins and verifies the All-In-One release", () => {
   const expectedValues = [
     "mayswind/AriaNg",
     "1.3.14",
-    "AriaNg-1.3.14-AllInOne.zip",
-    "701921",
-    "65bc5ed3573ef05313ea953a5c5363c8b33a4996849b2986c78660eab1a9edb2",
-    "2321502",
-    "ca2b51e09757159a4664b41423d5a8edb1c539e1a4700f568bfa1588bd896646",
+    "AriaNg-1.3.14.zip",
+    "1126362",
+    "e00db79b4cabac70f71c2673a6d454c8a92bfa9aa1f37bb00b01b7505f956805",
+    "11418",
+    "76b9dfe56ac19ff5d11578e7e07634601739628716623a95acf389b03a80c1f1",
+    "aria-ng-f90ba723d9.min.css",
+    "aria-ng-a5324ae04a.min.js",
+    "fontawesome-webfont.woff2",
     "ariang/index.html",
     "ariang/manifest.json",
     "licenses/ariang-LICENSE",
@@ -212,12 +217,14 @@ test("AriaNg packaging pins and verifies the All-In-One release", () => {
     assert.match(source, /ghp/);
     assert.match(source, /\bgh\b/);
     assert.match(source, /index\.html/);
+    assert.match(source, /ng-csp/);
     assert.match(source, /LICENSE/);
   }
 
   assert.match(notices, /AriaNg[\s\S]*1\.3\.14[\s\S]*MIT/);
   assert.match(license, /The MIT License \(MIT\)/);
   assert.match(gitignore, /addon\/ariang\/index\.html/);
+  assert.match(gitignore, /addon\/ariang\/fonts\//);
 });
 
 test("AriaNg documentation and DownloadIt version stay synchronized", () => {
@@ -231,13 +238,13 @@ test("AriaNg documentation and DownloadIt version stay synchronized", () => {
     "utf8",
   );
 
-  assert.match(manifest, /<em:version>2\.7\.0<\/em:version>/);
+  assert.match(manifest, /<em:version>2\.7\.1<\/em:version>/);
   for (const source of [readme, readmeChinese]) {
     assert.match(source, /AriaNg/);
     assert.match(source, /1\.3\.14/);
     assert.match(source, /moz-extension:\/\//);
     assert.match(source, /getAriaNgURL\(\)/);
     assert.match(source, /licenses\/ariang-LICENSE/);
-    assert.match(source, /2\.7\.0/);
+    assert.match(source, /2\.7\.1/);
   }
 });

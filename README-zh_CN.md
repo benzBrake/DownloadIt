@@ -21,7 +21,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 通过 Xtreme Download Manager 的内置回环 API 直接集成，不经过 `FlashGot.exe`。
 - 通过跨平台静默命令行接口直接集成 uGet，不经过 `FlashGot.exe`。
 - 在 Windows 和 Linux x86_64 上通过 JSON-RPC 直接集成随包提供的 Aria2Next，不经过 `FlashGot.exe`。
-- 将随包提供的 AriaNg All-In-One 前端注册为仅允许回环 RPC 的内部 `moz-extension://` 页面。
+- 将随包提供的 AriaNg 标准前端资源包注册为仅允许回环 RPC 的内部 `moz-extension://` 页面。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
@@ -97,7 +97,7 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 - Firefox 内建下载器始终可用，因此外部下载管理器不是必需项；
 - 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会下载 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 最新成功构建的 nightly artifact。存在 `GITHUB_TOKEN` 或 `GH_TOKEN` 时通过 GitHub Actions API 下载，否则通过 nightly.link 下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
 - 缺少 Aria2Next 资产时会从固定的 [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` Release 下载；已有或下载得到的 Windows x86_64 与 Linux x86_64 资产必须通过固定大小和 SHA-256 校验后才能打包；
-- 缺少 AriaNg 资产时通过 GitHub CLI 从固定的 [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` All-In-One Release 下载；压缩包只能包含 `index.html` 和 `LICENSE`，压缩包及解出的 HTML 都必须通过固定大小和 SHA-256 校验；
+- 缺少或过期的 AriaNg 资产时通过 GitHub CLI 从固定的 [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` 标准 Release 下载；打包前会校验压缩包、解出的 `index.html`、外置 CSS、JS 和 Font Awesome WOFF2 资源，页面不含内联脚本且不需要 `unsafe-eval`；
 - 开发和测试需要 Node.js 18 或更高版本；
 - 在 Windows 上构建需要 PowerShell 7（`pwsh`）；
 - 在 Linux 上构建需要 Bash、GitHub CLI、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；使用带认证的 GitHub API 路径时还需要 `jq`。
@@ -130,11 +130,11 @@ Linux：
 - `licenses/aria2-next-COPYING` 和 `licenses/ariang-LICENSE`；
 - `chrome/content/DownloadItAriaNg.sys.mjs`。
 
-`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe`、`addon/aria2-next.exe`、`addon/aria2-next-linux-x86_64` 和 `addon/ariang/index.html` 也不纳入版本控制。缺少 Aria2Next 或 AriaNg 资产时从各自的固定上游 Release 下载；缓存资产校验失败时构建会停止，不会静默覆盖。Nightly 仍只发布一个通用 XPI，不拆分平台构建产物。
+`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe`、`addon/aria2-next.exe`、`addon/aria2-next-linux-x86_64` 和生成的 AriaNg 标准资源树也不纳入版本控制。缺少 Aria2Next 资产或 AriaNg 资产缺失、过期时从各自的固定上游 Release 下载；最终资产校验失败时构建会停止，不会将错误文件打入包内。Nightly 仍只发布一个通用 XPI，不拆分平台构建产物。
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.7.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.7.1`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -275,9 +275,9 @@ UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发�
 
 ### 嵌入式 AriaNg 页面
 
-DownloadIt 将固定的 AriaNg `1.3.14` All-In-One 页面作为内部 ID 为 `downloadit-ariang@downloadit.invalid` 的嵌入式 Firefox WebExtension 启动。Firefox 为其分配并持久化 profile 专属 UUID，在父进程和内容进程中注册对应的 `moz-extension://<uuid>/index.html` 来源，并在 DownloadIt 关闭时注销。DownloadIt PanelView 提供“打开 AriaNg”入口，通过可信标签页打开当前 URL；注册成功前入口保持禁用。入口通过内部 `getAriaNgURL()` API 获取 URL，不会硬编码 UUID。
+DownloadIt 将固定的 AriaNg `1.3.14` 标准资源页面作为内部 ID 为 `downloadit-ariang@downloadit.invalid` 的嵌入式 Firefox WebExtension 启动。Firefox 为其分配并持久化 profile 专属 UUID，在父进程和内容进程中注册对应的 `moz-extension://<uuid>/index.html` 来源，并在 DownloadIt 关闭时注销。DownloadIt PanelView 提供“打开 AriaNg”入口，通过可信标签页打开当前 URL；注册成功前入口保持禁用。入口通过内部 `getAriaNgURL()` API 获取 URL，不会硬编码 UUID。
 
-嵌入式 Manifest 只授予 `127.0.0.1` 和 `localhost` 主机权限。CSP 允许上游 All-In-One 构建所需的内联脚本和样式，同时把 HTTP 和 WebSocket 连接限制在这些回环主机。该嵌入式页面有意不支持远程 aria2 RPC 主机。
+嵌入式 Manifest 只授予 `127.0.0.1` 和 `localhost` 主机权限。CSP 只允许同源脚本，因此标准资源包的外置脚本无需 `unsafe-inline` 或 `unsafe-eval`；打包时会加入 Angular 的 `ng-csp="no-unsafe-eval"` 标记，让它选择兼容 CSP 的表达式解析器。页面仍保留 AriaNg 所需的内联样式，同时把 HTTP 和 WebSocket 连接限制在这些回环主机。该嵌入式页面有意不支持远程 aria2 RPC 主机。
 
 DownloadIt 管理回环监听地址、端口、可选密钥和下载目录参数，并在 `aria2.getVersion` 成功后才提供该 provider。链接通过 `system.multicall` 提交，可以传递文件名、Referer、User-Agent、Cookie 和下载目录。启用退出时关闭后，DownloadIt 会发送 `aria2.shutdown` 并短暂等待；只有优雅关闭失败时才会强制终止由自身启动的进程实例。
 
@@ -336,7 +336,9 @@ addon/
 ├── licenses/ariang-LICENSE               # AriaNg MIT 许可证文本
 ├── ariang/
 │   ├── manifest.json                     # 仅允许回环访问的嵌入式 WebExtension Manifest
-│   └── index.html                        # 已校验的 AriaNg All-In-One 构建资产
+│   ├── index.html                        # 已校验的 AriaNg 标准入口页面
+│   ├── css/ 和 js/                       # 外置样式表和脚本
+│   └── fonts/                            # 包含 Font Awesome WOFF2
 └── chrome/content/
     ├── DownloadItAriaNg.sys.mjs         # 嵌入式 WebExtension 生命周期和 URL 访问
     ├── DownloadItService.sys.mjs        # 服务、进程和偏好管理
@@ -379,6 +381,6 @@ DownloadIt 是基于原 FlashGot 扩展的非官方现代化移植版。原 Flas
 
 包内 Windows 与 Linux x86_64 Aria2Next `v2.5.5` 二进制来自 [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next)，采用 GPL-2.0。XPI 的第三方说明中包含对应许可证文本和固定源码位置，生成的元数据记录两份资产经验证的文件大小和 SHA-256。
 
-嵌入式 AriaNg `1.3.14` All-In-One 页面来自 [mayswind/AriaNg](https://github.com/mayswind/AriaNg)，采用 MIT。XPI 的第三方说明中包含对应许可证和固定源码位置；打包过程会校验上游压缩包及解出的单文件页面。
+嵌入式 AriaNg `1.3.14` 标准资源包来自 [mayswind/AriaNg](https://github.com/mayswind/AriaNg)，采用 MIT。XPI 的第三方说明中包含对应许可证和固定源码位置；打包过程会校验上游压缩包、入口页面和所需外置资源。
 
 英文版本请参阅 [README.md](README.md)。

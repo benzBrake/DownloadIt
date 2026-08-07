@@ -13,13 +13,26 @@ $binaryMetadataPath = Join-Path $addonDirectory "chrome\content\DownloadItBinary
 $generatedMetadataCreated = $false
 $ariaNgRepository = "mayswind/AriaNg"
 $ariaNgVersion = "1.3.14"
-$ariaNgReleaseName = "AriaNg-1.3.14-AllInOne.zip"
-$ariaNgArchiveSize = [Int64]701921
-$ariaNgArchiveSha256 = "65bc5ed3573ef05313ea953a5c5363c8b33a4996849b2986c78660eab1a9edb2"
-$ariaNgIndexSize = [Int64]2321502
-$ariaNgIndexSha256 = "ca2b51e09757159a4664b41423d5a8edb1c539e1a4700f568bfa1588bd896646"
+$ariaNgReleaseName = "AriaNg-1.3.14.zip"
+$ariaNgArchiveSize = [Int64]1126362
+$ariaNgArchiveSha256 = "e00db79b4cabac70f71c2673a6d454c8a92bfa9aa1f37bb00b01b7505f956805"
+$ariaNgIndexSize = [Int64]11418
+$ariaNgIndexSha256 = "76b9dfe56ac19ff5d11578e7e07634601739628716623a95acf389b03a80c1f1"
 $ariaNgLicenseSize = [Int64]1097
 $ariaNgLicenseSha256 = "cbfd5dc92e3fd24a52362a439a12f4584868bbb5bb28faaed37abd2d972fc9d7"
+$ariaNgAssets = @(
+    [PSCustomObject]@{ Path = "css/aria-ng-f90ba723d9.min.css"; Size = [Int64]34711; Sha256 = "a03e4b77b1725f2e428a12f331c0120d280597161258f1cabd67dc124ff5bcd9" }
+    [PSCustomObject]@{ Path = "css/bootstrap-3.4.1.min.css"; Size = [Int64]121412; Sha256 = "c28eb8900abce3c478234e62390838556d839c10b7073b2ba42bcbae20d6e2fc" }
+    [PSCustomObject]@{ Path = "css/plugins-ccac6fc3fc.min.css"; Size = [Int64]167377; Sha256 = "a373cdf8d64be9b1938cefdfa03fd43f5ba794c51b7de783806dd16b988203ee" }
+    [PSCustomObject]@{ Path = "js/angular-packages-1.6.10.min.js"; Size = [Int64]217156; Sha256 = "629638fb36f6f74049c6350651ab0815c8517248720f12084b117d3d96aefbd9" }
+    [PSCustomObject]@{ Path = "js/aria-ng-a5324ae04a.min.js"; Size = [Int64]282451; Sha256 = "d8ff216c8c5c8a845e8382430b68c8195dc82745808a9a9df2f5f1278bd1140e" }
+    [PSCustomObject]@{ Path = "js/bootstrap-3.4.1.min.js"; Size = [Int64]39680; Sha256 = "9ee2fcff6709e4d0d24b09ca0fc56aade12b4961ed9c43fd13b03248bfb57afe" }
+    [PSCustomObject]@{ Path = "js/echarts-common-3.8.5.min.js"; Size = [Int64]401142; Sha256 = "b2d40b7e8c9b925f00213bbe9944ae765f5637f1657921b744a5f3946c98c4c1" }
+    [PSCustomObject]@{ Path = "js/jquery-3.3.1.min.js"; Size = [Int64]88145; Sha256 = "0925e8ad7bd971391a8b1e98be8e87a6971919eb5b60c196485941c3c1df089a" }
+    [PSCustomObject]@{ Path = "js/moment-with-locales-2.29.4.min.js"; Size = [Int64]61737; Sha256 = "908ac76e9f34dc138359de91d570ce3ec972246fb892ffc2638c9a0339d94012" }
+    [PSCustomObject]@{ Path = "js/plugins-b3cb190423.min.js"; Size = [Int64]123750; Sha256 = "a3dae6fd4117844fc189201acaf85ff841ebf29f7c0dd680c8fa6ef36e9ccf96" }
+    [PSCustomObject]@{ Path = "fonts/fontawesome-webfont.woff2"; Size = [Int64]77160; Sha256 = "2adefcbc041e7d18fcf2d417879dc5a09997aa64d675b7a3c4b6ce33da13f3fe" }
+)
 $ariaNgDirectory = Join-Path $addonDirectory "ariang"
 $ariaNgIndexPath = Join-Path $ariaNgDirectory "index.html"
 $ariaNgLicensePath = Join-Path $addonDirectory "licenses\ariang-LICENSE"
@@ -69,6 +82,17 @@ $requiredEntries = @(
     "aria2-next-linux-x86_64"
     "ariang/index.html"
     "ariang/manifest.json"
+    "ariang/css/aria-ng-f90ba723d9.min.css"
+    "ariang/css/bootstrap-3.4.1.min.css"
+    "ariang/css/plugins-ccac6fc3fc.min.css"
+    "ariang/js/angular-packages-1.6.10.min.js"
+    "ariang/js/aria-ng-a5324ae04a.min.js"
+    "ariang/js/bootstrap-3.4.1.min.js"
+    "ariang/js/echarts-common-3.8.5.min.js"
+    "ariang/js/jquery-3.3.1.min.js"
+    "ariang/js/moment-with-locales-2.29.4.min.js"
+    "ariang/js/plugins-b3cb190423.min.js"
+    "ariang/fonts/fontawesome-webfont.woff2"
     "licenses/aria2-next-COPYING"
     "licenses/ariang-LICENSE"
     "chrome/content/DownloadItBinaryMetadata.sys.mjs"
@@ -96,7 +120,28 @@ try {
 
     New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
 
-    if (-not (Test-Path -LiteralPath $ariaNgIndexPath -PathType Leaf)) {
+    $ariaNgAssetReady = $false
+    if (Test-Path -LiteralPath $ariaNgIndexPath -PathType Leaf) {
+        $ariaNgExistingIndex = Get-Item -LiteralPath $ariaNgIndexPath
+        $ariaNgExistingHash = (Get-FileHash -LiteralPath $ariaNgIndexPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $ariaNgAssetReady = ([Int64]$ariaNgExistingIndex.Length -eq $ariaNgIndexSize) -and
+            ($ariaNgExistingHash -eq $ariaNgIndexSha256)
+        foreach ($ariaNgAsset in $ariaNgAssets) {
+            $ariaNgAssetPath = Join-Path $ariaNgDirectory $ariaNgAsset.Path.Replace("/", "\")
+            if (-not (Test-Path -LiteralPath $ariaNgAssetPath -PathType Leaf)) {
+                $ariaNgAssetReady = $false
+                break
+            }
+            $ariaNgAssetFile = Get-Item -LiteralPath $ariaNgAssetPath
+            $ariaNgAssetHash = (Get-FileHash -LiteralPath $ariaNgAssetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if (([Int64]$ariaNgAssetFile.Length -ne $ariaNgAsset.Size) -or ($ariaNgAssetHash -ne $ariaNgAsset.Sha256)) {
+                $ariaNgAssetReady = $false
+                break
+            }
+        }
+    }
+
+    if (-not $ariaNgAssetReady) {
         $githubCli = Get-Command ghp -ErrorAction SilentlyContinue
         if (-not $githubCli) {
             $githubCli = Get-Command gh -ErrorAction SilentlyContinue
@@ -130,27 +175,23 @@ try {
         try {
             $ariaNgEntries = @($ariaNgArchive.Entries)
             $ariaNgEntryNames = @($ariaNgEntries | ForEach-Object { $_.FullName })
-            $expectedAriaNgEntries = @("index.html", "LICENSE")
-            $unexpectedAriaNgEntries = @(
-                Compare-Object $expectedAriaNgEntries $ariaNgEntryNames
-            )
-            if (($ariaNgEntryNames.Count -ne $expectedAriaNgEntries.Count) -or $unexpectedAriaNgEntries) {
-                throw "The AriaNg archive must contain only index.html and LICENSE at its root"
+            foreach ($ariaNgEntryName in $ariaNgEntryNames) {
+                if ($ariaNgEntryName.StartsWith("/") -or $ariaNgEntryName.Contains("..")) {
+                    throw "The AriaNg archive contains an unsafe entry: $ariaNgEntryName"
+                }
+            }
+            foreach ($requiredAriaNgEntry in @(
+                "index.html"
+                "css/aria-ng-f90ba723d9.min.css"
+                "js/aria-ng-a5324ae04a.min.js"
+                "fonts/fontawesome-webfont.woff2"
+            )) {
+                if (-not ($ariaNgEntryNames -contains $requiredAriaNgEntry)) {
+                    throw "The AriaNg archive is missing required entry: $requiredAriaNgEntry"
+                }
             }
 
             New-Item -ItemType Directory -Path $ariaNgDirectory -Force | Out-Null
-            $temporaryIndexPath = Join-Path $temporaryDirectory "ariang-index.html"
-            $indexEntry = $ariaNgEntries | Where-Object { $_.FullName -eq "index.html" } | Select-Object -First 1
-            $indexInput = $indexEntry.Open()
-            $indexOutput = [IO.File]::Create($temporaryIndexPath)
-            try {
-                $indexInput.CopyTo($indexOutput)
-            }
-            finally {
-                $indexOutput.Dispose()
-                $indexInput.Dispose()
-            }
-
             $temporaryLicensePath = Join-Path $temporaryDirectory "ariang-LICENSE"
             $licenseEntry = $ariaNgEntries | Where-Object { $_.FullName -eq "LICENSE" } | Select-Object -First 1
             $licenseInput = $licenseEntry.Open()
@@ -172,8 +213,19 @@ try {
         if (([Int64]$temporaryLicenseFile.Length -ne $ariaNgLicenseSize) -or ($temporaryLicenseHash -ne $ariaNgLicenseSha256)) {
             throw "AriaNg archive LICENSE failed integrity verification"
         }
-        [IO.File]::Move($temporaryIndexPath, $ariaNgIndexPath)
-        Write-Output "[OK] Extracted $ariaNgIndexPath"
+
+        Expand-Archive -LiteralPath $ariaNgArchivePath -DestinationPath $ariaNgDirectory -Force
+        $ariaNgIndexContent = [IO.File]::ReadAllText($ariaNgIndexPath)
+        $ariaNgIndexMarker = '<html ng-app="ariaNg">'
+        if (-not $ariaNgIndexContent.Contains($ariaNgIndexMarker)) {
+            throw "AriaNg index does not contain the expected Angular application root"
+        }
+        $ariaNgIndexContent = $ariaNgIndexContent.Replace(
+            $ariaNgIndexMarker,
+            '<html ng-app="ariaNg" ng-csp="no-unsafe-eval">'
+        )
+        [IO.File]::WriteAllText($ariaNgIndexPath, $ariaNgIndexContent, [Text.UTF8Encoding]::new($false))
+        Write-Output "[OK] Extracted AriaNg assets to $ariaNgDirectory"
     }
 
     $ariaNgIndexFile = Get-Item -LiteralPath $ariaNgIndexPath
@@ -184,6 +236,21 @@ try {
     $ariaNgIndexActualHash = (Get-FileHash -LiteralPath $ariaNgIndexPath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($ariaNgIndexActualHash -ne $ariaNgIndexSha256) {
         throw "AriaNg index has invalid SHA-256: $ariaNgIndexPath"
+    }
+    $ariaNgIndexContent = [IO.File]::ReadAllText($ariaNgIndexPath)
+    if ([regex]::IsMatch($ariaNgIndexContent, '<script\b(?![^>]*\bsrc\s*=)[^>]*>', [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+        throw "AriaNg index contains an inline script, which is blocked by the extension CSP"
+    }
+    foreach ($ariaNgAsset in $ariaNgAssets) {
+        $ariaNgAssetPath = Join-Path $ariaNgDirectory $ariaNgAsset.Path.Replace("/", "\")
+        if (-not (Test-Path -LiteralPath $ariaNgAssetPath -PathType Leaf)) {
+            throw "AriaNg asset is missing: $ariaNgAssetPath"
+        }
+        $ariaNgAssetFile = Get-Item -LiteralPath $ariaNgAssetPath
+        $ariaNgAssetHash = (Get-FileHash -LiteralPath $ariaNgAssetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if (([Int64]$ariaNgAssetFile.Length -ne $ariaNgAsset.Size) -or ($ariaNgAssetHash -ne $ariaNgAsset.Sha256)) {
+            throw "AriaNg asset has invalid integrity: $ariaNgAssetPath"
+        }
     }
 
     $ariaNgLicenseFile = Get-Item -LiteralPath $ariaNgLicensePath
