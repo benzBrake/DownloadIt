@@ -803,13 +803,13 @@ function renderServiceState() {
 }
 
 function draftDownloaders() {
+  const builtInProviders = new Set(
+    BUILT_IN_PROTOCOLS.map(protocol => protocol.provider),
+  );
   const detected = (state.snapshot?.downloaders || [])
     .filter(downloader =>
       !downloader.custom &&
-      downloader.ref?.provider !== JDOWNLOADER_PROVIDER &&
-      downloader.ref?.provider !== ABDM_PROVIDER &&
-      downloader.ref?.provider !== XDM_PROVIDER &&
-      downloader.ref?.provider !== UGET_PROVIDER
+      !builtInProviders.has(downloader.ref?.provider)
     );
   const jDownloaderDraft =
     state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER];

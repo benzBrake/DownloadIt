@@ -301,6 +301,10 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /downloadit-remove-auto-deny/);
   assert.match(script, /reloadAutoCaptureRules/);
   assert.match(script, /resetAutoCaptureRules/);
+  assert.match(
+    script,
+    /const builtInProviders = new Set\([\s\S]*?BUILT_IN_PROTOCOLS\.map\(protocol => protocol\.provider\)[\s\S]*?\);[\s\S]*?!builtInProviders\.has\(downloader\.ref\?\.provider\)/,
+  );
   assert.match(script, /customDownloaders/);
   assert.match(script, /reloadCustomDownloaders/);
   assert.match(script, /testAria2Configuration/);
@@ -382,7 +386,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
   assert.match(downloaders, /params\.set\("autostart"/);
   assert.match(downloaders, /jdownloader-mixed-post-data/);
   assert.match(script, /createJDownloaderDescriptor\(jDownloaderDraft\)/);
-  assert.match(script, /provider !== XDM_PROVIDER/);
+  assert.match(script, /!builtInProviders\.has\(downloader\.ref\?\.provider\)/);
   assert.match(script, /createXDMDescriptor\(xdmDraft\)/);
   assert.match(script, /createUGetDescriptor\(uGetDraft\)/);
   assert.match(
