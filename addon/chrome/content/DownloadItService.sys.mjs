@@ -365,6 +365,7 @@ export class DownloadItService {
     this.refreshPromise = null;
     this.builtInRefreshPromise = null;
     this.aria2StartupPromises = new Map();
+    this.aria2Processes = new Map();
     this.aria2NextStartupPromise = null;
     this.aria2NextProcess = null;
     this.abdmOnline = false;
@@ -1303,16 +1304,17 @@ export class DownloadItService {
     }
   }
 
-  async shutdownAria2NextIfEnabled() {
-    const settings = this.getAria2NextSettings();
-    if (!settings.enabled || !settings.exitOnClose) {
+  async shutdownAria2Process(
+    config,
+    process,
+    label = "aria2",
+    { allowRpcWithoutProcess = true } = {},
+  ) {
+    if (!process && !allowRpcWithoutProcess) {
       return;
     }
-
-    const process = this.aria2NextProcess;
     let shutdownAccepted = false;
     try {
-      const config = this.normalizeAria2NextSettings(settings);
       const payload = {
         jsonrpc: "2.0",
         id: `downloadit-shutdown-${Date.now()}`,
@@ -1330,7 +1332,7 @@ export class DownloadItService {
       }
       shutdownAccepted = true;
     } catch (error) {
-      console.error("DownloadIt: Aria2Next shutdown request failed", error);
+      console.error(`DownloadIt: ${label} shutdown request failed`, error);
     } finally {
       // If Firefox is already tearing down its networking stack, the RPC may
       // never complete. Only terminate a process that DownloadIt started.
@@ -1355,6 +1357,101 @@ export class DownloadItService {
         this.aria2NextProcess = null;
       }
     }
+  }
+
+  async shutdownAria2NextIfEnabled(
+    settingsOverride = null,
+    { force = false } = {},
+  ) {
+    const settings = settingsOverride || this.getAria2NextSettings();
+    const process = this.aria2NextProcess;
+    if (!force && (!settings.enabled || !settings.exitOnClose)) {
+      return;
+    }
+    const config = this.normalizeAria2NextSettings(settings);
+    await this.shutdownAria2Process(config, process, "Aria2Next");
+    if (this.aria2NextProcess === process) {
+      this.aria2NextProcess = null;
+    }
+  }
+
+  async shutdownCustomAria2IfStarted(id, fallbackConfig = null) {
+    const startupPromise = this.aria2StartupPromises?.get(id);
+    let entry = this.aria2Processes?.get(id);
+    if (!entry && !startupPromise) {
+      return;
+    }
+    if (startupPromise) {
+      try {
+        await startupPromise;
+      } catch {}
+      entry = this.aria2Processes?.get(id) || entry;
+    }
+    const process = entry?.process;
+    if (!process) {
+      return;
+    }
+    await this.shutdownAria2Process(
+      entry?.config || fallbackConfig || {},
+      process,
+      `custom aria2 ${id}`,
+      { allowRpcWithoutProcess: false },
+    );
+    if (this.aria2Processes?.get(id)?.process === process) {
+      this.aria2Processes.delete(id);
+    }
+  }
+
+  async shutdownRemovedAria2Downloaders(previousDocument, nextDocument) {
+    const nextById = new Map(
+      nextDocument.downloaders.map(downloader => [downloader.id, downloader]),
+    );
+    const shutdowns = [];
+    for (const previous of previousDocument.downloaders) {
+      if (previous.type !== "aria2" || !previous.aria2?.autoStart) {
+        continue;
+      }
+      const next = nextById.get(previous.id);
+      const configurationChanged = !next ||
+        next.type !== "aria2" ||
+        next.enabled === false ||
+        JSON.stringify(next.aria2) !== JSON.stringify(previous.aria2);
+      if (configurationChanged) {
+        shutdowns.push(
+          this.shutdownCustomAria2IfStarted(previous.id, previous.aria2),
+        );
+      }
+    }
+    await Promise.all(shutdowns);
+  }
+
+  async shutdownManagedCustomAria2() {
+    const configurations = new Map();
+    for (const downloader of this.customDownloaderDocument?.downloaders || []) {
+      if (downloader.type === "aria2" && downloader.aria2?.autoStart) {
+        configurations.set(downloader.id, downloader.aria2);
+      }
+    }
+    for (const [id, entry] of this.aria2Processes || []) {
+      if (!configurations.has(id) && entry?.config) {
+        configurations.set(id, entry.config);
+      }
+    }
+    for (const id of this.aria2StartupPromises?.keys() || []) {
+      if (!configurations.has(id)) {
+        const downloader = this.customDownloaderDocument?.downloaders?.find(
+          entry => entry.id === id && entry.type === "aria2",
+        );
+        if (downloader?.aria2) {
+          configurations.set(id, downloader.aria2);
+        }
+      }
+    }
+    await Promise.all(
+      Array.from(configurations, ([id, config]) =>
+        this.shutdownCustomAria2IfStarted(id, config)
+      ),
+    );
   }
 
   getAria2NextBinaryDefinition() {
@@ -2897,9 +2994,16 @@ export class DownloadItService {
     }
 
     if (customDownloadersChanged) {
+      await this.shutdownRemovedAria2Downloaders(
+        this.customDownloaderDocument,
+        requestedCustomDownloaders,
+      );
       await this.writeCustomDownloaders(requestedCustomDownloaders);
       this.customDownloaderDocument = requestedCustomDownloaders;
       this.customDownloaderLoadError = null;
+    }
+    if (currentAria2Next.enabled && !requestedAria2Next.enabled) {
+      await this.shutdownAria2NextIfEnabled(currentAria2Next, { force: true });
     }
     if (!defaultManagerLocked) {
       let nextDefault = null;
@@ -3191,6 +3295,9 @@ export class DownloadItService {
   async shutdown() {
     this.serviceReady = false;
     this.idmBridge.stop();
+    if (this.aria2Processes?.size || this.aria2StartupPromises?.size) {
+      await this.shutdownManagedCustomAria2();
+    }
     await this.shutdownAria2NextIfEnabled();
     unregisterDownloadItHelperAppHook(this);
     try {
@@ -4901,6 +5008,8 @@ export class DownloadItService {
     ) {
       throw new DownloadItError("aria2-autostart-local-only");
     }
+    this.aria2StartupPromises ||= new Map();
+    this.aria2Processes ||= new Map();
     if (this.aria2StartupPromises.has(downloader.id)) {
       return this.aria2StartupPromises.get(downloader.id);
     }
@@ -4909,7 +5018,9 @@ export class DownloadItService {
         await this.testAria2Configuration(downloader.aria2);
         return true;
       } catch {}
-      this.startDetachedProcess(
+      let process = null;
+      let processExited = false;
+      process = this.startDetachedProcess(
         downloader.aria2.executablePath,
         buildAria2StartupArguments(
           downloader.aria2,
@@ -4917,9 +5028,22 @@ export class DownloadItService {
             ? this.resolveCustomFilePath(downloader.aria2.configurationPath)
             : "",
         ),
-        null,
+        () => {
+          processExited = true;
+          const entry = this.aria2Processes?.get(downloader.id);
+          if (entry?.process === process) {
+            this.aria2Processes.delete(downloader.id);
+          }
+        },
         downloader.startHidden,
       );
+      if (process && !processExited) {
+        this.aria2Processes ||= new Map();
+        this.aria2Processes.set(downloader.id, {
+          process,
+          config: { ...downloader.aria2 },
+        });
+      }
       const deadline = Date.now() + 5000;
       while (Date.now() <= deadline) {
         await new Promise(resolve => setTimeoutPromise(resolve, 250));

@@ -279,7 +279,7 @@ DownloadIt 将固定的 AriaNg `1.3.14` 标准资源页面作为内部 ID 为 `d
 
 嵌入式 Manifest 只授予 `127.0.0.1` 和 `localhost` 主机权限。CSP 只允许同源脚本，因此标准资源包的外置脚本无需 `unsafe-inline` 或 `unsafe-eval`；打包时会加入 Angular 的 `ng-csp="no-unsafe-eval"` 标记，让它选择兼容 CSP 的表达式解析器。页面仍保留 AriaNg 所需的内联样式，同时把 HTTP 和 WebSocket 连接限制在这些回环主机。该嵌入式页面有意不支持远程 aria2 RPC 主机。
 
-DownloadIt 管理回环监听地址、端口、可选密钥和下载目录参数，并在 `aria2.getVersion` 成功后才提供该 provider。链接通过 `system.multicall` 提交，可以传递文件名、Referer、User-Agent、Cookie 和下载目录。启用退出时关闭后，DownloadIt 会发送 `aria2.shutdown` 并短暂等待；只有优雅关闭失败时才会强制终止由自身启动的进程实例。
+DownloadIt 管理回环监听地址、端口、可选密钥和下载目录参数，并在 `aria2.getVersion` 成功后才提供该 provider。链接通过 `system.multicall` 提交，可以传递文件名、Referer、User-Agent、Cookie 和下载目录。启用退出时关闭后，DownloadIt 会发送 `aria2.shutdown` 并短暂等待；只有优雅关闭失败时才会强制终止由自身启动的进程实例。删除或禁用 Aria2Next 时，即使未启用退出时关闭，DownloadIt 也会发送 `aria2.shutdown`，因此可以在设置中关闭跨 Firefox 重启继续运行的进程。
 
 ### IDM 本地协议兼容
 
@@ -318,7 +318,7 @@ Windows 上的自定义下载器默认隐藏进程窗口。取消“隐藏运行
 
 命令行下载器需要选择可执行文件并填写参数模板；Linux 上所选文件必须具有执行权限。编辑器提供 `aria2c`、`wget` 和 `curl` 快捷模板。DownloadIt 默认使用 Firefox 原生进程 API 直接启动程序；若 Firefox 无法枚举 Linux 可执行文件，才会以固定参数使用 `/bin/sh` 回退：先通过 `test -f "$1" && test -x "$1"` 检查路径，再通过 `exec "$@"` 启动。可执行文件路径和模板参数始终作为独立进程参数传递，绝不会插入 shell 代码。支持的 FlashGot 兼容占位符包括 `URL`、`FNAME`、`COMMENT`、`REFERER`、`COOKIE`、`CFILE`、`FOLDER`、`POST`、`RAWPOST`、`HEADERS`、`ULIST`、`UFILE`、`USERPASS` 和 `UA`。模板包含 `ULIST` 或 `UFILE` 时整批只启动一个进程，否则每个链接分别启动一个进程。URL 列表和 Netscape Cookie 临时文件在 Windows 使用 CRLF，在 Linux 使用 LF；HTTP header 块在两个平台仍使用协议要求的 CRLF。
 
-aria2 定义通过 HTTP 或 HTTPS JSON-RPC 连接，支持可选密钥和服务端下载目录；多链接使用 `system.multicall` 提交。本地启动配置可选填写 `executablePath` 和 `configurationPath`：只有启用自动启动时可执行文件才是必填项，配置文件可以始终留空；填写配置文件后，DownloadIt 会把解析后的路径作为 `--conf-path` 传给 aria2c。可选的 aria2c 自动启动仅适用于 HTTP 回环地址，DownloadIt 会管理配置文件路径、RPC 开关、监听地址、端口和密钥参数，等待最多五秒后重试一次请求。RPC 密钥以明文保存在 JSON 文件中，但不会写入 DownloadIt 日志。
+aria2 定义通过 HTTP 或 HTTPS JSON-RPC 连接，支持可选密钥和服务端下载目录；多链接使用 `system.multicall` 提交。本地启动配置可选填写 `executablePath` 和 `configurationPath`：只有启用自动启动时可执行文件才是必填项，配置文件可以始终留空；填写配置文件后，DownloadIt 会把解析后的路径作为 `--conf-path` 传给 aria2c。可选的 aria2c 自动启动仅适用于 HTTP 回环地址，DownloadIt 会管理配置文件路径、RPC 开关、监听地址、端口和密钥参数，等待最多五秒后重试一次请求。删除或禁用自定义条目以及 Firefox 退出时，DownloadIt 会关闭由自身启动的 aria2c 实例；不会强制终止外部管理的进程。RPC 密钥以明文保存在 JSON 文件中，但不会写入 DownloadIt 日志。
 
 `native:firefox` provider 接受 HTTP、HTTPS、批量链接和 POST 请求体。它会继承来源 frame 可用的 principal、Referer、容器、隐私浏览和 Cookie jar 上下文。下载直接进入 Firefox 首选下载目录，使用 `.part` 文件；目标文件已存在时按 `name(1).ext` 形式生成唯一名称。文件名优先使用显式名称，其次取 URL 最后一个路径段，最后回退为 `download`。DownloadIt 不会额外探测重定向或 `Content-Disposition`，因此签名 URL、一次性 URL 和 POST 地址只请求一次。该 provider 会显示在 DownloadIt 菜单和设置中，但不会出现在 Firefox 自己的下载弹窗里，因为其中已有等价的“保存文件”操作。FTP 和 magnet 链接需要使用外部 provider。
 

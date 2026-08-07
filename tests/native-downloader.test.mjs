@@ -375,6 +375,53 @@ test("unsupported Linux ABI rejects Aria2Next enablement but permits disabling",
   preferenceValues.clear();
 });
 
+test("removing Aria2Next shuts down only its managed process", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.rpcPort", 6801);
+  preferenceValues.set("downloadit.aria2next.secret", "remove-secret");
+  const service = createSettingsService();
+  let killed = 0;
+  const process = { isRunning: false, kill() { killed++; } };
+  service.aria2NextProcess = process;
+  let request = null;
+  service.sendAria2Request = async (config, payload) => {
+    request = { config, payload };
+    return { result: "OK" };
+  };
+
+  await service.applySettings({ aria2next: { enabled: false } });
+
+  assert.equal(request.config.rpcUrl, "http://127.0.0.1:6801/jsonrpc");
+  assert.equal(request.payload.method, "aria2.shutdown");
+  assert.deepEqual(request.payload.params, ["token:remove-secret"]);
+  assert.equal(killed, 0);
+  assert.equal(service.aria2NextProcess, null);
+  preferenceValues.clear();
+});
+
+test("removing Aria2Next after Firefox restart shuts it down without a process handle", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.aria2next.rpcPort", 6802);
+  preferenceValues.set("downloadit.aria2next.secret", "stale-process-secret");
+  // exitOnClose is intentionally false: the previous Firefox session left
+  // Aria2Next running, so this service instance has no process handle.
+  const service = createSettingsService();
+  let request = null;
+  service.sendAria2Request = async (config, payload) => {
+    request = { config, payload };
+    return { result: "OK" };
+  };
+
+  await service.applySettings({ aria2next: { enabled: false } });
+
+  assert.equal(request.config.rpcUrl, "http://127.0.0.1:6802/jsonrpc");
+  assert.equal(request.payload.method, "aria2.shutdown");
+  assert.deepEqual(request.payload.params, ["token:stale-process-secret"]);
+  preferenceValues.clear();
+});
+
 test("service shutdown waits for the Aria2Next shutdown RPC", async () => {
   preferenceValues.clear();
   preferenceValues.set("downloadit.aria2next.enabled", true);
@@ -428,6 +475,93 @@ test("Aria2Next shutdown kills only its own process when the RPC fails", async (
   await service.shutdownAria2NextIfEnabled();
   assert.equal(killed, 1);
   assert.equal(service.aria2NextProcess, null);
+  preferenceValues.clear();
+});
+
+test("removing a custom auto-start aria2 downloader shuts down its process", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  const id = "11111111-1111-4111-8111-111111111111";
+  const configuration = {
+    rpcUrl: "http://127.0.0.1:6800/jsonrpc",
+    secret: "custom-secret",
+    executablePath: "C:\\Tools\\aria2c.exe",
+    configurationPath: "",
+    autoStart: true,
+    startupArguments: "",
+    downloadDirectory: "",
+  };
+  service.customDownloaderDocument = {
+    version: 1,
+    downloaders: [{
+      id,
+      name: "Custom Aria2",
+      enabled: true,
+      type: "aria2",
+      startHidden: true,
+      aria2: configuration,
+    }],
+  };
+  let killed = 0;
+  const process = { isRunning: false, kill() { killed++; } };
+  service.aria2Processes = new Map([[id, {
+    process,
+    config: { ...configuration },
+  }]]);
+  service.aria2StartupPromises = new Map();
+  service.normalizeCustomDownloaderFilePaths = value => value;
+  service.writeCustomDownloaders = async () => {};
+  let request = null;
+  service.sendAria2Request = async (config, payload) => {
+    request = { config, payload };
+    return { result: "OK" };
+  };
+
+  await service.applySettings({
+    customDownloaders: { version: 1, downloaders: [] },
+  });
+
+  assert.equal(request.config.rpcUrl, configuration.rpcUrl);
+  assert.equal(request.payload.method, "aria2.shutdown");
+  assert.deepEqual(request.payload.params, ["token:custom-secret"]);
+  assert.equal(killed, 0);
+  assert.equal(service.aria2Processes.has(id), false);
+  preferenceValues.clear();
+});
+
+test("service shutdown closes custom aria2 processes started by DownloadIt", async () => {
+  preferenceValues.clear();
+  const service = new DownloadItService({ version: "test" });
+  service.idmBridge = { stop() {} };
+  service.unregisterToolbarWidget = () => {};
+  const id = "22222222-2222-4222-8222-222222222222";
+  const config = {
+    rpcUrl: "http://127.0.0.1:6800/jsonrpc",
+    secret: "shutdown-secret",
+    autoStart: true,
+  };
+  let killed = 0;
+  service.customDownloaderDocument = {
+    version: 1,
+    downloaders: [{ id, type: "aria2", aria2: config }],
+  };
+  service.aria2Processes.set(id, {
+    process: { isRunning: false, kill() { killed++; } },
+    config,
+  });
+  let request;
+  service.sendAria2Request = async (requestConfig, payload) => {
+    request = { requestConfig, payload };
+    return { result: "OK" };
+  };
+
+  await service.shutdown();
+
+  assert.equal(request.requestConfig.rpcUrl, config.rpcUrl);
+  assert.equal(request.payload.method, "aria2.shutdown");
+  assert.deepEqual(request.payload.params, ["token:shutdown-secret"]);
+  assert.equal(killed, 0);
+  assert.equal(service.aria2Processes.has(id), false);
   preferenceValues.clear();
 });
 
