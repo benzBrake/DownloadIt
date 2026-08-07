@@ -155,7 +155,13 @@ class MockDocument {
 }
 
 class MockService {
-  constructor({ managers = null, defaultManager = "flashgot:idm", locked = false } = {}) {
+  constructor({
+    managers = null,
+    defaultManager = "flashgot:idm",
+    locked = false,
+    aria2NextEnabled = true,
+    aria2NextSupported = true,
+  } = {}) {
     this.managers = managers ?? [
       {
         key: "flashgot:idm",
@@ -176,6 +182,8 @@ class MockService {
     this.selectionError = null;
     this.refreshCalls = 0;
     this.ariaNgURL = "moz-extension://profile-uuid/index.html";
+    this.aria2NextEnabled = aria2NextEnabled;
+    this.aria2NextSupported = aria2NextSupported;
   }
 
   get defaultManager() {
@@ -194,6 +202,8 @@ class MockService {
       managers: this.managers.map(manager => ({ ...manager })),
       defaultManager: this.selectedManager,
       defaultManagerLocked: this.locked,
+      aria2next: { enabled: this.aria2NextEnabled },
+      aria2NextSupported: this.aria2NextSupported,
     };
   }
 
@@ -285,6 +295,8 @@ test("panel view builds native links, manager, refresh, and settings controls", 
     /chrome:\/\/downloadit\/content\/icons\/downloadit\.svg$/,
   );
   assert.equal(controller.linksButton.disabled, false);
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), null);
   assert.equal(controller.ariaNgButton.disabled, false);
   assert.equal(
     controller.managerButtons[1].getAttribute("data-l10n-id"),
@@ -309,11 +321,45 @@ test("panel AriaNg command opens the internal page in a trusted tab", () => {
   ]]);
 });
 
+test("panel hides AriaNg until Aria2Next is enabled, then updates on refresh and show", async () => {
+  const service = new MockService({ aria2NextEnabled: false });
+  const { controller, ariaNgCalls } = createController(service);
+
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), "true");
+  assert.equal(controller.ariaNgButton.disabled, true);
+  assert.equal(controller.openAriaNg(), null);
+  assert.deepEqual(ariaNgCalls, []);
+
+  service.aria2NextEnabled = true;
+  controller.onViewShowing();
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), null);
+  assert.equal(controller.ariaNgButton.disabled, false);
+
+  service.aria2NextEnabled = false;
+  await controller.refreshManagers();
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.disabled, true);
+});
+
+test("panel hides AriaNg when the platform does not support Aria2Next", () => {
+  const service = new MockService({ aria2NextSupported: false });
+  const { controller, ariaNgCalls } = createController(service);
+
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), "true");
+  controller.handleEvent({ type: "command", target: controller.ariaNgButton });
+  assert.deepEqual(ariaNgCalls, []);
+});
+
 test("panel AriaNg entry is disabled when registration is unavailable", () => {
   const service = new MockService();
   service.ariaNgURL = "";
   const { controller, ariaNgCalls } = createController(service);
 
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), null);
   assert.equal(controller.ariaNgButton.disabled, true);
   assert.equal(controller.ariaNgButton.getAttribute("disabled"), "true");
   assert.equal(controller.openAriaNg(), null);

@@ -223,7 +223,35 @@ export class DownloadItPanelViewController {
     }
   }
 
+  isAria2NextAvailable(snapshot) {
+    return Boolean(
+      snapshot?.aria2next?.enabled && snapshot?.aria2NextSupported,
+    );
+  }
+
+  updateAriaNgVisibility(snapshot) {
+    if (!this.ariaNgButton) {
+      return;
+    }
+    const hidden = !this.isAria2NextAvailable(snapshot);
+    this.ariaNgButton.hidden = hidden;
+    if (hidden) {
+      this.ariaNgButton.setAttribute("hidden", "true");
+    } else {
+      this.ariaNgButton.removeAttribute("hidden");
+    }
+  }
+
   openAriaNg() {
+    let snapshot;
+    try {
+      snapshot = this.service.readSettings();
+    } catch {
+      return null;
+    }
+    if (!this.isAria2NextAvailable(snapshot)) {
+      return null;
+    }
     const url = this.getAriaNgURL();
     if (!url || typeof this.window.openTrustedLinkIn !== "function") {
       return null;
@@ -238,6 +266,7 @@ export class DownloadItPanelViewController {
     const snapshot = this.service.readSettings();
     const managers = snapshot.managers || [];
     this.defaultManagerLocked = Boolean(snapshot.defaultManagerLocked);
+    this.updateAriaNgVisibility(snapshot);
     this.managerButtons = [];
     this.managerList.replaceChildren();
 
@@ -374,7 +403,7 @@ export class DownloadItPanelViewController {
       }
     }
     if (this.ariaNgButton) {
-      const disabled = !this.getAriaNgURL();
+      const disabled = this.ariaNgButton.hidden || !this.getAriaNgURL();
       this.ariaNgButton.disabled = disabled;
       if (disabled) {
         this.ariaNgButton.setAttribute("disabled", "true");
