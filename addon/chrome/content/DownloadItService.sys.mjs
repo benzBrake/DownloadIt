@@ -4944,6 +4944,12 @@ export class DownloadItService {
     return openSettingsWindow(parentWindow);
   }
 
+  getAriaNgURL() {
+    return ChromeUtils.importESModule(
+      "chrome://downloadit/content/DownloadItAriaNg.sys.mjs",
+    ).getAriaNgURL();
+  }
+
   createTemporaryPath(prefix, extension) {
     const id = Services.uuid.generateUUID().toString().replace(/[{}-]/g, "");
     const path = PathUtils.join(PathUtils.tempDir, `downloadit-${prefix}-${id}${extension}`);

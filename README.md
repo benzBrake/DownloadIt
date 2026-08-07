@@ -21,6 +21,7 @@ The project is currently being migrated. It supports Windows and Linux, and the 
 - Supports Xtreme Download Manager directly through its built-in loopback API without routing requests through `FlashGot.exe`.
 - Supports uGet directly through its cross-platform quiet command-line interface without routing requests through `FlashGot.exe`.
 - Supports the bundled Aria2Next directly through JSON-RPC on Windows and Linux x86_64 without routing requests through `FlashGot.exe`.
+- Registers the bundled AriaNg All-In-One frontend as an internal `moz-extension://` page with loopback-only RPC access.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
@@ -96,9 +97,10 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 - External download managers are optional because the Firefox downloader is always available;
 - If `addon/FlashGot.exe` is missing during the build, both packaging scripts download the latest successful [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly artifact. They use the GitHub Actions API when `GITHUB_TOKEN` or `GH_TOKEN` is available and otherwise download through nightly.link. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
 - Missing Aria2Next assets are downloaded from the pinned [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` release. Existing or downloaded Windows x86_64 and Linux x86_64 assets must match their fixed size and SHA-256 values before packaging;
+- Missing AriaNg assets are downloaded from the pinned [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` All-In-One release through GitHub CLI. The archive must contain only `index.html` and `LICENSE`, and both the archive and extracted HTML are checked against fixed sizes and SHA-256 values;
 - Node.js 18 or later for development and testing;
 - PowerShell 7 (`pwsh`) for building on Windows;
-- Bash, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. The authenticated GitHub API path additionally requires `jq`.
+- Bash, GitHub CLI, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. The authenticated GitHub API path additionally requires `jq`.
 
 ## Build
 
@@ -107,7 +109,7 @@ Run the command for your platform from the repository root.
 Windows:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
+pwsh -ExecutionPolicy Bypass -File .\pack.ps1
 ```
 
 Linux:
@@ -124,13 +126,15 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 - `FlashGot.exe`;
 - `aria2-next.exe`;
 - `aria2-next-linux-x86_64`;
-- `licenses/aria2-next-COPYING`.
+- `ariang/index.html` and `ariang/manifest.json`;
+- `licenses/aria2-next-COPYING` and `licenses/ariang-LICENSE`;
+- `chrome/content/DownloadItAriaNg.sys.mjs`.
 
-`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe`, `addon/aria2-next.exe`, and `addon/aria2-next-linux-x86_64` are also excluded from version control. Missing Aria2Next assets are downloaded from the fixed upstream release URL; invalid cached assets fail the build instead of being silently replaced. Nightly builds still publish one universal XPI rather than separate platform artifacts.
+`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe`, `addon/aria2-next.exe`, `addon/aria2-next-linux-x86_64`, and `addon/ariang/index.html` are also excluded from version control. Missing Aria2Next and AriaNg assets are downloaded from their pinned upstream releases; invalid cached assets fail the build instead of being silently replaced. Nightly builds still publish one universal XPI rather than separate platform artifacts.
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.6.1`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.7.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -142,7 +146,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link filtering and copying, download-manager parsing, JDownloader, AB Download Manager, Xtreme Download Manager, uGet, Aria2Next platform deployment and JSON-RPC behavior, the toolbar PanelView and context-menu insertion point, automatic capture, IDM local protocol parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link filtering and copying, download-manager parsing, JDownloader, AB Download Manager, Xtreme Download Manager, uGet, Aria2Next platform deployment and JSON-RPC behavior, the embedded AriaNg lifecycle and permission boundary, the toolbar PanelView and context-menu insertion point, automatic capture, IDM local protocol parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. The independent **Magnet links only** filter also combines with those conditions. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature. Selected links can be copied as newline-separated URLs, tab-separated titles and URLs, or Markdown links without contacting a downloader.
 
@@ -269,6 +273,12 @@ Each link is submitted as a separate `uget --quiet` process. DownloadIt conditio
 
 The `aria2next:aria2next` provider deploys the pinned Aria2Next `v2.5.5` binary from the universal XPI and communicates with it over `http://127.0.0.1:<port>/jsonrpc`. Windows keeps the existing `DownloadIt\aria2-next.exe` profile path. Linux x86_64 uses `DownloadIt/aria2-next`; runtime integrity checks verify its size and SHA-256 and Firefox sets mode `0755` before starting it directly with the native process API. Other Linux architectures cannot enable this bundled provider, but the custom aria2 JSON-RPC provider remains available for an externally managed service.
 
+### Embedded AriaNg page
+
+DownloadIt starts the pinned AriaNg `1.3.14` All-In-One page as an embedded Firefox WebExtension with the internal ID `downloadit-ariang@downloadit.invalid`. Firefox assigns and persists the profile-specific UUID, registers the resulting `moz-extension://<uuid>/index.html` origin in parent and content processes, and unregisters it during DownloadIt shutdown. The DownloadIt PanelView provides an **Open AriaNg** entry that opens the active URL in a trusted tab; it is disabled until registration succeeds. The entry obtains its URL through the internal `getAriaNgURL()` API and does not hardcode the UUID.
+
+The embedded manifest grants host access only to `127.0.0.1` and `localhost`. Its CSP allows the upstream All-In-One build's inline scripts and styles while limiting HTTP and WebSocket connections to those loopback hosts. Remote aria2 RPC hosts are intentionally unsupported by this embedded page.
+
 DownloadIt owns the loopback address, port, optional secret, and download-directory arguments, then waits for `aria2.getVersion` before exposing the provider. Submitted links use `system.multicall` and can carry filenames, Referer, User-Agent, cookies, and a download directory. When shutdown-on-exit is enabled, DownloadIt sends `aria2.shutdown`, waits briefly, and only force-terminates the process instance that it started.
 
 ### IDM local protocol compatibility
@@ -323,7 +333,12 @@ addon/
 ├── aria2-next.exe                        # Pinned Windows x86_64 Aria2Next binary
 ├── aria2-next-linux-x86_64               # Pinned Linux x86_64 Aria2Next binary
 ├── licenses/aria2-next-COPYING           # Aria2Next GPL-2.0 license text
+├── licenses/ariang-LICENSE               # AriaNg MIT license text
+├── ariang/
+│   ├── manifest.json                     # Loopback-only embedded WebExtension manifest
+│   └── index.html                        # Verified AriaNg All-In-One build asset
 └── chrome/content/
+    ├── DownloadItAriaNg.sys.mjs         # Embedded WebExtension lifecycle and URL access
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItAutoCapture.sys.mjs    # Versioned typed rules and built-in capture protections
     ├── DownloadItPanelView.sys.mjs      # Native toolbar panel behavior
@@ -363,5 +378,7 @@ DownloadIt is an unofficial modern port based on the original FlashGot extension
 The bundled `FlashGot.exe` is based on [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) and is licensed under GPL-3.0. Each XPI contains `chrome/content/DownloadItBinaryMetadata.sys.mjs`, whose metadata matches the bundled binary and is used for runtime integrity verification.
 
 The bundled Windows and Linux x86_64 Aria2Next `v2.5.5` binaries come from [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) and are licensed under GPL-2.0. The corresponding license text and pinned source location are included in the XPI notices, and generated metadata records the verified size and SHA-256 of both assets.
+
+The embedded AriaNg `1.3.14` All-In-One page comes from [mayswind/AriaNg](https://github.com/mayswind/AriaNg) and is licensed under MIT. Its license and pinned source location are included in the XPI notices; packaging verifies both the upstream archive and extracted single-file page.
 
 For the Chinese version, see [README-zh_CN.md](README-zh_CN.md).

@@ -11,6 +11,18 @@ $nightlyDirectory = Join-Path $temporaryDirectory "FlashGot-nightly"
 $temporaryArchivePath = Join-Path $temporaryDirectory "addon.xpi"
 $binaryMetadataPath = Join-Path $addonDirectory "chrome\content\DownloadItBinaryMetadata.sys.mjs"
 $generatedMetadataCreated = $false
+$ariaNgRepository = "mayswind/AriaNg"
+$ariaNgVersion = "1.3.14"
+$ariaNgReleaseName = "AriaNg-1.3.14-AllInOne.zip"
+$ariaNgArchiveSize = [Int64]701921
+$ariaNgArchiveSha256 = "65bc5ed3573ef05313ea953a5c5363c8b33a4996849b2986c78660eab1a9edb2"
+$ariaNgIndexSize = [Int64]2321502
+$ariaNgIndexSha256 = "ca2b51e09757159a4664b41423d5a8edb1c539e1a4700f568bfa1588bd896646"
+$ariaNgLicenseSize = [Int64]1097
+$ariaNgLicenseSha256 = "cbfd5dc92e3fd24a52362a439a12f4584868bbb5bb28faaed37abd2d972fc9d7"
+$ariaNgDirectory = Join-Path $addonDirectory "ariang"
+$ariaNgIndexPath = Join-Path $ariaNgDirectory "index.html"
+$ariaNgLicensePath = Join-Path $addonDirectory "licenses\ariang-LICENSE"
 $aria2NextRepository = "AnInsomniacy/aria2-next"
 $aria2NextVersion = "2.5.5"
 $aria2NextAssets = @(
@@ -55,8 +67,12 @@ $requiredEntries = @(
     "FlashGot.exe"
     "aria2-next.exe"
     "aria2-next-linux-x86_64"
+    "ariang/index.html"
+    "ariang/manifest.json"
     "licenses/aria2-next-COPYING"
+    "licenses/ariang-LICENSE"
     "chrome/content/DownloadItBinaryMetadata.sys.mjs"
+    "chrome/content/DownloadItAriaNg.sys.mjs"
     "chrome/content/DownloadItDownloaders.sys.mjs"
     "chrome/content/DownloadItGitHubMirror.sys.mjs"
     "chrome/content/DownloadItIDMBridge.sys.mjs"
@@ -79,6 +95,105 @@ try {
     }
 
     New-Item -ItemType Directory -Path $temporaryDirectory -Force | Out-Null
+
+    if (-not (Test-Path -LiteralPath $ariaNgIndexPath -PathType Leaf)) {
+        $githubCli = Get-Command ghp -ErrorAction SilentlyContinue
+        if (-not $githubCli) {
+            $githubCli = Get-Command gh -ErrorAction SilentlyContinue
+        }
+        if (-not $githubCli) {
+            throw "GitHub CLI is required to download the pinned AriaNg release asset"
+        }
+
+        $ariaNgArchivePath = Join-Path $temporaryDirectory $ariaNgReleaseName
+        Write-Output "[INFO] $ariaNgReleaseName not found locally; downloading pinned AriaNg $ariaNgVersion asset"
+        & $githubCli release download $ariaNgVersion `
+            --repo $ariaNgRepository `
+            --pattern $ariaNgReleaseName `
+            --output $ariaNgArchivePath `
+            --clobber
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to download the pinned AriaNg release asset"
+        }
+
+        $ariaNgArchiveFile = Get-Item -LiteralPath $ariaNgArchivePath
+        $ariaNgArchiveActualSize = [Int64]$ariaNgArchiveFile.Length
+        if ($ariaNgArchiveActualSize -ne $ariaNgArchiveSize) {
+            throw "AriaNg archive has invalid size: $ariaNgArchivePath (expected $ariaNgArchiveSize, got $ariaNgArchiveActualSize)"
+        }
+        $ariaNgArchiveActualHash = (Get-FileHash -LiteralPath $ariaNgArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($ariaNgArchiveActualHash -ne $ariaNgArchiveSha256) {
+            throw "AriaNg archive has invalid SHA-256: $ariaNgArchivePath"
+        }
+
+        $ariaNgArchive = [IO.Compression.ZipFile]::OpenRead($ariaNgArchivePath)
+        try {
+            $ariaNgEntries = @($ariaNgArchive.Entries)
+            $ariaNgEntryNames = @($ariaNgEntries | ForEach-Object { $_.FullName })
+            $expectedAriaNgEntries = @("index.html", "LICENSE")
+            $unexpectedAriaNgEntries = @(
+                Compare-Object $expectedAriaNgEntries $ariaNgEntryNames
+            )
+            if (($ariaNgEntryNames.Count -ne $expectedAriaNgEntries.Count) -or $unexpectedAriaNgEntries) {
+                throw "The AriaNg archive must contain only index.html and LICENSE at its root"
+            }
+
+            New-Item -ItemType Directory -Path $ariaNgDirectory -Force | Out-Null
+            $temporaryIndexPath = Join-Path $temporaryDirectory "ariang-index.html"
+            $indexEntry = $ariaNgEntries | Where-Object { $_.FullName -eq "index.html" } | Select-Object -First 1
+            $indexInput = $indexEntry.Open()
+            $indexOutput = [IO.File]::Create($temporaryIndexPath)
+            try {
+                $indexInput.CopyTo($indexOutput)
+            }
+            finally {
+                $indexOutput.Dispose()
+                $indexInput.Dispose()
+            }
+
+            $temporaryLicensePath = Join-Path $temporaryDirectory "ariang-LICENSE"
+            $licenseEntry = $ariaNgEntries | Where-Object { $_.FullName -eq "LICENSE" } | Select-Object -First 1
+            $licenseInput = $licenseEntry.Open()
+            $licenseOutput = [IO.File]::Create($temporaryLicensePath)
+            try {
+                $licenseInput.CopyTo($licenseOutput)
+            }
+            finally {
+                $licenseOutput.Dispose()
+                $licenseInput.Dispose()
+            }
+        }
+        finally {
+            $ariaNgArchive.Dispose()
+        }
+
+        $temporaryLicenseFile = Get-Item -LiteralPath $temporaryLicensePath
+        $temporaryLicenseHash = (Get-FileHash -LiteralPath $temporaryLicensePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if (([Int64]$temporaryLicenseFile.Length -ne $ariaNgLicenseSize) -or ($temporaryLicenseHash -ne $ariaNgLicenseSha256)) {
+            throw "AriaNg archive LICENSE failed integrity verification"
+        }
+        [IO.File]::Move($temporaryIndexPath, $ariaNgIndexPath)
+        Write-Output "[OK] Extracted $ariaNgIndexPath"
+    }
+
+    $ariaNgIndexFile = Get-Item -LiteralPath $ariaNgIndexPath
+    $ariaNgIndexActualSize = [Int64]$ariaNgIndexFile.Length
+    if ($ariaNgIndexActualSize -ne $ariaNgIndexSize) {
+        throw "AriaNg index has invalid size: $ariaNgIndexPath (expected $ariaNgIndexSize, got $ariaNgIndexActualSize)"
+    }
+    $ariaNgIndexActualHash = (Get-FileHash -LiteralPath $ariaNgIndexPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($ariaNgIndexActualHash -ne $ariaNgIndexSha256) {
+        throw "AriaNg index has invalid SHA-256: $ariaNgIndexPath"
+    }
+
+    $ariaNgLicenseFile = Get-Item -LiteralPath $ariaNgLicensePath
+    $ariaNgLicenseActualSize = [Int64]$ariaNgLicenseFile.Length
+    $ariaNgLicenseActualHash = (Get-FileHash -LiteralPath $ariaNgLicensePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (($ariaNgLicenseActualSize -ne $ariaNgLicenseSize) -or ($ariaNgLicenseActualHash -ne $ariaNgLicenseSha256)) {
+        throw "Bundled AriaNg license failed integrity verification: $ariaNgLicensePath"
+    }
+    Write-Output "[INFO] AriaNg index size: $ariaNgIndexActualSize bytes"
+    Write-Output "[INFO] AriaNg index SHA-256: $ariaNgIndexActualHash"
 
     if (-not (Test-Path -LiteralPath $flashGotPath -PathType Leaf)) {
         New-Item -ItemType Directory -Path $nightlyDirectory -Force | Out-Null

@@ -30,3 +30,18 @@ https://github.com/AnInsomniacy/aria2-next/tree/v2.5.5
 https://github.com/AnInsomniacy/aria2-next/releases/tag/v2.5.5
 The SHA-256 of each bundled Aria2Next binary is recorded in the generated
 chrome/content/DownloadItBinaryMetadata.sys.mjs file inside each XPI.
+
+AriaNg
+======
+
+AriaNg is developed by MaysWind:
+https://github.com/mayswind/AriaNg
+
+Bundled source version: 1.3.14 All-In-One.
+Upstream license: MIT. The corresponding license text is included as
+licenses/ariang-LICENSE in the XPI. The pinned source tree and release asset
+are available at:
+https://github.com/mayswind/AriaNg/tree/1.3.14
+https://github.com/mayswind/AriaNg/releases/tag/1.3.14
+The packaging scripts verify the release archive and extracted index.html by
+fixed file size and SHA-256 before including them in the XPI.

@@ -12,6 +12,18 @@ temporary_directory=""
 temporary_archive_path=""
 binary_metadata_path="${addon_directory}/chrome/content/DownloadItBinaryMetadata.sys.mjs"
 generated_metadata_created=false
+ariang_repository="mayswind/AriaNg"
+ariang_version="1.3.14"
+ariang_release_name="AriaNg-1.3.14-AllInOne.zip"
+ariang_archive_size=701921
+ariang_archive_hash="65bc5ed3573ef05313ea953a5c5363c8b33a4996849b2986c78660eab1a9edb2"
+ariang_index_size=2321502
+ariang_index_hash="ca2b51e09757159a4664b41423d5a8edb1c539e1a4700f568bfa1588bd896646"
+ariang_license_size=1097
+ariang_license_hash="cbfd5dc92e3fd24a52362a439a12f4584868bbb5bb28faaed37abd2d972fc9d7"
+ariang_directory="${addon_directory}/ariang"
+ariang_index_path="${ariang_directory}/index.html"
+ariang_license_path="${addon_directory}/licenses/ariang-LICENSE"
 aria2next_repository="AnInsomniacy/aria2-next"
 aria2next_version="2.5.5"
 aria2next_windows_name="aria2-next.exe"
@@ -36,8 +48,12 @@ required_entries=(
     "FlashGot.exe"
     "aria2-next.exe"
     "aria2-next-linux-x86_64"
+    "ariang/index.html"
+    "ariang/manifest.json"
     "licenses/aria2-next-COPYING"
+    "licenses/ariang-LICENSE"
     "chrome/content/DownloadItBinaryMetadata.sys.mjs"
+    "chrome/content/DownloadItAriaNg.sys.mjs"
     "chrome/content/DownloadItDownloaders.sys.mjs"
     "chrome/content/DownloadItGitHubMirror.sys.mjs"
     "chrome/content/DownloadItIDMBridge.sys.mjs"
@@ -225,6 +241,135 @@ download_and_verify_aria2next_asset() {
     printf '[INFO] %s SHA-256: %s\n' "${resource_name}" "${actual_hash}"
 }
 
+download_and_verify_ariang() {
+    local archive_path="${temporary_directory}/${ariang_release_name}"
+    local archive_entries_path="${temporary_directory}/ariang-archive-entries.txt"
+    local temporary_index_path="${temporary_directory}/ariang-index.html"
+    local temporary_license_path="${temporary_directory}/ariang-LICENSE"
+    local archive_actual_size
+    local archive_hash_output
+    local archive_actual_hash
+    local index_actual_size
+    local index_hash_output
+    local index_actual_hash
+    local license_actual_size
+    local license_hash_output
+    local license_actual_hash
+    local index_entry_count=0
+    local license_entry_count=0
+    local entry
+    local github_cli
+    local -a archive_entries=()
+
+    if [[ ! -f "${ariang_index_path}" ]]; then
+        if command -v ghp > /dev/null 2>&1; then
+            github_cli="ghp"
+        elif command -v gh > /dev/null 2>&1; then
+            github_cli="gh"
+        else
+            die "GitHub CLI is required to download the pinned AriaNg release asset"
+        fi
+        printf '[INFO] %s not found locally; downloading pinned AriaNg %s asset\n' "${ariang_release_name}" "${ariang_version}"
+        if ! "${github_cli}" release download "${ariang_version}" \
+            --repo "${ariang_repository}" \
+            --pattern "${ariang_release_name}" \
+            --output "${archive_path}" \
+            --clobber; then
+            die "Unable to download the pinned AriaNg release asset"
+        fi
+
+        if ! archive_actual_size="$(stat -c '%s' "${archive_path}")"; then
+            die "Unable to read the size of ${archive_path}"
+        fi
+        if [[ "${archive_actual_size}" != "${ariang_archive_size}" ]]; then
+            die "AriaNg archive has invalid size: ${archive_path} (expected ${ariang_archive_size}, got ${archive_actual_size})"
+        fi
+        if ! archive_hash_output="$(sha256sum "${archive_path}")"; then
+            die "Unable to calculate the SHA-256 hash of ${archive_path}"
+        fi
+        archive_actual_hash="${archive_hash_output%% *}"
+        if [[ "${archive_actual_hash}" != "${ariang_archive_hash}" ]]; then
+            die "AriaNg archive has invalid SHA-256: ${archive_path}"
+        fi
+
+        if ! unzip -Z1 "${archive_path}" \
+            | sed -e 's/\r$//' -e 's#^\./##' \
+            > "${archive_entries_path}"; then
+            die "Unable to inspect the AriaNg archive"
+        fi
+        mapfile -t archive_entries < "${archive_entries_path}"
+        if [[ "${#archive_entries[@]}" -ne 2 ]]; then
+            die "The AriaNg archive must contain only index.html and LICENSE at its root"
+        fi
+        for entry in "${archive_entries[@]}"; do
+            case "${entry}" in
+                index.html)
+                    index_entry_count=$((index_entry_count + 1))
+                    ;;
+                LICENSE)
+                    license_entry_count=$((license_entry_count + 1))
+                    ;;
+                *)
+                    die "The AriaNg archive contains an unexpected entry: ${entry}"
+                    ;;
+            esac
+        done
+        if [[ "${index_entry_count}" -ne 1 || "${license_entry_count}" -ne 1 ]]; then
+            die "The AriaNg archive must contain one index.html and one LICENSE"
+        fi
+
+        if ! unzip -p "${archive_path}" "index.html" > "${temporary_index_path}"; then
+            die "Unable to extract index.html from the AriaNg archive"
+        fi
+        if ! unzip -p "${archive_path}" "LICENSE" > "${temporary_license_path}"; then
+            die "Unable to extract LICENSE from the AriaNg archive"
+        fi
+
+        if ! license_actual_size="$(stat -c '%s' "${temporary_license_path}")"; then
+            die "Unable to read the extracted AriaNg license size"
+        fi
+        if ! license_hash_output="$(sha256sum "${temporary_license_path}")"; then
+            die "Unable to calculate the extracted AriaNg license SHA-256"
+        fi
+        license_actual_hash="${license_hash_output%% *}"
+        if [[ "${license_actual_size}" != "${ariang_license_size}" || "${license_actual_hash}" != "${ariang_license_hash}" ]]; then
+            die "AriaNg archive LICENSE failed integrity verification"
+        fi
+
+        mkdir -p -- "${ariang_directory}"
+        mv -- "${temporary_index_path}" "${ariang_index_path}"
+        printf '[OK] Extracted %s\n' "${ariang_index_path}"
+    fi
+
+    if ! index_actual_size="$(stat -c '%s' "${ariang_index_path}")"; then
+        die "Unable to read the size of ${ariang_index_path}"
+    fi
+    if [[ "${index_actual_size}" != "${ariang_index_size}" ]]; then
+        die "AriaNg index has invalid size: ${ariang_index_path} (expected ${ariang_index_size}, got ${index_actual_size})"
+    fi
+    if ! index_hash_output="$(sha256sum "${ariang_index_path}")"; then
+        die "Unable to calculate the SHA-256 hash of ${ariang_index_path}"
+    fi
+    index_actual_hash="${index_hash_output%% *}"
+    if [[ "${index_actual_hash}" != "${ariang_index_hash}" ]]; then
+        die "AriaNg index has invalid SHA-256: ${ariang_index_path}"
+    fi
+
+    if ! license_actual_size="$(stat -c '%s' "${ariang_license_path}")"; then
+        die "Unable to read the size of ${ariang_license_path}"
+    fi
+    if ! license_hash_output="$(sha256sum "${ariang_license_path}")"; then
+        die "Unable to calculate the SHA-256 hash of ${ariang_license_path}"
+    fi
+    license_actual_hash="${license_hash_output%% *}"
+    if [[ "${license_actual_size}" != "${ariang_license_size}" || "${license_actual_hash}" != "${ariang_license_hash}" ]]; then
+        die "Bundled AriaNg license failed integrity verification: ${ariang_license_path}"
+    fi
+
+    printf '[INFO] AriaNg index size: %s bytes\n' "${index_actual_size}"
+    printf '[INFO] AriaNg index SHA-256: %s\n' "${index_actual_hash}"
+}
+
 for command_name in curl grep mktemp sed sha256sum stat unzip zip; do
     require_command "${command_name}"
 done
@@ -244,6 +389,8 @@ fi
 if [[ ! -s "${flashgot_path}" ]]; then
     die "FlashGot.exe is empty: ${flashgot_path}"
 fi
+
+download_and_verify_ariang
 
 download_and_verify_aria2next_asset \
     "${aria2next_windows_name}" \
