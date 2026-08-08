@@ -1058,13 +1058,16 @@ export function buildAria2StartupArguments(
   return argumentsList;
 }
 
-export function buildAria2NextStartupArguments(config, downloadDirectory = "") {
+export function buildAria2NextStartupArguments(config, downloadDirectory = "", managedConfPath = "") {
   const extras = tokenizeArguments(config.extraArgs);
   const managed = extras.find(argument => MANAGED_ARIA2_ARGUMENT.test(argument));
   if (managed) {
     throw new CustomDownloaderConfigError("aria2-managed-argument", {
       argument: managed.split("=", 1)[0],
     });
+  }
+  if (managedConfPath) {
+    return [...extras, `--conf-path=${managedConfPath}`];
   }
   const argumentsList = [
     ...extras,

@@ -223,6 +223,7 @@ const PREF_ARIA2NEXT_SECRET = "downloadit.aria2next.secret";
 const PREF_ARIA2NEXT_DOWNLOAD_DIR = "downloadit.aria2next.downloadDir";
 const PREF_ARIA2NEXT_EXTRA_ARGS = "downloadit.aria2next.extraArgs";
 const PREF_ARIA2NEXT_EXIT_ON_CLOSE = "downloadit.aria2next.exitOnClose";
+const PREF_ARIA2NEXT_CONF_PATH = "downloadit.aria2next.confPath";
 const PREF_JDOWNLOADER_ENABLED = "downloadit.jdownloader.enabled";
 const PREF_JDOWNLOADER_ENDPOINT = "downloadit.jdownloader.endpoint";
 const PREF_JDOWNLOADER_LAUNCH_PATH = "downloadit.jdownloader.launchPath";
@@ -711,7 +712,7 @@ export class DownloadItService {
   }
 
   aria2NextRuntimeSettingsEqual(first, second) {
-    return ["rpcPort", "secret", "downloadDir", "extraArgs"].every(
+    return ["rpcPort", "secret", "downloadDir", "extraArgs", "confPath"].every(
       key => first?.[key] === second?.[key],
     );
   }
@@ -1284,6 +1285,10 @@ export class DownloadItService {
         PREF_ARIA2NEXT_EXIT_ON_CLOSE,
         false,
       ),
+      confPath: Services.prefs.getStringPref(
+        PREF_ARIA2NEXT_CONF_PATH,
+        "",
+      ),
     };
   }
 
@@ -1295,6 +1300,7 @@ export class DownloadItService {
       downloadDir: Services.prefs.prefIsLocked(PREF_ARIA2NEXT_DOWNLOAD_DIR),
       extraArgs: Services.prefs.prefIsLocked(PREF_ARIA2NEXT_EXTRA_ARGS),
       exitOnClose: Services.prefs.prefIsLocked(PREF_ARIA2NEXT_EXIT_ON_CLOSE),
+      confPath: Services.prefs.prefIsLocked(PREF_ARIA2NEXT_CONF_PATH),
     };
   }
 
@@ -1331,6 +1337,7 @@ export class DownloadItService {
       downloadDir,
       extraArgs,
       exitOnClose: Boolean(value.exitOnClose),
+      confPath: String(value.confPath || "").trim(),
     };
   }
 
@@ -1341,6 +1348,7 @@ export class DownloadItService {
       PREF_ARIA2NEXT_DOWNLOAD_DIR,
       PREF_ARIA2NEXT_EXTRA_ARGS,
       PREF_ARIA2NEXT_EXIT_ON_CLOSE,
+      PREF_ARIA2NEXT_CONF_PATH,
     ]) {
       if (
         !Services.prefs.prefIsLocked(pref) &&
@@ -1436,6 +1444,7 @@ export class DownloadItService {
     if (this.aria2NextProcess === process) {
       this.aria2NextProcess = null;
     }
+    await this.removeAria2NextManagedConf();
   }
 
   async shutdownCustomAria2IfStarted(id, fallbackConfig = null) {
@@ -2072,9 +2081,16 @@ export class DownloadItService {
         }
         const effectiveDir = startupSettings.downloadDir ||
           await Downloads.getPreferredDownloadsDirectory();
+        const normalized = this.normalizeAria2NextSettings(
+          startupSettings,
+        );
+        const managedConfPath = await this.writeAria2NextManagedConf(
+          normalized,
+        );
         const startupArgs = buildAria2NextStartupArguments(
           startupSettings,
           effectiveDir,
+          managedConfPath,
         );
         process = this.startDetachedProcess(
           binaryPath,
@@ -2109,19 +2125,15 @@ export class DownloadItService {
         throw new DownloadItError("aria2next-start-timeout");
       } catch (error) {
         this.aria2NextOnline = false;
-        // Timeout cleanup is intentionally unchanged: the existing process
-        // remains available for a later probe or explicit shutdown.
-        if (error?.code !== "aria2next-start-timeout") {
-          if (process) {
-            try {
-              if (process.isRunning !== false) {
-                process.kill();
-              }
-            } catch {}
-          }
-          if (this.aria2NextProcess === process) {
-            this.aria2NextProcess = null;
-          }
+        if (process) {
+          try {
+            if (process.isRunning !== false) {
+              process.kill();
+            }
+          } catch {}
+        }
+        if (this.aria2NextProcess === process) {
+          this.aria2NextProcess = null;
         }
         rejectStartup(error);
       } finally {
@@ -3257,6 +3269,12 @@ export class DownloadItService {
         Services.prefs.setBoolPref(
           PREF_ARIA2NEXT_EXIT_ON_CLOSE,
           requestedAria2Next.exitOnClose,
+        );
+      }
+      if (requestedAria2Next.confPath !== currentAria2Next.confPath) {
+        Services.prefs.setStringPref(
+          PREF_ARIA2NEXT_CONF_PATH,
+          requestedAria2Next.confPath,
         );
       }
     }
@@ -5289,6 +5307,58 @@ export class DownloadItService {
       }
     }
     return destination;
+  }
+
+  getAria2NextManagedConfPath() {
+    return PathUtils.join(
+      PathUtils.profileDir,
+      PROFILE_DIRECTORY,
+      "aria2next-managed.conf",
+    );
+  }
+
+  async writeAria2NextManagedConf(normalizedSettings) {
+    const lines = [];
+    if (normalizedSettings.confPath) {
+      lines.push(`include=${normalizedSettings.confPath}`);
+      lines.push("");
+    }
+    lines.push("enable-rpc=true");
+    lines.push("rpc-listen-all=false");
+    lines.push(`rpc-listen-port=${normalizedSettings.rpcPort}`);
+    if (normalizedSettings.secret) {
+      lines.push(`rpc-secret=${normalizedSettings.secret}`);
+    }
+    if (normalizedSettings.downloadDir) {
+      lines.push(`dir=${normalizedSettings.downloadDir}`);
+    }
+    const confPath = this.getAria2NextManagedConfPath();
+    await IOUtils.makeDirectory(this.profileDirectory, {
+      ignoreExisting: true,
+    });
+    const tmpId = Services.uuid.generateUUID().toString()
+      .replace(/[{}-]/g, "");
+    const tmpPath = `${confPath}.${tmpId}.tmp`;
+    await IOUtils.remove(tmpPath, { ignoreAbsent: true });
+    try {
+      await IOUtils.writeUTF8(
+        confPath,
+        lines.join("\n") + "\n",
+        { tmpPath },
+      );
+    } finally {
+      await IOUtils.remove(tmpPath, { ignoreAbsent: true });
+    }
+    await IOUtils.setPermissions(confPath, 0o600);
+    return confPath;
+  }
+
+  async removeAria2NextManagedConf() {
+    try {
+      await IOUtils.remove(this.getAria2NextManagedConfPath(), {
+        ignoreAbsent: true,
+      });
+    } catch {}
   }
 
   async deployAria2NextBinary() {

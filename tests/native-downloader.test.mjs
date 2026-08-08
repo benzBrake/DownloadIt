@@ -234,6 +234,8 @@ function createSettingsService(platform = "windows") {
   service.aria2NextStartupSettings = null;
   service.aria2NextProcess = null;
   service.aria2NextOnline = false;
+  service.writeAria2NextManagedConf = async () => {};
+  service.removeAria2NextManagedConf = async () => {};
   service.abdmOnline = false;
   service.abdmProbePromise = null;
   service.abdmProbeEndpoint = "";
@@ -609,6 +611,8 @@ test("Aria2Next startup launches after a failed probe without recursive waiting"
   const service = createSettingsService();
   service.deployAria2NextBinary = async () =>
     "C:\\Profile\\DownloadIt\\aria2-next.exe";
+  service.writeAria2NextManagedConf = async () =>
+    "C:\\Profile\\DownloadIt\\aria2next-managed.conf";
   const launches = [];
   service.startDetachedProcess = (...args) => launches.push(args);
   let probes = 0;
@@ -625,10 +629,7 @@ test("Aria2Next startup launches after a failed probe without recursive waiting"
   assert.equal(launches.length, 1);
   assert.equal(launches[0][0], "C:\\Profile\\DownloadIt\\aria2-next.exe");
   assert.deepEqual(launches[0][1], [
-    "--enable-rpc=true",
-    "--rpc-listen-all=false",
-    "--rpc-listen-port=6800",
-    "--dir=C:\\Downloads",
+    "--conf-path=C:\\Profile\\DownloadIt\\aria2next-managed.conf",
   ]);
   preferenceValues.clear();
 });
@@ -791,6 +792,9 @@ test("changing Aria2Next runtime settings shuts down the old instance before pro
   };
   service.deployAria2NextBinary = async () =>
     "C:\\Profile\\DownloadIt\\aria2-next.exe";
+  service.writeAria2NextManagedConf = async () =>
+    "C:\\Profile\\DownloadIt\\aria2next-managed.conf";
+  service.removeAria2NextManagedConf = async () => {};
   let started = false;
   const launches = [];
   service.startDetachedProcess = (...args) => {
@@ -823,11 +827,7 @@ test("changing Aria2Next runtime settings shuts down the old instance before pro
   assert.equal(launches.length, 1);
   assert.deepEqual(launches[0][1], [
     "--continue=true",
-    "--enable-rpc=true",
-    "--rpc-listen-all=false",
-    "--rpc-listen-port=6804",
-    "--rpc-secret=new-secret",
-    "--dir=C:\\New",
+    "--conf-path=C:\\Profile\\DownloadIt\\aria2next-managed.conf",
   ]);
   assert.equal(service.aria2NextOnline, true);
   assert.equal(service.createAria2NextDescriptor().available, true);

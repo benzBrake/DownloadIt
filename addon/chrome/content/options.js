@@ -566,6 +566,14 @@ function bindEvents() {
     "input",
     renderAria2NextEditorState,
   );
+  document.getElementById("aria2next-conf-path").addEventListener(
+    "input",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("browse-aria2next-conf-path").addEventListener(
+    "click",
+    browseAria2NextConfPath,
+  );
   document.getElementById("browse-aria2next-download-dir").addEventListener(
     "click",
     browseAria2NextDir,
@@ -1996,6 +2004,8 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
     aria2Next?.downloadDir || "";
   document.getElementById("aria2next-extra-args").value =
     aria2Next?.extraArgs || "";
+  document.getElementById("aria2next-conf-path").value =
+    aria2Next?.confPath || "";
   document.getElementById("aria2next-test-state").textContent = "";
   document.getElementById("custom-name").value = downloader.name;
   document.getElementById("custom-enabled").checked = downloader.enabled;
@@ -2326,6 +2336,9 @@ function saveDownloadToolEditor() {
               exitOnClose: document.getElementById(
                 "aria2next-exit-on-close",
               ).checked,
+              confPath: document.getElementById(
+                "aria2next-conf-path",
+              ).value,
             })
           : {
               enabled: false,
@@ -2344,6 +2357,9 @@ function saveDownloadToolEditor() {
               exitOnClose: state.draft.builtInProtocols[
                 ARIA2NEXT_PROVIDER
               ].exitOnClose,
+              confPath: state.draft.builtInProtocols[
+                ARIA2NEXT_PROVIDER
+              ].confPath,
             };
       } else {
         throw new Error(`Unsupported built-in protocol: ${protocol}`);
@@ -2556,6 +2572,7 @@ function renderAria2NextEditorState() {
   const secret = document.getElementById("aria2next-secret");
   const downloadDir = document.getElementById("aria2next-download-dir");
   const extraArgs = document.getElementById("aria2next-extra-args");
+  const confPath = document.getElementById("aria2next-conf-path");
   const test = document.getElementById("test-aria2next");
   const lock = document.getElementById("aria2next-lock");
   const status = document.getElementById("aria2next-status");
@@ -2567,6 +2584,7 @@ function renderAria2NextEditorState() {
   secret.disabled = Boolean(locks.secret);
   downloadDir.disabled = Boolean(locks.downloadDir);
   extraArgs.disabled = Boolean(locks.extraArgs);
+  confPath.disabled = Boolean(locks.confPath);
   const supported = state.snapshot?.aria2NextSupported !== false;
   test.disabled = !state.service || !enabled.checked || !supported;
   lock.hidden = !Object.values(locks).some(Boolean);
@@ -2580,6 +2598,7 @@ function renderAria2NextEditorState() {
       secret: secret.value,
       downloadDir: downloadDir.value,
       extraArgs: extraArgs.value,
+      confPath: confPath.value,
     }).available;
   } catch {}
   const rpcPortValue = Number(rpcPort.value) || 6800;
@@ -2750,6 +2769,16 @@ async function browseUGetPath() {
 async function browseAria2NextDir() {
   const path = await browseLocalDirectory("aria2next-download-dir", {
     titleId: "downloadit-browse-aria2next-dir-title",
+  });
+  if (path == null || !state.editor) {
+    return;
+  }
+  renderAria2NextEditorState();
+}
+
+async function browseAria2NextConfPath() {
+  const path = await browseLocalDirectory("aria2next-conf-path", {
+    titleId: "downloadit-browse-aria2next-conf-title",
   });
   if (path == null || !state.editor) {
     return;
