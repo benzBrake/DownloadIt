@@ -118,16 +118,12 @@ export class DownloadItAriaNgParent extends ParentActor {
     }
     return readAria2NextRpcConfiguration();
   }
-
-  receiveQuery(message) {
-    return this.receiveMessage(message);
-  }
 }
 
 export class DownloadItAriaNgChild extends ChildActor {
   constructor() {
     super();
-    this.rpcSyncPromise = null;
+    this.rpcSyncCompleted = false;
   }
 
   async handleEvent(event) {
@@ -135,16 +131,15 @@ export class DownloadItAriaNgChild extends ChildActor {
       return false;
     }
 
-    if (this.rpcSyncPromise) {
-      return this.rpcSyncPromise;
+    if (this.rpcSyncCompleted) {
+      return false;
     }
 
-    this.rpcSyncPromise = this.syncRpcOptions();
-    try {
-      return await this.rpcSyncPromise;
-    } finally {
-      this.rpcSyncPromise = null;
+    const result = await this.syncRpcOptions();
+    if (result) {
+      this.rpcSyncCompleted = true;
     }
+    return result;
   }
 
   async syncRpcOptions() {

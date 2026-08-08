@@ -1,8 +1,10 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+const _globalSnapshot = new Map(Object.entries(globalThis));
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const modulePath = path.join(
@@ -105,11 +107,10 @@ test("AriaNg Actor Parent returns only enabled normalized Aria2Next RPC data", a
     null,
   );
   assert.equal(actor.receiveMessage({ name: "unknown" }), null);
-  assert.deepEqual(
-    actor.receiveQuery({
-      name: "DownloadItAriaNg:GetAria2NextRpcConfiguration",
-    }),
-    null,
+  assert.equal(
+    typeof actor.receiveQuery,
+    "undefined",
+    "DownloadItAriaNgParent must not define receiveQuery",
   );
 });
 
@@ -151,6 +152,7 @@ test("AriaNg Actor synchronizes the default RPC profile once and preserves other
   });
 
   assert.equal(await actor.handleEvent({ type: "DOMContentLoaded" }), false);
+  assert.equal(await actor.handleEvent({ type: "load" }), false);
   assert.equal(window.writes, 1);
   assert.equal(window.reloads, 1);
 });
@@ -229,11 +231,23 @@ test("AriaNg Actor retries configuration when the service becomes available at l
   assert.equal(window.storedOptions.rpcPort, "6800");
   assert.equal(window.writes, 1);
   assert.equal(window.reloads, 1);
+  assert.equal(await actor.handleEvent({ type: "load" }), false);
 });
 
 test("AriaNg Actor module remains included by both packaging scripts", () => {
   for (const relativePath of ["pack.ps1", "pack.sh"]) {
     const source = fs.readFileSync(path.join(projectRoot, relativePath), "utf8");
     assert.match(source, /chrome\/content\/DownloadItAriaNgActor\.sys\.mjs/);
+  }
+});
+
+after(() => {
+  for (const key of Object.keys(globalThis)) {
+    if (!_globalSnapshot.has(key)) {
+      try { delete globalThis[key]; } catch {}
+    }
+  }
+  for (const [key, value] of _globalSnapshot) {
+    try { globalThis[key] = value; } catch {}
   }
 });
