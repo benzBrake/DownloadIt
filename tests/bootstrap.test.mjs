@@ -22,6 +22,7 @@ function createBootstrapContext({
   const reportedErrors = [];
   const unloadedModules = [];
   let unregisteredService = null;
+  const asyncShutdownBlockers = [];
 
   const serviceInstance = {
     async startup() {
@@ -62,10 +63,27 @@ function createBootstrapContext({
   };
   const context = vm.createContext({
     ADDON_DISABLE: 4,
+    ADDON_UNINSTALL: 6,
     APP_SHUTDOWN: 2,
     APP_STARTUP: 1,
+    AsyncShutdown: {
+      profileBeforeChange: {
+        addBlocker(name, fn) {
+          const blocker = { name, fn, removed: false };
+          asyncShutdownBlockers.push(blocker);
+          return {
+            remove() {
+              blocker.removed = true;
+            },
+          };
+        },
+      },
+    },
     ChromeUtils: {
       importESModule(spec) {
+        if (spec.includes("AsyncShutdown")) {
+          return { AsyncShutdown: context.AsyncShutdown };
+        }
         return spec.includes("DownloadItAriaNg")
           ? ariaNgModule
           : serviceModule;
@@ -90,6 +108,7 @@ function createBootstrapContext({
   vm.runInContext(bootstrapSource, context, { filename: "bootstrap.js" });
 
   return {
+    asyncShutdownBlockers,
     context,
     events,
     reportedErrors,
@@ -139,6 +158,7 @@ test("bootstrap startup rolls back AriaNg when the service fails", async () => {
     "service-constructed",
     "service-registered",
     "service-startup",
+    "service-shutdown",
     "service-unregistered",
     "ariang-shutdown:ADDON_DISABLE",
   ]);
@@ -146,10 +166,14 @@ test("bootstrap startup rolls back AriaNg when the service fails", async () => {
 
 test("service rollback errors do not leave AriaNg active", async () => {
   const startupError = new Error("service failed");
+  const shutdownError = new Error("service shutdown failed");
   const unregisterError = new Error("service unregister failed");
   const fixture = createBootstrapContext({
     serviceStartup: async () => {
       throw startupError;
+    },
+    serviceShutdown: async () => {
+      throw shutdownError;
     },
     serviceUnregister: () => {
       throw unregisterError;
@@ -164,11 +188,14 @@ test("service rollback errors do not leave AriaNg active", async () => {
     startupError,
   );
 
-  assert.deepEqual(fixture.reportedErrors, [unregisterError, startupError]);
+  assert.deepEqual(
+    fixture.reportedErrors,
+    [shutdownError, unregisterError, startupError],
+  );
   assert.equal(fixture.events.at(-1), "ariang-shutdown:ADDON_DISABLE");
 });
 
-test("bootstrap shutdown waits for AriaNg and service cleanup", async () => {
+test("bootstrap shutdown waits for service and AriaNg cleanup", async () => {
   let finishAriaNgShutdown;
   let finishServiceShutdown;
   const ariaNgShutdownGate = new Promise(resolve => {
@@ -194,15 +221,18 @@ test("bootstrap shutdown waits for AriaNg and service cleanup", async () => {
 
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(settled, false);
-  assert.match(fixture.events.at(-1), /^ariang-shutdown:APP_SHUTDOWN$/);
-  assert.doesNotMatch(fixture.events.join("\n"), /service-shutdown/);
-
-  finishAriaNgShutdown();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.match(fixture.events.join("\n"), /service-shutdown/);
-  assert.equal(settled, false);
+  assert.match(fixture.events.at(-1), /^service-shutdown$/);
+  assert.doesNotMatch(fixture.events.join("\n"), /ariang-shutdown/);
 
   finishServiceShutdown();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(
+    fixture.events.at(-1),
+    /^ariang-shutdown:APP_SHUTDOWN$/,
+  );
+  assert.equal(settled, false);
+
+  finishAriaNgShutdown();
   await result;
   assert.equal(settled, true);
   assert.equal(fixture.unregisteredService, fixture.serviceInstance);
@@ -216,9 +246,9 @@ test("non-app shutdown unloads both DownloadIt modules", async () => {
   await fixture.context.shutdown({}, fixture.context.ADDON_DISABLE);
 
   assert.deepEqual(fixture.events.slice(-3), [
-    "ariang-shutdown:ADDON_DISABLE",
     "service-shutdown",
     "service-unregistered",
+    "ariang-shutdown:ADDON_DISABLE",
   ]);
   assert.equal(fixture.unloadedModules.length, 2);
   assert.ok(fixture.unloadedModules.some(spec => spec.includes("DownloadItService")));
@@ -239,4 +269,45 @@ test("service shutdown errors do not skip unregistering or module cleanup", asyn
   assert.equal(fixture.unregisteredService, fixture.serviceInstance);
   assert.deepEqual(fixture.reportedErrors, [shutdownError]);
   assert.equal(fixture.unloadedModules.length, 2);
+});
+
+test("async shutdown barrier is registered during startup", async () => {
+  const fixture = createBootstrapContext();
+
+  await fixture.context.startup({ version: "test" });
+
+  assert.equal(fixture.asyncShutdownBlockers.length, 1);
+  assert.equal(
+    fixture.asyncShutdownBlockers[0].name,
+    "DownloadIt: shutdown",
+  );
+  assert.equal(fixture.asyncShutdownBlockers[0].removed, false);
+});
+
+test("async shutdown barrier awaits the shutdown promise", async () => {
+  let finishServiceShutdown;
+  const serviceShutdownGate = new Promise(resolve => {
+    finishServiceShutdown = resolve;
+  });
+  const fixture = createBootstrapContext({
+    serviceShutdown: () => serviceShutdownGate,
+  });
+
+  await fixture.context.startup({ version: "test" });
+  fixture.context.shutdown({}, fixture.context.APP_SHUTDOWN);
+
+  const blockerPromise = fixture.asyncShutdownBlockers[0].fn();
+  assert.equal(typeof blockerPromise.then, "function");
+
+  finishServiceShutdown();
+  await blockerPromise;
+});
+
+test("uninstall removes the async shutdown barrier", async () => {
+  const fixture = createBootstrapContext();
+
+  await fixture.context.startup({ version: "test" });
+  fixture.context.uninstall({}, fixture.context.ADDON_UNINSTALL);
+
+  assert.equal(fixture.asyncShutdownBlockers[0].removed, true);
 });

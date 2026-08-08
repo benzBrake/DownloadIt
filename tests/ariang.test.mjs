@@ -1,8 +1,10 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+const _globalSnapshot = new Map(Object.entries(globalThis));
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const modulePath = path.join(
@@ -278,5 +280,17 @@ test("AriaNg documentation and DownloadIt version stay synchronized", () => {
     assert.match(source, /getAriaNgURL\(\)/);
     assert.match(source, /licenses\/ariang-LICENSE/);
     assert.match(source, /2\.7\.2/);
+  }
+});
+
+after(() => {
+  for (const key of Object.keys(globalThis)) {
+    if (!_globalSnapshot.has(key)) {
+      try { delete globalThis[key]; } catch {}
+    }
+  }
+  for (const [key, value] of _globalSnapshot) {
+    try { globalThis[key] = value;
+} catch {}
   }
 });

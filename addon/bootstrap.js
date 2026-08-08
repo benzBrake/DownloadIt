@@ -13,6 +13,8 @@ const PROFILE_DIRECTORY = "DownloadIt";
 
 let service = null;
 let startupPromise = null;
+let asyncShutdownBlocker = null;
+let shutdownCompletedPromise = null;
 
 function install() {}
 
@@ -57,6 +59,11 @@ function startup(data, reason) {
     } catch (error) {
       if (service) {
         try {
+          await service.shutdown();
+        } catch (cleanupError) {
+          Cu.reportError(cleanupError);
+        }
+        try {
           serviceModule?.unregisterActiveService?.(service);
         } catch (cleanupError) {
           Cu.reportError(cleanupError);
@@ -72,6 +79,15 @@ function startup(data, reason) {
     }
   })();
   startupPromise.catch(Cu.reportError);
+  try {
+    const { AsyncShutdown } = ChromeUtils.importESModule(
+      "resource://gre/modules/AsyncShutdown.sys.mjs",
+    );
+    asyncShutdownBlocker = AsyncShutdown.profileBeforeChange.addBlocker(
+      "DownloadIt: shutdown",
+      () => shutdownCompletedPromise || Promise.resolve(),
+    );
+  } catch {}
   return startupPromise;
 }
 
@@ -83,14 +99,8 @@ function shutdown(data, reason) {
   );
   const pending = startupPromise || Promise.resolve();
 
-  return pending.catch(Cu.reportError).then(async () => {
+  shutdownCompletedPromise = pending.catch(Cu.reportError).then(async () => {
     const currentService = service;
-    const ariaNgModule = ChromeUtils.importESModule(ARIANG_MODULE_URI);
-    try {
-      await ariaNgModule.stopAriaNg(lifecycleReason);
-    } catch (error) {
-      Cu.reportError(error);
-    }
     try {
       await currentService?.shutdown();
     } catch (error) {
@@ -103,16 +113,30 @@ function shutdown(data, reason) {
       service = null;
       startupPromise = null;
     }
+    const ariaNgModule = ChromeUtils.importESModule(ARIANG_MODULE_URI);
+    try {
+      await ariaNgModule.stopAriaNg(lifecycleReason);
+    } catch (error) {
+      Cu.reportError(error);
+    }
     if (!appShutdown) {
       ChromeUtils.unloadESModule(MODULE_URI);
       ChromeUtils.unloadESModule(ARIANG_MODULE_URI);
     }
   }).catch(Cu.reportError);
+  return shutdownCompletedPromise;
 }
 
 function uninstall(data, reason) {
   if (typeof ADDON_UNINSTALL === "undefined" || reason !== ADDON_UNINSTALL) {
     return;
+  }
+
+  if (asyncShutdownBlocker) {
+    try {
+      asyncShutdownBlocker.remove();
+    } catch {}
+    asyncShutdownBlocker = null;
   }
 
   try {
