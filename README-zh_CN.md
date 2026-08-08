@@ -20,6 +20,8 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 通过 AB Download Manager 的本地 HTTP API 直接集成，不经过 `FlashGot.exe`。
 - 通过 Xtreme Download Manager 的内置回环 API 直接集成，不经过 `FlashGot.exe`。
 - 通过跨平台静默命令行接口直接集成 uGet，不经过 `FlashGot.exe`。
+- 在 Windows 和 Linux x86_64 上通过 JSON-RPC 直接集成随包提供的 Aria2Next，不经过 `FlashGot.exe`。
+- 将随包提供的 AriaNg 标准前端资源包注册为仅允许回环 RPC 的内部 `moz-extension://` 页面。
 - 支持不经过 `FlashGot.exe` 的自定义命令行下载器和 aria2 JSON-RPC。
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
@@ -54,6 +56,7 @@ DownloadIt 后台服务
         ├── abdm provider ── 回环 HTTP `/queues` 和 `/add`
         ├── xdm provider ── 回环 HTTP `/sync`、`/download` 和 `/link`
         ├── uget provider ── uGet 静默命令行 ── Firefox 原生进程 API
+        ├── aria2next provider ── 包内原生进程 ── JSON-RPC
         ├── 自定义命令 provider ── Firefox 原生进程 API
         └── 自定义 aria2 provider ── JSON-RPC
 ```
@@ -63,11 +66,11 @@ DownloadIt 后台服务
 - `--list-json`：检测可用下载管理器；
 - `--job-json`：提交单链接或多链接下载任务。
 
-Linux 会跳过部署，且不会运行 XPI 中的 Windows helper。服务的其余部分仍会正常初始化，包括 Firefox 原生下载、自定义命令、aria2、JDownloader、Xtreme Download Manager、工具栏与右键菜单、原生下载弹窗、自动接管和协议服务。
+Linux 会跳过部署，且不会运行 XPI 中的 Windows FlashGot helper。Linux x86_64 上会以 `0755` 权限部署包内 Aria2Next 可执行文件；所有受支持的 Linux 安装仍会正常初始化其余服务。
 
 ## 平台支持
 
-Windows 和 Linux 发布同一个通用 XPI。该文件包含 Windows helper，以保证同一构建产物功能完整；Linux 运行时会忽略它。
+Windows 和 Linux 发布同一个通用 XPI。该文件包含 Windows helper 和 Linux x86_64 Aria2Next 可执行文件，运行时根据平台和 ABI 只选择适用的二进制。
 
 macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 
@@ -80,6 +83,7 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 | AB Download Manager 回环 API | 支持 | 支持 |
 | Xtreme Download Manager 回环 API | 支持 | 支持 |
 | uGet 静默命令行 provider | 支持 | 支持 |
+| 包内 Aria2Next provider | 支持 | x86_64 上支持 |
 | FlashGot 下载器发现与任务提交 | 支持 | 不使用 |
 | 部署包内 `FlashGot.exe` | 启用 | 跳过 |
 
@@ -92,9 +96,11 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 - Linux 首版不支持 Snap 和 Flatpak Firefox，因为其 Loader 安装、宿主文件访问和进程沙箱边界与非沙箱 Firefox 不同；
 - Firefox 内建下载器始终可用，因此外部下载管理器不是必需项；
 - 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会下载 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 最新成功构建的 nightly artifact。存在 `GITHUB_TOKEN` 或 `GH_TOKEN` 时通过 GitHub Actions API 下载，否则通过 nightly.link 下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
+- 缺少 Aria2Next 资产时会从固定的 [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` Release 下载；已有或下载得到的 Windows x86_64 与 Linux x86_64 资产必须通过固定大小和 SHA-256 校验后才能打包；
+- 缺少或过期的 AriaNg 资产时通过 GitHub CLI 从固定的 [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` 标准 Release 下载；打包前会校验压缩包、解出的 `index.html`、外置 CSS、JS 和 Font Awesome WOFF2 资源，页面不含内联脚本且不需要 `unsafe-eval`；
 - 开发和测试需要 Node.js 18 或更高版本；
 - 在 Windows 上构建需要 PowerShell 7（`pwsh`）；
-- 在 Linux 上构建需要 Bash、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；使用带认证的 GitHub API 路径时还需要 `jq`。
+- 在 Linux 上构建需要 Bash、GitHub CLI、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；使用带认证的 GitHub API 路径时还需要 `jq`。
 
 ## 构建
 
@@ -103,7 +109,7 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 Windows：
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
+pwsh -ExecutionPolicy Bypass -File .\pack.ps1
 ```
 
 Linux：
@@ -117,13 +123,18 @@ Linux：
 - `bootstrap.js`；
 - `install.rdf`；
 - `chrome.manifest`；
-- `FlashGot.exe`。
+- `FlashGot.exe`；
+- `aria2-next.exe`；
+- `aria2-next-linux-x86_64`；
+- `ariang/index.html` 和 `ariang/manifest.json`；
+- `licenses/aria2-next-COPYING` 和 `licenses/ariang-LICENSE`；
+- `chrome/content/DownloadItAriaNg.sys.mjs`。
 
-`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe` 也默认不纳入版本控制；缺少它时，两套脚本都会优先使用 `GITHUB_TOKEN`，其次使用 `GH_TOKEN`，通过 GitHub Actions API 获取最新成功构建的 nightly artifact。两个 token 都未设置时，则通过 nightly.link 下载同一 artifact。Nightly 仍只发布一个通用 XPI，不拆分平台构建产物。
+`addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe`、`addon/aria2-next.exe`、`addon/aria2-next-linux-x86_64` 和生成的 AriaNg 标准资源树也不纳入版本控制。缺少 Aria2Next 资产或 AriaNg 资产缺失、过期时从各自的固定上游 Release 下载；最终资产校验失败时构建会停止，不会将错误文件打入包内。Nightly 仍只发布一个通用 XPI，不拆分平台构建产物。
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.6.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.7.2`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -135,7 +146,7 @@ DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.6.0`�
 node --test .\tests\*.test.mjs
 ```
 
-测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接类型、后缀与磁力链接筛选、选中链接复制格式、选择状态、下载管理器解析、JDownloader、AB Download Manager 与 Xtreme Download Manager 的本地协议校验和请求构造、工具栏 PanelView 与右键菜单插入点、自动接管黑白名单判定与回退、IDM 本地端点与字节级消息解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
+测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接筛选与复制、下载管理器解析、JDownloader、AB Download Manager、Xtreme Download Manager、uGet、Aria2Next 平台部署与 JSON-RPC 行为、嵌入式 AriaNg 生命周期和权限边界、工具栏 PanelView 与右键菜单插入点、自动接管、IDM 本地协议解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
 
 DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。独立的“仅磁力链接”筛选也会与这些条件组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。选中的链接可以复制为每行一个 URL、制表符分隔的标题与 URL，或 Markdown 链接，且不会请求下载器。
 
@@ -162,7 +173,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
-下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager、Xtreme Download Manager 和 uGet 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径；uGet 只有在明确启用并为当前系统配置绝对启动器路径后才可选择。回环 provider 只会在明确测试或提交时启动配置的程序；uGet 会为每个任务直接调用静默命令行，不会探测后台 API。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
+下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager、Xtreme Download Manager、uGet 和 Aria2Next 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径；uGet 只有在明确启用并为当前系统配置绝对启动器路径后才可选择；Aria2Next 只有在受支持的平台和 ABI 上启用且 `aria2.getVersion` 探测成功后才可选择。回环 provider 只会在明确测试或提交时启动配置的程序；uGet 会为每个任务直接调用静默命令行，不会探测后台 API。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
@@ -177,6 +188,12 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.xdm.launchPath` | 字符串 | 可选的 XDM 启动器或 JAR 绝对路径。Linux 下的 JAR 会使用系统 Java 运行；本地 API 离线时，DownloadIt 只会在明确测试连接或提交下载时使用该路径。 |
 | `downloadit.uget.enabled` | 布尔值 | 启用 uGet 静默命令行 provider。新安装默认禁用，直到用户配置 uGet。 |
 | `downloadit.uget.launchPath` | 字符串 | 当前系统上的 uGet 启动器绝对路径。DownloadIt 会对每个提交的链接使用 `--quiet` 调用它。 |
+| `downloadit.aria2next.enabled` | 布尔值 | 在 Windows 或 Linux x86_64 上启用包内 Aria2Next provider。 |
+| `downloadit.aria2next.rpcPort` | 整数 | 回环 JSON-RPC 端口；默认值为 `6800`。 |
+| `downloadit.aria2next.secret` | 字符串 | 可选 RPC 密钥，以明文保存并作为 aria2 token 传递。 |
+| `downloadit.aria2next.downloadDir` | 字符串 | 可选下载目录；留空时使用 Firefox 首选下载目录。 |
+| `downloadit.aria2next.extraArgs` | 字符串 | 不会覆盖 DownloadIt 所管理 RPC 参数的额外进程参数。 |
+| `downloadit.aria2next.exitOnClose` | 布尔值 | Firefox 退出时发送 `aria2.shutdown`；优雅关闭失败时只终止由 DownloadIt 启动的 Aria2Next 进程。 |
 | `downloadit.jdownloader.enabled` | 布尔值 | 控制是否已配置并显示 JDownloader 内建协议集成。新安装默认为 `false`；已有 JDownloader 偏好或将 JDownloader 设为默认工具的旧配置会迁移为启用状态，直到用户明确移除。 |
 | `downloadit.jdownloader.endpoint` | 字符串 | JDownloader FlashGot 端点；默认值为 `http://127.0.0.1:9666/flashgot`。 |
 | `downloadit.jdownloader.launchPath` | 字符串 | 可选的 JDownloader Windows `.exe`、Linux 可执行启动器或 `.jar` 绝对路径；手动值优先于检测结果。 |
@@ -252,6 +269,18 @@ UTF-8 表单按换行严格对齐 `urls`、`descriptions` 和 `fnames`，并发�
 
 每个链接都会作为独立的 `uget --quiet` 进程提交。DownloadIt 会按需将 Firefox 首选下载目录、文件名、Referer、User-Agent、Cookie 和非空 POST 正文分别以 `--option=value` 形式传递，并保持 URL 不变地放在最后。因此批量任务会为每个链接启动一次 uGet 命令。该 provider 报告支持 POST、Cookie、批量和目录，但不读取 `downloadit.autoStartTasks`；uGet 命令行没有按任务控制启动状态的开关。进程成功启动即视为 uGet 已接受任务；进程 API 边界之外的后续下载失败不由 Firefox 获取。
 
+### Aria2Next provider
+
+`aria2next:aria2next` provider 从通用 XPI 部署固定的 Aria2Next `v2.5.5` 二进制，并通过 `http://127.0.0.1:<端口>/jsonrpc` 通信。Windows 保持原有的 profile 路径 `DownloadIt\aria2-next.exe`；Linux x86_64 使用 `DownloadIt/aria2-next`。运行时会校验文件大小和 SHA-256，Firefox 在直接通过原生进程 API 启动前将 Linux 文件权限设为 `0755`。其他 Linux 架构不能启用该内建 provider，但仍可使用自定义 aria2 JSON-RPC provider 连接外部管理的服务。
+
+### 嵌入式 AriaNg 页面
+
+DownloadIt 将固定的 AriaNg `1.3.14` 标准资源页面作为内部 ID 为 `downloadit-ariang@downloadit.invalid` 的嵌入式 Firefox WebExtension 启动。Firefox 为其分配并持久化 profile 专属 UUID，在父进程和内容进程中注册对应的 `moz-extension://<uuid>/index.html` 来源，并在 DownloadIt 关闭时注销。只有 Aria2Next 已启用、当前平台受支持且 RPC 探测成功后，DownloadIt PanelView 才显示“打开 AriaNg”入口；该入口会在可信标签页打开当前 URL，并在注册成功前保持禁用。入口通过内部 `getAriaNgURL()` API 获取 URL，不会硬编码 UUID。启用 Aria2Next 后，AriaNg Actor 会在页面载入时用 DownloadIt 当前的回环配置同步默认 RPC profile，同时保留其他 AriaNg 偏好和额外 RPC profile。
+
+嵌入式 Manifest 只授予 `127.0.0.1` 和 `localhost` 主机权限。CSP 只允许同源脚本，因此标准资源包的外置脚本无需 `unsafe-inline` 或 `unsafe-eval`；打包时会加入 Angular 的 `ng-csp="no-unsafe-eval"` 标记，让它选择兼容 CSP 的表达式解析器。页面仍保留 AriaNg 所需的内联样式，同时把 HTTP 和 WebSocket 连接限制在这些回环主机。该嵌入式页面有意不支持远程 aria2 RPC 主机。
+
+DownloadIt 管理回环监听地址、端口、可选密钥和下载目录参数，并在 `aria2.getVersion` 成功后才提供该 provider。链接通过 `system.multicall` 提交，可以传递文件名、Referer、User-Agent、Cookie 和下载目录。启用退出时关闭后，DownloadIt 会发送 `aria2.shutdown` 并短暂等待；只有优雅关闭失败时才会强制终止由自身启动的进程实例。删除或禁用 Aria2Next 时，即使未启用退出时关闭，DownloadIt 也会发送 `aria2.shutdown`，因此可以在设置中关闭跨 Firefox 重启继续运行的进程。
+
 ### IDM 本地协议兼容
 
 在“请求与隐私”中启用后，DownloadIt 会识别 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等兼容扩展客户端使用的 IDM 本地 HTTP 请求格式：`POST http://127.0.0.1:1001/client/<id>?seq=<seq>`。它要求请求来自 Firefox 扩展 principal，并校验按字节声明长度的 `MSG#` 请求体，再把请求重定向到 DownloadIt 自己的临时回环监听器。任务会提交给当前默认下载器，下载器接受或拒绝任务后，请求客户端会收到预期的序号响应。
@@ -289,7 +318,7 @@ Windows 上的自定义下载器默认隐藏进程窗口。取消“隐藏运行
 
 命令行下载器需要选择可执行文件并填写参数模板；Linux 上所选文件必须具有执行权限。编辑器提供 `aria2c`、`wget` 和 `curl` 快捷模板。DownloadIt 默认使用 Firefox 原生进程 API 直接启动程序；若 Firefox 无法枚举 Linux 可执行文件，才会以固定参数使用 `/bin/sh` 回退：先通过 `test -f "$1" && test -x "$1"` 检查路径，再通过 `exec "$@"` 启动。可执行文件路径和模板参数始终作为独立进程参数传递，绝不会插入 shell 代码。支持的 FlashGot 兼容占位符包括 `URL`、`FNAME`、`COMMENT`、`REFERER`、`COOKIE`、`CFILE`、`FOLDER`、`POST`、`RAWPOST`、`HEADERS`、`ULIST`、`UFILE`、`USERPASS` 和 `UA`。模板包含 `ULIST` 或 `UFILE` 时整批只启动一个进程，否则每个链接分别启动一个进程。URL 列表和 Netscape Cookie 临时文件在 Windows 使用 CRLF，在 Linux 使用 LF；HTTP header 块在两个平台仍使用协议要求的 CRLF。
 
-aria2 定义通过 HTTP 或 HTTPS JSON-RPC 连接，支持可选密钥和服务端下载目录；多链接使用 `system.multicall` 提交。本地启动配置可选填写 `executablePath` 和 `configurationPath`：只有启用自动启动时可执行文件才是必填项，配置文件可以始终留空；填写配置文件后，DownloadIt 会把解析后的路径作为 `--conf-path` 传给 aria2c。可选的 aria2c 自动启动仅适用于 HTTP 回环地址，DownloadIt 会管理配置文件路径、RPC 开关、监听地址、端口和密钥参数，等待最多五秒后重试一次请求。RPC 密钥以明文保存在 JSON 文件中，但不会写入 DownloadIt 日志。
+aria2 定义通过 HTTP 或 HTTPS JSON-RPC 连接，支持可选密钥和服务端下载目录；多链接使用 `system.multicall` 提交。本地启动配置可选填写 `executablePath` 和 `configurationPath`：只有启用自动启动时可执行文件才是必填项，配置文件可以始终留空；填写配置文件后，DownloadIt 会把解析后的路径作为 `--conf-path` 传给 aria2c。可选的 aria2c 自动启动仅适用于 HTTP 回环地址，DownloadIt 会管理配置文件路径、RPC 开关、监听地址、端口和密钥参数，等待最多五秒后重试一次请求。删除或禁用自定义条目以及 Firefox 退出时，DownloadIt 会关闭由自身启动的 aria2c 实例；不会强制终止外部管理的进程。RPC 密钥以明文保存在 JSON 文件中，但不会写入 DownloadIt 日志。
 
 `native:firefox` provider 接受 HTTP、HTTPS、批量链接和 POST 请求体。它会继承来源 frame 可用的 principal、Referer、容器、隐私浏览和 Cookie jar 上下文。下载直接进入 Firefox 首选下载目录，使用 `.part` 文件；目标文件已存在时按 `name(1).ext` 形式生成唯一名称。文件名优先使用显式名称，其次取 URL 最后一个路径段，最后回退为 `download`。DownloadIt 不会额外探测重定向或 `Content-Disposition`，因此签名 URL、一次性 URL 和 POST 地址只请求一次。该 provider 会显示在 DownloadIt 菜单和设置中，但不会出现在 Firefox 自己的下载弹窗里，因为其中已有等价的“保存文件”操作。FTP 和 magnet 链接需要使用外部 provider。
 
@@ -301,7 +330,17 @@ addon/
 ├── install.rdf                           # bootstrapped XPI 元数据
 ├── chrome.manifest                       # chrome://downloadit 注册
 ├── FlashGot.exe                          # 下载管理器桥接程序
+├── aria2-next.exe                        # 固定的 Windows x86_64 Aria2Next 二进制
+├── aria2-next-linux-x86_64               # 固定的 Linux x86_64 Aria2Next 二进制
+├── licenses/aria2-next-COPYING           # Aria2Next GPL-2.0 许可证文本
+├── licenses/ariang-LICENSE               # AriaNg MIT 许可证文本
+├── ariang/
+│   ├── manifest.json                     # 仅允许回环访问的嵌入式 WebExtension Manifest
+│   ├── index.html                        # 已校验的 AriaNg 标准入口页面
+│   ├── css/ 和 js/                       # 外置样式表和脚本
+│   └── fonts/                            # 包含 Font Awesome WOFF2
 └── chrome/content/
+    ├── DownloadItAriaNg.sys.mjs         # 嵌入式 WebExtension 生命周期和 URL 访问
     ├── DownloadItService.sys.mjs        # 服务、进程和偏好管理
     ├── DownloadItAutoCapture.sys.mjs    # 版本化类型规则与内置接管保护
     ├── DownloadItPanelView.sys.mjs      # 原生工具栏面板行为
@@ -339,5 +378,9 @@ tests/                                    # Node.js 单元测试
 DownloadIt 是基于原 FlashGot 扩展的非官方现代化移植版。原 FlashGot 由 Giorgio Maone 创作，采用 GPL-2.0-or-later，相关说明见 [`addon/THIRD_PARTY_NOTICES.txt`](addon/THIRD_PARTY_NOTICES.txt)。
 
 打包时随附的 `FlashGot.exe` 基于 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot)，采用 GPL-3.0；每个 XPI 包含与其中二进制匹配的 `chrome/content/DownloadItBinaryMetadata.sys.mjs`，用于运行时完整性校验。
+
+包内 Windows 与 Linux x86_64 Aria2Next `v2.5.5` 二进制来自 [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next)，采用 GPL-2.0。XPI 的第三方说明中包含对应许可证文本和固定源码位置，生成的元数据记录两份资产经验证的文件大小和 SHA-256。
+
+嵌入式 AriaNg `1.3.14` 标准资源包来自 [mayswind/AriaNg](https://github.com/mayswind/AriaNg)，采用 MIT。XPI 的第三方说明中包含对应许可证和固定源码位置；打包过程会校验上游压缩包、入口页面和所需外置资源。
 
 英文版本请参阅 [README.md](README.md)。

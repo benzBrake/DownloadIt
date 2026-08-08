@@ -13,6 +13,7 @@ const { createXULElement } = ChromeUtils.importESModule(
 );
 const {
   ABDM_PROVIDER,
+  ARIA2NEXT_PROVIDER,
   BUILT_IN_PROTOCOLS,
   COMMAND_PLACEHOLDERS,
   COMMAND_TEMPLATE_PRESETS,
@@ -158,6 +159,16 @@ const CUSTOM_ERROR_MESSAGES = {
   "uget-launch-failed": "downloadit-error-uget-launch",
   "uget-submit-failed": "downloadit-error-uget-submit",
   "uget-partial-failure": "downloadit-error-uget-partial",
+  "aria2next-unavailable": "downloadit-error-aria2next-unavailable",
+  "aria2next-platform-unsupported": "downloadit-error-aria2next-platform",
+  "aria2next-port-invalid": "downloadit-error-aria2next-port",
+  "aria2next-secret-invalid": "downloadit-error-aria2next-secret",
+  "aria2next-args-invalid": "downloadit-error-aria2next-args",
+  "aria2-managed-argument": "downloadit-error-aria2-managed-argument",
+  "aria2next-rpc-error": "downloadit-error-aria2next-rpc",
+  "aria2next-start-timeout": "downloadit-error-aria2next-start-timeout",
+  "aria2next-submit-failed": "downloadit-error-aria2next-submit",
+  "aria2next-partial-failure": "downloadit-error-aria2next-partial",
   "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
 };
 
@@ -166,6 +177,7 @@ const BUILT_IN_PROTOCOL_MESSAGE_IDS = {
   abdm: "downloadit-abdm-title",
   xdm: "downloadit-xdm-title",
   uget: "downloadit-uget-title",
+  aria2next: "downloadit-aria2next-title",
 };
 
 const MIRROR_ERROR_MESSAGES = {
@@ -530,6 +542,46 @@ function bindEvents() {
     "click",
     testUGet,
   );
+  document.getElementById("aria2next-enabled").addEventListener(
+    "change",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("aria2next-exit-on-close").addEventListener(
+    "change",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("aria2next-rpc-port").addEventListener(
+    "input",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("aria2next-secret").addEventListener(
+    "input",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("aria2next-download-dir").addEventListener(
+    "input",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("aria2next-extra-args").addEventListener(
+    "input",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("aria2next-conf-path").addEventListener(
+    "input",
+    renderAria2NextEditorState,
+  );
+  document.getElementById("browse-aria2next-conf-path").addEventListener(
+    "click",
+    browseAria2NextConfPath,
+  );
+  document.getElementById("browse-aria2next-download-dir").addEventListener(
+    "click",
+    browseAria2NextDir,
+  );
+  document.getElementById("test-aria2next").addEventListener(
+    "click",
+    testAria2Next,
+  );
   document.getElementById("custom-aria2-autostart").addEventListener(
     "change",
     renderEditorType,
@@ -760,13 +812,13 @@ function renderServiceState() {
 }
 
 function draftDownloaders() {
+  const builtInProviders = new Set(
+    BUILT_IN_PROTOCOLS.map(protocol => protocol.provider),
+  );
   const detected = (state.snapshot?.downloaders || [])
     .filter(downloader =>
       !downloader.custom &&
-      downloader.ref?.provider !== JDOWNLOADER_PROVIDER &&
-      downloader.ref?.provider !== ABDM_PROVIDER &&
-      downloader.ref?.provider !== XDM_PROVIDER &&
-      downloader.ref?.provider !== UGET_PROVIDER
+      !builtInProviders.has(downloader.ref?.provider)
     );
   const jDownloaderDraft =
     state.draft?.builtInProtocols?.[JDOWNLOADER_PROVIDER];
@@ -800,6 +852,21 @@ function draftDownloaders() {
       downloader => downloader.ref?.provider === "native",
     );
     detected.splice(nativeIndex < 0 ? detected.length : nativeIndex, 0, uGet);
+  }
+  const aria2NextDraft =
+    state.draft?.builtInProtocols?.[ARIA2NEXT_PROVIDER];
+  if (aria2NextDraft?.enabled) {
+    const aria2Next = state.service.createAria2NextDescriptor(
+      aria2NextDraft,
+    );
+    const nativeIdx = detected.findIndex(
+      downloader => downloader.ref?.provider === "native",
+    );
+    detected.splice(
+      nativeIdx < 0 ? detected.length : nativeIdx,
+      0,
+      aria2Next,
+    );
   }
   const snapshotCustom = new Map(
     (state.snapshot?.downloaders || [])
@@ -1922,6 +1989,24 @@ function openDownloadToolEditor(kind = "builtin", id = "") {
   uGetLaunchPath.value = uGet?.launchPath || "";
   uGetLaunchPath.readOnly = true;
   document.getElementById("uget-test-state").textContent = "";
+  const aria2Next = state.draft.builtInProtocols[ARIA2NEXT_PROVIDER];
+  document.getElementById("aria2next-enabled").checked = Boolean(
+    aria2Next?.enabled,
+  );
+  document.getElementById("aria2next-exit-on-close").checked = Boolean(
+    aria2Next?.exitOnClose,
+  );
+  document.getElementById("aria2next-rpc-port").value =
+    aria2Next?.rpcPort || 6800;
+  document.getElementById("aria2next-secret").value =
+    aria2Next?.secret || "";
+  document.getElementById("aria2next-download-dir").value =
+    aria2Next?.downloadDir || "";
+  document.getElementById("aria2next-extra-args").value =
+    aria2Next?.extraArgs || "";
+  document.getElementById("aria2next-conf-path").value =
+    aria2Next?.confPath || "";
+  document.getElementById("aria2next-test-state").textContent = "";
   document.getElementById("custom-name").value = downloader.name;
   document.getElementById("custom-enabled").checked = downloader.enabled;
   document.getElementById("custom-start-hidden").checked =
@@ -2052,6 +2137,7 @@ function renderDownloadToolEditor() {
   renderABDMEditorState();
   renderXDMEditorState();
   renderUGetEditorState();
+  renderAria2NextEditorState();
 }
 
 function renderJDownloaderEditorState() {
@@ -2231,6 +2317,49 @@ function saveDownloadToolEditor() {
           : {
               enabled: false,
               launchPath: state.draft.builtInProtocols[UGET_PROVIDER].launchPath,
+            };
+      } else if (protocol === ARIA2NEXT_PROVIDER) {
+        const enabled = document.getElementById("aria2next-enabled").checked;
+        settings = enabled
+          ? state.service.normalizeAria2NextSettings({
+              enabled: true,
+              rpcPort: Number(
+                document.getElementById("aria2next-rpc-port").value,
+              ) || 6800,
+              secret: document.getElementById("aria2next-secret").value,
+              downloadDir: document.getElementById(
+                "aria2next-download-dir",
+              ).value,
+              extraArgs: document.getElementById(
+                "aria2next-extra-args",
+              ).value,
+              exitOnClose: document.getElementById(
+                "aria2next-exit-on-close",
+              ).checked,
+              confPath: document.getElementById(
+                "aria2next-conf-path",
+              ).value,
+            })
+          : {
+              enabled: false,
+              rpcPort: state.draft.builtInProtocols[
+                ARIA2NEXT_PROVIDER
+              ].rpcPort,
+              secret: state.draft.builtInProtocols[
+                ARIA2NEXT_PROVIDER
+              ].secret,
+              downloadDir: state.draft.builtInProtocols[
+                ARIA2NEXT_PROVIDER
+              ].downloadDir,
+              extraArgs: state.draft.builtInProtocols[
+                ARIA2NEXT_PROVIDER
+              ].extraArgs,
+              exitOnClose: state.draft.builtInProtocols[
+                ARIA2NEXT_PROVIDER
+              ].exitOnClose,
+              confPath: state.draft.builtInProtocols[
+                ARIA2NEXT_PROVIDER
+              ].confPath,
             };
       } else {
         throw new Error(`Unsupported built-in protocol: ${protocol}`);
@@ -2431,6 +2560,62 @@ function renderUGetEditorState() {
   );
 }
 
+function renderAria2NextEditorState() {
+  if (!state.editor) {
+    return;
+  }
+  const protocol = getBuiltInProtocolSnapshot(ARIA2NEXT_PROVIDER);
+  const locks = protocol?.locks || {};
+  const enabled = document.getElementById("aria2next-enabled");
+  const exitOnClose = document.getElementById("aria2next-exit-on-close");
+  const rpcPort = document.getElementById("aria2next-rpc-port");
+  const secret = document.getElementById("aria2next-secret");
+  const downloadDir = document.getElementById("aria2next-download-dir");
+  const extraArgs = document.getElementById("aria2next-extra-args");
+  const confPath = document.getElementById("aria2next-conf-path");
+  const test = document.getElementById("test-aria2next");
+  const lock = document.getElementById("aria2next-lock");
+  const status = document.getElementById("aria2next-status");
+  const statusDot = document.getElementById("aria2next-status-dot");
+
+  enabled.disabled = Boolean(locks.enabled);
+  exitOnClose.disabled = Boolean(locks.exitOnClose);
+  rpcPort.disabled = Boolean(locks.rpcPort);
+  secret.disabled = Boolean(locks.secret);
+  downloadDir.disabled = Boolean(locks.downloadDir);
+  extraArgs.disabled = Boolean(locks.extraArgs);
+  confPath.disabled = Boolean(locks.confPath);
+  const supported = state.snapshot?.aria2NextSupported !== false;
+  test.disabled = !state.service || !enabled.checked || !supported;
+  lock.hidden = !Object.values(locks).some(Boolean);
+
+  let available = false;
+  try {
+    available = state.service.createAria2NextDescriptor({
+      ...state.draft.builtInProtocols[ARIA2NEXT_PROVIDER],
+      enabled: enabled.checked,
+      rpcPort: Number(rpcPort.value) || 6800,
+      secret: secret.value,
+      downloadDir: downloadDir.value,
+      extraArgs: extraArgs.value,
+      confPath: confPath.value,
+    }).available;
+  } catch {}
+  const rpcPortValue = Number(rpcPort.value) || 6800;
+  statusDot.className = `manager-dot ${available ? "is-ready" : "is-error"}`;
+  setLocalized(
+    status,
+    !supported
+      ? "downloadit-aria2next-status-unsupported"
+      : available
+        ? "downloadit-aria2next-status-ready"
+        : enabled.checked
+          ? "downloadit-aria2next-status-unavailable"
+          : "downloadit-aria2next-status-disabled",
+    { port: rpcPortValue },
+  );
+}
+
 async function removeBuiltInDownloader(id) {
   const protocol = BUILT_IN_PROTOCOLS.find(entry => entry.id === id);
   const settings = state.draft?.builtInProtocols?.[id];
@@ -2450,7 +2635,9 @@ async function removeBuiltInDownloader(id) {
       ? state.service.createXDMDescriptor(settings).key
       : id === UGET_PROVIDER
         ? state.service.createUGetDescriptor(settings).key
-        : state.service.createJDownloaderDescriptor(settings).key;
+        : id === ARIA2NEXT_PROVIDER
+          ? state.service.createAria2NextDescriptor(settings).key
+          : state.service.createJDownloaderDescriptor(settings).key;
   settings.enabled = false;
   if (state.draft.defaultManager === removedKey) {
     const fallback = draftDownloaders().find(downloader => downloader.available);
@@ -2576,6 +2763,27 @@ async function browseUGetPath() {
     return;
   }
   renderUGetEditorState();
+  renderAria2NextEditorState();
+}
+
+async function browseAria2NextDir() {
+  const path = await browseLocalDirectory("aria2next-download-dir", {
+    titleId: "downloadit-browse-aria2next-dir-title",
+  });
+  if (path == null || !state.editor) {
+    return;
+  }
+  renderAria2NextEditorState();
+}
+
+async function browseAria2NextConfPath() {
+  const path = await browseLocalDirectory("aria2next-conf-path", {
+    titleId: "downloadit-browse-aria2next-conf-title",
+  });
+  if (path == null || !state.editor) {
+    return;
+  }
+  renderAria2NextEditorState();
 }
 
 function clearJDownloaderPath() {
@@ -2612,6 +2820,7 @@ function clearUGetPath() {
   }
   document.getElementById("uget-launch-path").value = "";
   renderUGetEditorState();
+  renderAria2NextEditorState();
 }
 
 function enableXDMPathInput() {
@@ -2698,6 +2907,31 @@ async function browseLocalFile(inputId, {
       : state.service.normalizeCustomFilePathForStorage(picker.file);
     document.getElementById(inputId).value = path;
     return path;
+  }
+  return null;
+}
+
+async function browseLocalDirectory(inputId, { titleId }) {
+  const title = await document.l10n.formatValue(titleId);
+  const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+  const pickerParent = !(
+    "inIsolatedMozBrowser" in window.browsingContext.originAttributes
+  ) ? window.browsingContext : window;
+  picker.init(pickerParent, title, Ci.nsIFilePicker.modeGetFolder);
+  const currentPath = document.getElementById(inputId).value;
+  try {
+    if (currentPath) {
+      const current = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+      current.initWithPath(currentPath);
+      picker.displayDirectory = current;
+    } else {
+      picker.displayDirectory = state.service.getConfigurationDirectoryFile();
+    }
+  } catch {}
+  const result = await new Promise(resolve => picker.open(resolve));
+  if (result === Ci.nsIFilePicker.returnOK && picker.file) {
+    document.getElementById(inputId).value = picker.file.path;
+    return picker.file.path;
   }
   return null;
 }
@@ -2836,6 +3070,39 @@ async function testUGet() {
     });
   } finally {
     button.disabled = false;
+  }
+}
+
+async function testAria2Next() {
+  const button = document.getElementById("test-aria2next");
+  const output = document.getElementById("aria2next-test-state");
+  button.disabled = true;
+  output.className = "";
+  setLocalized(output, "downloadit-aria2next-testing");
+  try {
+    const result = await state.service.testAria2NextConfiguration({
+      settings: {
+        enabled: true,
+        rpcPort: Number(
+          document.getElementById("aria2next-rpc-port").value,
+        ) || 6800,
+        secret: document.getElementById("aria2next-secret").value,
+        downloadDir: document.getElementById("aria2next-download-dir").value,
+        extraArgs: document.getElementById("aria2next-extra-args").value,
+      },
+    });
+    output.className = "is-success";
+    setLocalized(output, "downloadit-aria2next-test-success", {
+      version: result?.version || "",
+    });
+  } catch (error) {
+    output.className = "is-error";
+    setLocalized(output, "downloadit-aria2next-test-failed", {
+      error: await formatLocalizedError(error),
+    });
+  } finally {
+    button.disabled = state.snapshot?.aria2NextSupported === false ||
+      !document.getElementById("aria2next-enabled").checked;
   }
 }
 

@@ -78,6 +78,12 @@ const DOWNLOAD_ERROR_MESSAGES = {
   "uget-launch-failed": "downloadit-error-uget-launch",
   "uget-submit-failed": "downloadit-error-uget-submit",
   "uget-partial-failure": "downloadit-error-uget-partial",
+  "aria2next-unavailable": "downloadit-error-aria2next-unavailable",
+  "aria2next-platform-unsupported": "downloadit-error-aria2next-platform",
+  "aria2next-rpc-error": "downloadit-error-aria2next-rpc",
+  "aria2next-start-timeout": "downloadit-error-aria2next-start-timeout",
+  "aria2next-submit-failed": "downloadit-error-aria2next-submit",
+  "aria2next-partial-failure": "downloadit-error-aria2next-partial",
 };
 
 function bindingAbortedResult () {

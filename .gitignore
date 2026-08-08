@@ -5,3 +5,16 @@ reference/
 AGENTS.local.md
 .tmp/
 addon/FlashGot.exe
+addon/aria2-next.exe
+addon/aria2-next-linux-x86_64
+addon/ariang/index.html
+addon/ariang/LICENSE
+addon/ariang/robots.txt
+addon/ariang/favicon.ico
+addon/ariang/favicon.png
+addon/ariang/tileicon.png
+addon/ariang/touchicon.png
+addon/ariang/css/
+addon/ariang/fonts/
+addon/ariang/js/
+addon/ariang/langs/
