@@ -8,7 +8,8 @@
     <em:type>2</em:type>
     <em:bootstrap>true</em:bootstrap>
     <em:description>Send Firefox downloads to external download managers through DownloadIt.</em:description>
-    <em:creator>DownloadIt contributors</em:creator>
+    <em:creator>Ryan</em:creator>
+    <em:contributor>Codex</em:contributor>
     <em:contributor>Giorgio Maone (original FlashGot)</em:contributor>
     <em:optionsURL>chrome://downloadit/content/options.xhtml</em:optionsURL>
     <em:optionsType>1</em:optionsType>
