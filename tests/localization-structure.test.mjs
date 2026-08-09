@@ -49,6 +49,34 @@ test("custom XUL menu labels use the Fluent label attribute", () => {
   }
 });
 
+test("PanelView static actions expose matching access keys", () => {
+  for (const locale of ["en-US", "zh-CN"]) {
+    const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    assert.match(
+      source,
+      /downloadit-refresh\s*=\s*\r?\n\s+\.label\s*=.*\r?\n\s+\.accesskey\s*=\s*R\b/,
+    );
+    assert.match(
+      source,
+      /downloadit-settings\s*=\s*\r?\n\s+\.label\s*=.*\r?\n\s+\.accesskey\s*=\s*S\b/,
+    );
+  }
+});
+
+test("context-menu download actions expose access keys", () => {
+  for (const locale of ["en-US", "zh-CN"]) {
+    const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    assert.match(
+      source,
+      /downloadit-download-links\s*=\s*\r?\n\s+\.label\s*=.*\r?\n\s+\.accesskey\s*=\s*L\b/,
+    );
+    assert.match(
+      source,
+      /downloadit-set-default-and-download\s*=\s*\r?\n\s+\.label\s*=.*\r?\n\s+\.accesskey\s*=\s*D\b/,
+    );
+  }
+});
+
 test("downloader capability states have accessible Fluent labels", () => {
   for (const locale of ["en-US", "zh-CN"]) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
