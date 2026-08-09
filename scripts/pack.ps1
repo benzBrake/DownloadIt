@@ -2,10 +2,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
-$addonDirectory = Join-Path $scriptDirectory "addon"
+$projectDirectory = Split-Path -Parent $scriptDirectory
+$addonDirectory = Join-Path $projectDirectory "addon"
 $flashGotPath = Join-Path $addonDirectory "FlashGot.exe"
-$xpiPath = Join-Path $scriptDirectory "addon.xpi"
-$temporaryRoot = Join-Path $scriptDirectory ".tmp"
+$xpiPath = Join-Path $projectDirectory "addon.xpi"
+$temporaryRoot = Join-Path $projectDirectory ".tmp"
 $temporaryDirectory = Join-Path $temporaryRoot ([IO.Path]::GetRandomFileName())
 $nightlyDirectory = Join-Path $temporaryDirectory "FlashGot-nightly"
 $temporaryArchivePath = Join-Path $temporaryDirectory "addon.xpi"

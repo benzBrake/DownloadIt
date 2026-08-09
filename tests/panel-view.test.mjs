@@ -554,8 +554,8 @@ test("service registers a removable native view widget in the navigation bar", (
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const panel = read("addon/chrome/content/DownloadItPanelView.sys.mjs");
   const panelStyles = read("addon/chrome/content/panel.css");
-  const powerShellPack = read("pack.ps1");
-  const bashPack = read("pack.sh");
+  const powerShellPack = read("scripts/pack.ps1");
+  const bashPack = read("scripts/pack.sh");
 
   assert.equal(DOWNLOADIT_TOOLBAR_WIDGET_ID, "downloadit-toolbar-button");
   assert.equal(DOWNLOADIT_PANEL_VIEW_ID, "downloadit-panel-view");

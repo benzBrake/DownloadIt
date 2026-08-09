@@ -22,7 +22,7 @@ jobs:
 
       - name: Build XPI
         shell: pwsh
-        run: .\pack.ps1
+        run: .\scripts\pack.ps1
         env:
           GITHUB_TOKEN: ${{ github.token }}
 

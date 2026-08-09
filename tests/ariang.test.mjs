@@ -205,11 +205,11 @@ test("AriaNg registration delegates policy and process setup to Firefox", () => 
 
 test("AriaNg packaging pins and verifies the standard release", () => {
   const packPowerShell = fs.readFileSync(
-    path.join(projectRoot, "pack.ps1"),
+    path.join(projectRoot, "scripts/pack.ps1"),
     "utf8",
   );
   const packShell = fs.readFileSync(
-    path.join(projectRoot, "pack.sh"),
+    path.join(projectRoot, "scripts/pack.sh"),
     "utf8",
   );
   const notices = fs.readFileSync(

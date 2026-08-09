@@ -133,7 +133,7 @@ test("external protocol hook registration is idempotent and restores the chooser
 });
 
 test("external protocol hook is included by both packaging scripts", () => {
-  for (const script of ["pack.ps1", "pack.sh"]) {
+  for (const script of ["scripts/pack.ps1", "scripts/pack.sh"]) {
     const source = readFileSync(new URL(script, projectRoot), "utf8");
     assert.match(source, /chrome[\\/]content[\\/]DownloadItExternalProtocol\.sys\.mjs/);
   }

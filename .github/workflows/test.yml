@@ -33,7 +33,7 @@ jobs:
 
       - name: Check Linux packaging script syntax
         if: runner.os == 'Linux'
-        run: bash -n pack.sh
+        run: bash -n scripts/pack.sh
 
   build:
     name: Build XPI
@@ -45,6 +45,6 @@ jobs:
 
       - name: Build XPI
         shell: pwsh
-        run: .\pack.ps1
+        run: .\scripts\pack.ps1
         env:
           GITHUB_TOKEN: ${{ github.token }}

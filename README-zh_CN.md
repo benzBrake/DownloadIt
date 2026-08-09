@@ -109,13 +109,13 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 Windows：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File .\pack.ps1
+pwsh -ExecutionPolicy Bypass -File .\scripts\pack.ps1
 ```
 
 Linux：
 
 ```bash
-./pack.sh
+./scripts/pack.sh
 ```
 
 两套脚本都会把 `addon/` 打包为相同的通用 `addon.xpi` 格式，并检查 XPI 至少包含：
@@ -373,8 +373,10 @@ addon/
     ├── links.xhtml                       # 批量链接选择器结构
     ├── links.js                          # 批量链接选择器行为
     └── links.css                         # 批量链接选择器样式
-pack.ps1                                  # XPI 打包脚本
-pack.sh                                   # Linux XPI 打包脚本
+scripts/
+├── New-UpdateManifest.ps1                 # 旧版更新清单生成脚本
+├── pack.ps1                               # XPI 打包脚本
+└── pack.sh                                # Linux XPI 打包脚本
 tests/                                    # Node.js 单元测试
 ```
 

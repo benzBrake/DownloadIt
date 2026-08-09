@@ -107,7 +107,7 @@ test("link collector Actor is safe for untrusted web processes", () => {
 });
 
 test("both packaging scripts require the batch-link selector files", () => {
-  for (const script of [read("pack.ps1"), read("pack.sh")]) {
+  for (const script of [read("scripts/pack.ps1"), read("scripts/pack.sh")]) {
     for (const entry of [
       "chrome/content/DownloadItLinks.sys.mjs",
       "chrome/content/links.xhtml",

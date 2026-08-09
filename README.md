@@ -109,13 +109,13 @@ Run the command for your platform from the repository root.
 Windows:
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File .\pack.ps1
+pwsh -ExecutionPolicy Bypass -File .\scripts\pack.ps1
 ```
 
 Linux:
 
 ```bash
-./pack.sh
+./scripts/pack.sh
 ```
 
 Both scripts package `addon/` into the same universal `addon.xpi` format in the repository root and verify that the XPI contains at least:
@@ -373,8 +373,10 @@ addon/
     ├── links.xhtml                       # Batch-link selector structure
     ├── links.js                          # Batch-link selector behavior
     └── links.css                         # Batch-link selector styles
-pack.ps1                                  # XPI packaging script
-pack.sh                                   # Linux XPI packaging script
+scripts/
+├── New-UpdateManifest.ps1                 # Legacy update-manifest generator
+├── pack.ps1                               # XPI packaging script
+└── pack.sh                                # Linux XPI packaging script
 tests/                                    # Node.js unit tests
 ```
 

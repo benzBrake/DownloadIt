@@ -4,10 +4,11 @@ set -euo pipefail
 # Package DownloadIt as an XPI on Linux.
 
 script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-addon_directory="${script_directory}/addon"
+project_directory="$(cd -- "${script_directory}/.." && pwd -P)"
+addon_directory="${project_directory}/addon"
 flashgot_path="${addon_directory}/FlashGot.exe"
-xpi_path="${script_directory}/addon.xpi"
-temporary_root="${script_directory}/.tmp"
+xpi_path="${project_directory}/addon.xpi"
+temporary_root="${project_directory}/.tmp"
 temporary_directory=""
 temporary_archive_path=""
 binary_metadata_path="${addon_directory}/chrome/content/DownloadItBinaryMetadata.sys.mjs"

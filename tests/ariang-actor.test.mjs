@@ -235,7 +235,7 @@ test("AriaNg Actor retries configuration when the service becomes available at l
 });
 
 test("AriaNg Actor module remains included by both packaging scripts", () => {
-  for (const relativePath of ["pack.ps1", "pack.sh"]) {
+  for (const relativePath of ["scripts/pack.ps1", "scripts/pack.sh"]) {
     const source = fs.readFileSync(path.join(projectRoot, relativePath), "utf8");
     assert.match(source, /chrome\/content\/DownloadItAriaNgActor\.sys\.mjs/);
   }

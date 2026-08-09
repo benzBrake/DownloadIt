@@ -254,8 +254,8 @@ test("toast uses the browser chrome stylesheet included in both package scripts"
   const toast = read("addon/chrome/content/DownloadItChrome.sys.mjs");
   const styles = read("addon/chrome/content/chrome.css");
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
-  const powerShellPack = read("pack.ps1");
-  const bashPack = read("pack.sh");
+  const powerShellPack = read("scripts/pack.ps1");
+  const bashPack = read("scripts/pack.sh");
 
   assert.match(toast, /loadSheetUsingURIString/);
   assert.match(toast, /removeSheetUsingURIString/);

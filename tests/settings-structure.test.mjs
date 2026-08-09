@@ -43,8 +43,8 @@ test("DownloadIt icon is packaged and used by branded Firefox UI", () => {
   const panel = read("addon/chrome/content/DownloadItPanelView.sys.mjs");
   const contextMenu = read("addon/chrome/content/DownloadItContextMenu.sys.mjs");
   const downloadDialog = read("addon/chrome/content/DownloadItDownloadDialog.sys.mjs");
-  const packPowerShell = read("pack.ps1");
-  const packShell = read("pack.sh");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
   const iconUrl = "chrome://downloadit/content/icons/downloadit.svg";
 
   assert.match(icon, /<svg[^>]+viewBox="0 0 16 16"/);
@@ -57,8 +57,8 @@ test("DownloadIt icon is packaged and used by branded Firefox UI", () => {
 });
 
 test("packaging scripts select the authenticated API or nightly.link", () => {
-  const packPowerShell = read("pack.ps1");
-  const packShell = read("pack.sh");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
   const nightlyLink = "https://nightly.link/benzBrake/Grabby-FlashGot/workflows/nightly.yml/master/FlashGot-nightly.zip";
 
   for (const source of [packPowerShell, packShell]) {
@@ -76,8 +76,8 @@ test("packaging scripts select the authenticated API or nightly.link", () => {
 test("Aria2Next packaging pins and verifies universal XPI assets", () => {
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const options = read("addon/chrome/content/options.js");
-  const packPowerShell = read("pack.ps1");
-  const packShell = read("pack.sh");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
   const notices = read("addon/THIRD_PARTY_NOTICES.txt");
   const license = read("addon/licenses/aria2-next-COPYING");
 
@@ -160,9 +160,9 @@ test("Windows and Linux share one runtime capability matrix and universal XPI", 
   assert.match(workflow, /ubuntu-24\.04/);
   assert.match(workflow, /windows-latest/);
   assert.match(workflow, /run: node --test/);
-  assert.match(workflow, /run: bash -n pack\.sh/);
+  assert.match(workflow, /run: bash -n scripts\/pack\.sh/);
   assert.match(workflow, /name: Build XPI/);
-  assert.match(workflow, /run: \.\\pack\.ps1/);
+  assert.match(workflow, /run: \.\\scripts\\pack\.ps1/);
 });
 
 test("about callout exposes the localized easter egg toast trigger", () => {
@@ -660,7 +660,7 @@ test("settings dialog exposes a unified download-tool editor", () => {
 
 test("custom downloader persistence is profile-scoped and atomic", () => {
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
-  const pack = read("pack.ps1");
+  const pack = read("scripts/pack.ps1");
 
   assert.match(service, /CUSTOM_DOWNLOADERS_FILE = "custom-downloaders\.json"/);
   assert.match(service, /PathUtils\.join\(PathUtils\.profileDir, PROFILE_DIRECTORY\)/);
@@ -752,8 +752,8 @@ test("link groups are validated, policy-aware, and documented", () => {
 test("IDM bridge is staged, policy-aware, packaged, and documented", () => {
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const bridge = read("addon/chrome/content/DownloadItIDMBridge.sys.mjs");
-  const packPowerShell = read("pack.ps1");
-  const packShell = read("pack.sh");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
   const englishReadme = read("README.md");
   const chineseReadme = read("README-zh_CN.md");
 
@@ -783,8 +783,8 @@ test("mirror adapters are validated, policy-aware, packaged, and documented", ()
   const github = read("addon/chrome/content/DownloadItGitHubMirror.sys.mjs");
   const options = read("addon/chrome/content/options.js");
   const styles = read("addon/chrome/content/options.css");
-  const packPowerShell = read("pack.ps1");
-  const packShell = read("pack.sh");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
   const englishReadme = read("README.md");
   const chineseReadme = read("README-zh_CN.md");
 
