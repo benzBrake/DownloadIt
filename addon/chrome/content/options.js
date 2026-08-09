@@ -8,6 +8,9 @@ const { getActiveService } = ChromeUtils.importESModule(
 const { initializeDownloadItLocalization } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItLocalization.sys.mjs",
 );
+const { showDownloadItToast } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItChrome.sys.mjs",
+);
 const { createXULElement } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItXUL.sys.mjs",
 );
@@ -40,6 +43,18 @@ const {
 const localizationReady = initializeDownloadItLocalization(window);
 const DEVELOPER_MODE_DOUBLE_CLICKS = 6;
 const DEVELOPER_MODE_GESTURE_TIMEOUT_MS = 4000;
+const EASTER_EGG_LOG_IDS = Object.freeze([
+  "downloadit-easter-egg-log-1",
+  "downloadit-easter-egg-log-2",
+  "downloadit-easter-egg-log-3",
+  "downloadit-easter-egg-log-4",
+  "downloadit-easter-egg-log-5",
+  "downloadit-easter-egg-log-6",
+  "downloadit-easter-egg-log-7",
+  "downloadit-easter-egg-log-8",
+  "downloadit-easter-egg-log-9",
+  "downloadit-easter-egg-log-10",
+]);
 
 const SECTION_META = {
   managers: [
@@ -260,6 +275,20 @@ function bindEvents() {
     "dblclick",
     activateDeveloperModeFromGesture,
   );
+  const calloutMark = document.getElementById("callout-mark");
+  const showEasterEggLog = async () => {
+    try {
+      await localizationReady;
+      const logId = EASTER_EGG_LOG_IDS[
+        Math.floor(Math.random() * EASTER_EGG_LOG_IDS.length)
+      ];
+      const message = await document.l10n.formatValue(logId);
+      showDownloadItToast(window, message);
+    } catch (error) {
+      console.error("DownloadIt: easter egg toast failed", error);
+    }
+  };
+  calloutMark?.addEventListener("click", showEasterEggLog);
   for (const button of document.querySelectorAll(".nav-item")) {
     button.addEventListener("click", () => {
       state.section = button.dataset.section;

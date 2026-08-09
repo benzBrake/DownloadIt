@@ -165,6 +165,22 @@ test("Windows and Linux share one runtime capability matrix and universal XPI", 
   assert.match(workflow, /run: \.\\pack\.ps1/);
 });
 
+test("about callout exposes the localized easter egg toast trigger", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const script = read("addon/chrome/content/options.js");
+  assert.match(
+    markup,
+    /<button\s+id="callout-mark"[\s\S]*data-l10n-id="downloadit-about-callout-mark"/,
+  );
+  assert.match(script, /showDownloadItToast\(window, message\)/);
+  for (const locale of ["en-US", "zh-CN"]) {
+    const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    for (let index = 1; index <= 10; index++) {
+      assert.match(source, new RegExp(`^downloadit-easter-egg-log-${index} =`, "m"));
+    }
+  }
+});
+
 test("settings dialog contains the current capability controls", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   assert.doesNotMatch(markup, /chrome:\/\/global\/skin\/menulist\.css/);
