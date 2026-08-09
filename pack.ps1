@@ -127,6 +127,15 @@ try {
         $ariaNgExistingHash = (Get-FileHash -LiteralPath $ariaNgIndexPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $ariaNgAssetReady = ([Int64]$ariaNgExistingIndex.Length -eq $ariaNgIndexSize) -and
             ($ariaNgExistingHash -eq $ariaNgIndexSha256)
+        if ($ariaNgAssetReady -and (Test-Path -LiteralPath $ariaNgLicensePath -PathType Leaf)) {
+            $ariaNgExistingLicense = Get-Item -LiteralPath $ariaNgLicensePath
+            $ariaNgExistingLicenseHash = (Get-FileHash -LiteralPath $ariaNgLicensePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $ariaNgAssetReady = ([Int64]$ariaNgExistingLicense.Length -eq $ariaNgLicenseSize) -and
+                ($ariaNgExistingLicenseHash -eq $ariaNgLicenseSha256)
+        }
+        else {
+            $ariaNgAssetReady = $false
+        }
         foreach ($ariaNgAsset in $ariaNgAssets) {
             $ariaNgAssetPath = Join-Path $ariaNgDirectory $ariaNgAsset.Path.Replace("/", "\")
             if (-not (Test-Path -LiteralPath $ariaNgAssetPath -PathType Leaf)) {
@@ -214,6 +223,8 @@ try {
         if (([Int64]$temporaryLicenseFile.Length -ne $ariaNgLicenseSize) -or ($temporaryLicenseHash -ne $ariaNgLicenseSha256)) {
             throw "AriaNg archive LICENSE failed integrity verification"
         }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $ariaNgLicensePath) -Force | Out-Null
+        Copy-Item -LiteralPath $temporaryLicensePath -Destination $ariaNgLicensePath -Force
 
         Expand-Archive -LiteralPath $ariaNgArchivePath -DestinationPath $ariaNgDirectory -Force
         $ariaNgIndexContent = [IO.File]::ReadAllText($ariaNgIndexPath)

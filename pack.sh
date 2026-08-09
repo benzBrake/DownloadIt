@@ -324,6 +324,11 @@ download_and_verify_ariang() {
             index_actual_hash="${index_hash_output%% *}"
             if [[ "${index_actual_size}" == "${ariang_index_size}" && "${index_actual_hash}" == "${ariang_index_hash}" ]]; then
                 ariang_asset_ready=true
+                if [[ ! -f "${ariang_license_path}" ]] || \
+                    [[ "$(stat -c '%s' "${ariang_license_path}")" != "${ariang_license_size}" ]] || \
+                    [[ "$(sha256sum "${ariang_license_path}" | cut -d ' ' -f 1)" != "${ariang_license_hash}" ]]; then
+                    ariang_asset_ready=false
+                fi
                 for asset_index in "${!ariang_asset_paths[@]}"; do
                     asset_path="${ariang_directory}/${ariang_asset_paths[asset_index]}"
                     if [[ ! -f "${asset_path}" ]] || \
@@ -405,6 +410,8 @@ download_and_verify_ariang() {
         if [[ "${license_actual_size}" != "${ariang_license_size}" || "${license_actual_hash}" != "${ariang_license_hash}" ]]; then
             die "AriaNg archive LICENSE failed integrity verification"
         fi
+        mkdir -p -- "$(dirname "${ariang_license_path}")"
+        cp -f -- "${temporary_license_path}" "${ariang_license_path}"
 
         mkdir -p -- "${ariang_directory}"
         if ! unzip -oq "${archive_path}" -d "${ariang_directory}"; then

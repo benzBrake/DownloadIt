@@ -161,6 +161,8 @@ test("Windows and Linux share one runtime capability matrix and universal XPI", 
   assert.match(workflow, /windows-latest/);
   assert.match(workflow, /run: node --test/);
   assert.match(workflow, /run: bash -n pack\.sh/);
+  assert.match(workflow, /name: Build XPI/);
+  assert.match(workflow, /run: \.\\pack\.ps1/);
 });
 
 test("settings dialog contains the current capability controls", () => {

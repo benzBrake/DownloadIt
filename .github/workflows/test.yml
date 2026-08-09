@@ -34,3 +34,17 @@ jobs:
       - name: Check Linux packaging script syntax
         if: runner.os == 'Linux'
         run: bash -n pack.sh
+
+  build:
+    name: Build XPI
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build XPI
+        shell: pwsh
+        run: .\pack.ps1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
