@@ -2082,7 +2082,10 @@ export class DownloadItService {
         const effectiveDir = startupSettings.downloadDir ||
           await Downloads.getPreferredDownloadsDirectory();
         const normalized = this.normalizeAria2NextSettings(
-          startupSettings,
+          {
+            ...startupSettings,
+            downloadDir: effectiveDir,
+          },
         );
         const managedConfPath = await this.writeAria2NextManagedConf(
           normalized,
@@ -2952,6 +2955,7 @@ export class DownloadItService {
           downloadDir: currentAria2Next.downloadDir,
           extraArgs: currentAria2Next.extraArgs,
           exitOnClose: currentAria2Next.exitOnClose,
+          confPath: currentAria2Next.confPath,
         }
       : requestedAria2NextInput.enabled === false
         ? {
@@ -2961,6 +2965,7 @@ export class DownloadItService {
             downloadDir: currentAria2Next.downloadDir,
             extraArgs: currentAria2Next.extraArgs,
             exitOnClose: currentAria2Next.exitOnClose,
+            confPath: currentAria2Next.confPath,
           }
         : this.normalizeAria2NextSettings(requestedAria2NextInput);
     if (requestedAria2Next.enabled && !this.isAria2NextSupported()) {
@@ -5320,8 +5325,11 @@ export class DownloadItService {
   async writeAria2NextManagedConf(normalizedSettings) {
     const lines = [];
     if (normalizedSettings.confPath) {
-      lines.push(`include=${normalizedSettings.confPath}`);
-      lines.push("");
+      const customConf = await IOUtils.readUTF8(normalizedSettings.confPath);
+      if (customConf) {
+        lines.push(customConf.replace(/[\r\n]+$/, ""));
+        lines.push("");
+      }
     }
     lines.push("enable-rpc=true");
     lines.push("rpc-listen-all=false");

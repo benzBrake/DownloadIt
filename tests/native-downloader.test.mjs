@@ -387,6 +387,65 @@ test("Aria2Next validates quoted extra arguments when settings are saved", async
   preferenceValues.clear();
 });
 
+test("Aria2Next preserves its configuration path across unrelated settings saves", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set(
+    "downloadit.aria2next.confPath",
+    "C:\\Config\\aria2.conf",
+  );
+  const service = createSettingsService();
+
+  await service.applySettings({ autoStartTasks: false });
+
+  assert.equal(
+    preferenceValues.get("downloadit.aria2next.confPath"),
+    "C:\\Config\\aria2.conf",
+  );
+  preferenceValues.clear();
+});
+
+test("Aria2Next managed config copies custom settings before managed overrides", async () => {
+  const originalIOUtils = { ...ioUtilsMock };
+  const writes = [];
+  Object.assign(ioUtilsMock, {
+    async makeDirectory() {},
+    async readUTF8(path) {
+      assert.equal(path, "C:\\Config\\aria2.conf");
+      return "continue=true\ndir=C:\\CustomDownloads\n";
+    },
+    async remove() {},
+    async setPermissions() {},
+    async writeUTF8(path, value) {
+      writes.push({ path, value });
+    },
+  });
+  const service = createSettingsService();
+  service.writeAria2NextManagedConf =
+    DownloadItService.prototype.writeAria2NextManagedConf.bind(service);
+  try {
+    await service.writeAria2NextManagedConf({
+      confPath: "C:\\Config\\aria2.conf",
+      rpcPort: 6800,
+      secret: "secret",
+      downloadDir: "C:\\Firefox\\Downloads",
+    });
+
+    assert.equal(writes.length, 1);
+    assert.doesNotMatch(writes[0].value, /^include=/m);
+    assert.match(
+      writes[0].value,
+      /^continue=true\ndir=C:\\CustomDownloads\n\nenable-rpc=true/m,
+    );
+    assert.match(writes[0].value, /dir=C:\\Firefox\\Downloads\n$/);
+  } finally {
+    for (const key of Object.keys(ioUtilsMock)) {
+      delete ioUtilsMock[key];
+    }
+    Object.assign(ioUtilsMock, originalIOUtils);
+  }
+});
+
 test("unsupported Linux ABI rejects Aria2Next enablement but permits disabling", async () => {
   preferenceValues.clear();
   servicesMock.appinfo.OS = "Linux";
@@ -632,6 +691,39 @@ test("Aria2Next startup launches after a failed probe without recursive waiting"
     "--conf-path=C:\\Profile\\DownloadIt\\aria2next-managed.conf",
   ]);
   preferenceValues.clear();
+});
+
+test("Aria2Next startup writes Firefox's preferred directory when unset", async () => {
+  preferenceValues.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  const service = createSettingsService();
+  service.deployAria2NextBinary = async () =>
+    "C:\\Profile\\DownloadIt\\aria2-next.exe";
+  let writtenSettings;
+  service.writeAria2NextManagedConf = async settings => {
+    writtenSettings = settings;
+    return "C:\\Profile\\DownloadIt\\aria2next-managed.conf";
+  };
+  service.startDetachedProcess = () => ({ isRunning: false, kill() {} });
+  let probes = 0;
+  service.probeAria2Next = async () => {
+    probes++;
+    if (probes === 1) {
+      throw new DownloadItError("aria2-unavailable");
+    }
+    return { version: "2.5.5" };
+  };
+  const previousPreferredDirectory = downloadsMock.getPreferredDownloadsDirectory;
+  downloadsMock.getPreferredDownloadsDirectory = async () =>
+    "C:\\Firefox\\Downloads";
+  try {
+    await service.ensureAria2NextRunning();
+
+    assert.equal(writtenSettings.downloadDir, "C:\\Firefox\\Downloads");
+  } finally {
+    downloadsMock.getPreferredDownloadsDirectory = previousPreferredDirectory;
+    preferenceValues.clear();
+  }
 });
 
 test("Aria2Next startup is shared before binary deployment", async () => {
