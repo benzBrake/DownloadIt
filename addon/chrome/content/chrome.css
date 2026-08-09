@@ -35,6 +35,15 @@
   transform: translateY(0);
 }
 
+#downloadit-toast-host .downloadit-toast.is-actionable {
+  cursor: pointer;
+}
+
+#downloadit-toast-host .downloadit-toast.is-actionable:focus-visible {
+  outline: 2px solid AccentColor;
+  outline-offset: 2px;
+}
+
 #downloadit-toast-host .downloadit-toast-content {
   min-width: 0;
 }

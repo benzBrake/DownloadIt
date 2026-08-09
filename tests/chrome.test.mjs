@@ -79,6 +79,11 @@ class MockElement {
   addEventListener(type, listener) {
     this.listeners.set(type, listener);
   }
+
+  dispatchEvent(event) {
+    event.target ||= this;
+    this.listeners.get(event.type)?.(event);
+  }
 }
 
 class MockDocument {
@@ -171,6 +176,76 @@ test("toast is local to its browser document and exposes localized controls", ()
   }]);
 });
 
+test("actionable toast opens AriaNg once from clicks and keyboard activation", () => {
+  const document = new MockDocument();
+  const timers = [];
+  const window = {
+    document,
+    windowUtils: {
+      AUTHOR_SHEET: 1,
+      loadSheetUsingURIString() {},
+      removeSheetUsingURIString() {},
+    },
+    requestAnimationFrame(callback) {
+      callback();
+    },
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
+    clearTimeout() {},
+  };
+  let opened = 0;
+
+  showDownloadItToast(window, "aria2 accepted the task.", {
+    onClick: () => {
+      opened++;
+    },
+  });
+  const toast = document.getElementById("downloadit-toast-host").children[0];
+  const close = toast.children[1];
+
+  assert.equal(toast.getAttribute("role"), "button");
+  assert.equal(toast.getAttribute("tabindex"), "0");
+  assert.equal(toast.getAttribute("data-l10n-id"), "downloadit-toast-open-ariang");
+  toast.dispatchEvent({
+    type: "click",
+    preventDefault() {},
+  });
+  toast.dispatchEvent({
+    type: "keydown",
+    key: "Enter",
+    preventDefault() {},
+  });
+  assert.equal(opened, 1);
+
+  showDownloadItToast(window, "aria2 accepted the task.", {
+    onClick: () => {
+      opened++;
+    },
+  });
+  const keyboardToast = document.getElementById("downloadit-toast-host").children[1];
+  keyboardToast.dispatchEvent({
+    type: "keydown",
+    key: " ",
+    preventDefault() {},
+  });
+  assert.equal(opened, 2);
+
+  showDownloadItToast(window, "aria2 accepted the task.", {
+    onClick: () => {
+      opened++;
+    },
+  });
+  const closeOnlyToast = document.getElementById("downloadit-toast-host").children[2];
+  closeOnlyToast.children[1].dispatchEvent({
+    type: "click",
+    stopPropagation() {},
+  });
+  assert.equal(opened, 2);
+  assert.equal(timers.at(-1).delay, 160);
+});
+
 test("toast declines windows without a document root", () => {
   assert.equal(showDownloadItToast({}, "message"), false);
 });
@@ -187,7 +262,10 @@ test("toast uses the browser chrome stylesheet included in both package scripts"
   assert.doesNotMatch(toast, /createElement\(document, "style"\)/);
   assert.match(styles, /#downloadit-toast-host/);
   assert.match(styles, /\.downloadit-toast-close/);
+  assert.match(styles, /\.downloadit-toast\.is-actionable/);
   assert.match(service, /destroyDownloadItToasts\(window\)/);
+  assert.match(service, /downloader\.ref\.provider === ARIA2NEXT_PROVIDER/);
+  assert.match(service, /openAriaNgFromToast\(browserWindow\)/);
   assert.match(powerShellPack, /chrome\/content\/chrome\.css/);
   assert.match(bashPack, /chrome\/content\/chrome\.css/);
 });

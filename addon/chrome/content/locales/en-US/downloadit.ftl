@@ -110,6 +110,8 @@ downloadit-toast-title = DownloadIt
 downloadit-toast-close =
     .title = Close notification
     .aria-label = Close notification
+downloadit-toast-open-ariang =
+    .aria-label = Open AriaNg from this notification
 downloadit-aria2-submitted =
     { $count ->
         [one] aria2 accepted 1 download task.

@@ -4522,12 +4522,22 @@ export class DownloadItService {
       downloader.ref.provider === ARIA2NEXT_PROVIDER ||
       downloader.aria2
     ) {
-      await this.showAria2SubmissionToast(browser, result, links.length);
+      await this.showAria2SubmissionToast(
+        browser,
+        result,
+        links.length,
+        downloader.ref.provider === ARIA2NEXT_PROVIDER,
+      );
     }
     return result;
   }
 
-  async showAria2SubmissionToast(browser, result, submittedCount) {
+  async showAria2SubmissionToast(
+    browser,
+    result,
+    submittedCount,
+    openAriaNg = false,
+  ) {
     const browserWindow = this.getBrowserWindow(browser?.ownerGlobal);
     if (!browserWindow) {
       return;
@@ -4540,10 +4550,31 @@ export class DownloadItService {
         { count },
       );
       if (message) {
-        this.alert(browserWindow, message);
+        this.alert(
+          browserWindow,
+          message,
+          openAriaNg
+            ? { onClick: () => this.openAriaNgFromToast(browserWindow) }
+            : null,
+        );
       }
     } catch (error) {
       console.error("DownloadIt: could not show aria2 submission toast", error);
+    }
+  }
+
+  openAriaNgFromToast(browserWindow) {
+    let url = "";
+    try {
+      url = this.getAriaNgURL();
+    } catch {}
+    if (!url || typeof browserWindow?.openTrustedLinkIn !== "function") {
+      return null;
+    }
+    try {
+      return browserWindow.openTrustedLinkIn(url, "tab");
+    } catch {
+      return null;
     }
   }
 
@@ -5558,9 +5589,9 @@ export class DownloadItService {
     return promise;
   }
 
-  alert(window, message) {
+  alert(window, message, options = null) {
     const browserWindow = this.getBrowserWindow(window);
-    if (showDownloadItToast(browserWindow, message)) {
+    if (showDownloadItToast(browserWindow, message, options)) {
       return;
     }
     Services.prompt.alert(window, "DownloadIt", String(message));

@@ -49,12 +49,15 @@ function ensureToastHost(window) {
   return host;
 }
 
-export function showDownloadItToast(window, message) {
+export function showDownloadItToast(window, message, options = null) {
   const host = ensureToastHost(window);
   if (!host) {
     return false;
   }
 
+  const onClick = typeof options?.onClick === "function"
+    ? options.onClick
+    : null;
   const document = window.document;
   const toast = createElement(document, "div");
   const content = createElement(document, "div");
@@ -76,6 +79,27 @@ export function showDownloadItToast(window, message) {
     toast.classList.remove("is-visible");
     window.setTimeout(() => toast.remove(), 160);
   };
+  const activate = event => {
+    if (!onClick || dismissed || event.target === close) {
+      return;
+    }
+    if (
+      event.type === "keydown" &&
+      event.key !== "Enter" &&
+      event.key !== " "
+    ) {
+      return;
+    }
+    event.preventDefault?.();
+    try {
+      Promise.resolve(onClick()).catch(error => {
+        console.error("DownloadIt: toast action failed", error);
+      });
+    } catch (error) {
+      console.error("DownloadIt: toast action failed", error);
+    }
+    dismiss();
+  };
   const scheduleDismiss = () => {
     if (dismissTimer !== null) {
       window.clearTimeout(dismissTimer);
@@ -84,7 +108,12 @@ export function showDownloadItToast(window, message) {
   };
 
   toast.className = "downloadit-toast";
-  toast.setAttribute("role", "status");
+  toast.setAttribute("role", onClick ? "button" : "status");
+  if (onClick) {
+    toast.classList.add("is-actionable");
+    toast.setAttribute("tabindex", "0");
+    localize(document, toast, "downloadit-toast-open-ariang");
+  }
   content.className = "downloadit-toast-content";
   title.className = "downloadit-toast-title";
   body.className = "downloadit-toast-message";
@@ -96,7 +125,14 @@ export function showDownloadItToast(window, message) {
   body.textContent = String(message);
   content.append(title, body);
   toast.append(content, close);
-  close.addEventListener("click", dismiss, { once: true });
+  close.addEventListener("click", event => {
+    event.stopPropagation?.();
+    dismiss();
+  }, { once: true });
+  if (onClick) {
+    toast.addEventListener("click", activate);
+    toast.addEventListener("keydown", activate);
+  }
   toast.addEventListener("mouseenter", () => {
     if (dismissTimer !== null) {
       window.clearTimeout(dismissTimer);
