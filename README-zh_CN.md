@@ -2,7 +2,7 @@
 
 <img src="addon/chrome/content/icons/downloadit.svg" alt="DownloadIt 图标" width="128">
 
-[![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://nightly.link/benzBrake/DownloadIt/workflows/nightly.yml/master/DownloadIt-nightly.zip)
+[![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi)
 
 DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。它通过定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) 加载 bootstrapped XPI，并把网页链接交给外部下载管理器处理。
 
@@ -132,11 +132,13 @@ Linux：
 
 `addon.xpi` 是构建产物，默认被 `.gitignore` 忽略。`addon/FlashGot.exe`、`addon/aria2-next.exe`、`addon/aria2-next-linux-x86_64` 和生成的 AriaNg 标准资源树也不纳入版本控制。缺少 Aria2Next 资产或 AriaNg 资产缺失、过期时从各自的固定上游 Release 下载；最终资产校验失败时构建会停止，不会将错误文件打入包内。Nightly 仍只发布一个通用 XPI，不拆分平台构建产物。
 
+Nightly workflow 会替换 GitHub `nightly` 预发布中的资产。稳定下载地址为 [`addon.xpi`](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) 和 [`update.rdf`](https://github.com/benzBrake/DownloadIt/releases/download/nightly/update.rdf)。每次构建完成后，都会从 `addon/install.rdf` 生成 `update.rdf`；该文件是 legacy bootstrapped XPI 的更新清单，包含扩展 ID、版本、Firefox 兼容范围和 XPI 下载链接。
+
 ## 版本规则
 
 DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.10.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
-`addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
+`addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本和生成的 `update.rdf` 的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
 ## 测试
 
@@ -161,7 +163,7 @@ DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中�
 
 Linux 上请使用发行版原生包或 Mozilla tarball 版 Firefox 完成以上步骤，并确认 Loader 能访问目标 profile，所有已配置的本地启动器也具有可执行权限。Snap 和 Flatpak 不属于当前支持的安装方式。
 
-升级时使用新构建的 `addon.xpi` 覆盖安装即可。若扩展未启动，请先确认 Loader 版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
+升级时使用新构建的 `addon.xpi` 或 [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) 覆盖安装即可。`install.rdf` 已声明 legacy `update.rdf` 的位置，但当前 userChrome.js Loader 不执行更新检查或自动安装，因此仍需手动升级。若扩展未启动，请先确认 Loader 版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
 
 ## 配置
 

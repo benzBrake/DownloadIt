@@ -10,7 +10,7 @@ on:
       - grabby-nightly-ready
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -26,10 +26,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Generate update manifest
+        shell: pwsh
+        run: |
+          .\scripts\New-UpdateManifest.ps1 `
+            -InstallManifestPath .\addon\install.rdf `
+            -OutputPath .\update.rdf
+
+      - name: Publish nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: DownloadIt nightly
+          prerelease: true
+          make_latest: false
+          body: Automated nightly build for ${{ github.sha }}.
+          files: |
+            addon.xpi
+            update.rdf
+          fail_on_unmatched_files: true
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Upload nightly build
         uses: actions/upload-artifact@v4
         with:
           name: DownloadIt-nightly
-          path: addon.xpi
+          path: |
+            addon.xpi
+            update.rdf
           if-no-files-found: error
           retention-days: 7

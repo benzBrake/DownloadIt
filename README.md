@@ -2,7 +2,7 @@
 
 <img src="addon/chrome/content/icons/downloadit.svg" alt="DownloadIt icon" width="128">
 
-[![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://nightly.link/benzBrake/DownloadIt/workflows/nightly/master/DownloadIt-nightly.zip)
+[![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi)
 
 DownloadIt is a port of FlashGot's download-bridge extension for modern Firefox. It uses a customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) to load a bootstrapped XPI and forward web links to an external download manager.
 
@@ -132,11 +132,13 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 
 `addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe`, `addon/aria2-next.exe`, `addon/aria2-next-linux-x86_64`, and the generated AriaNg standard asset tree are also excluded from version control. Missing Aria2Next assets and missing or stale AriaNg assets are downloaded from their pinned upstream releases; invalid final assets fail the build instead of being packaged. Nightly builds still publish one universal XPI rather than separate platform artifacts.
 
+The nightly workflow replaces the assets of the `nightly` GitHub prerelease. Its stable download URLs are [`addon.xpi`](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) and [`update.rdf`](https://github.com/benzBrake/DownloadIt/releases/download/nightly/update.rdf). `update.rdf` is generated after every build from `addon/install.rdf`; it is the legacy bootstrapped-XPI update manifest and contains the extension ID, version, Firefox compatibility range, and XPI download link.
+
 ## Versioning
 
 DownloadIt has its own version line starting at `2.0.0`; the current version is `2.10.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
-The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
+The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page and the generated `update.rdf`. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
 ## Testing
 
@@ -161,7 +163,7 @@ The **Link groups** settings tab can enable or disable each built-in suffix grou
 
 On Linux, perform these steps with a distribution-native or Mozilla tarball Firefox build. Confirm that the Loader can access the profile and that every configured local launcher is executable. Snap and Flatpak packages are outside the supported installation path.
 
-To upgrade, install the newly built `addon.xpi` over the existing installation. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
+To upgrade, install the newly built `addon.xpi` or the [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) over the existing installation. `install.rdf` publishes the legacy `update.rdf` location, but the current userChrome.js Loader does not perform update checks or automatic installation, so upgrades remain manual. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
 
 ## Configuration
 
