@@ -106,6 +106,15 @@ downloadit-settings =
 downloadit-download-failed = Could not send the link to { $manager }: { $error }
 downloadit-download-selection-failed = Could not send the selected links to { $manager }: { $error }
 downloadit-context-default-change-failed = Could not change the default download manager: { $error }
+downloadit-toast-title = DownloadIt
+downloadit-toast-close =
+    .title = Close notification
+    .aria-label = Close notification
+downloadit-aria2-submitted =
+    { $count ->
+        [one] aria2 accepted 1 download task.
+       *[other] aria2 accepted { NUMBER($count) } download tasks.
+    }
 downloadit-download-dialog-option =
     .label = Use DownloadIt
     .accesskey = D

@@ -30,6 +30,7 @@ import {
   updateAutoCaptureRule,
 } from "./DownloadItAutoCapture.sys.mjs";
 import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
+import { showDownloadItToast } from "./DownloadItToast.sys.mjs";
 import { DownloadItIDMBridge } from "./DownloadItIDMBridge.sys.mjs";
 import {
   createDefaultLinkGroupSettings,
@@ -4506,11 +4507,38 @@ export class DownloadItService {
     for (let index = 0; index < job.links.length; index++) {
       job.links[index].cookieRecords = links[index].cookieRecords;
     }
-    await this.dispatchDownload(
+    const result = await this.dispatchDownload(
       downloader,
       job,
       runtimeContexts,
     );
+    if (
+      downloader.ref.provider === ARIA2NEXT_PROVIDER ||
+      downloader.aria2
+    ) {
+      await this.showAria2SubmissionToast(browser, result, links.length);
+    }
+    return result;
+  }
+
+  async showAria2SubmissionToast(browser, result, submittedCount) {
+    const browserWindow = this.getBrowserWindow(browser?.ownerGlobal);
+    if (!browserWindow) {
+      return;
+    }
+    const count = result?.succeeded ?? submittedCount;
+    try {
+      await initializeDownloadItLocalization(browserWindow);
+      const message = await browserWindow.document.l10n?.formatValue(
+        "downloadit-aria2-submitted",
+        { count },
+      );
+      if (message) {
+        this.alert(browserWindow, message);
+      }
+    } catch (error) {
+      console.error("DownloadIt: could not show aria2 submission toast", error);
+    }
   }
 
   async downloadViaNative(managerId, job, runtimeContexts = []) {
@@ -5525,6 +5553,10 @@ export class DownloadItService {
   }
 
   alert(window, message) {
+    const browserWindow = this.getBrowserWindow(window);
+    if (showDownloadItToast(browserWindow, message)) {
+      return;
+    }
     Services.prompt.alert(window, "DownloadIt", String(message));
   }
 

@@ -113,6 +113,7 @@ required_entries=(
     "chrome/content/DownloadItLinks.sys.mjs"
     "chrome/content/DownloadItMirrors.sys.mjs"
     "chrome/content/DownloadItPanelView.sys.mjs"
+    "chrome/content/DownloadItToast.sys.mjs"
     "chrome/content/icons/downloadit.svg"
     "chrome/content/panel.css"
     "chrome/content/links.xhtml"
