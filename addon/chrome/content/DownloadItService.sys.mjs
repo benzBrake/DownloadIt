@@ -30,7 +30,10 @@ import {
   updateAutoCaptureRule,
 } from "./DownloadItAutoCapture.sys.mjs";
 import { initializeDownloadItLocalization } from "./DownloadItLocalization.sys.mjs";
-import { showDownloadItToast } from "./DownloadItToast.sys.mjs";
+import {
+  destroyDownloadItToasts,
+  showDownloadItToast,
+} from "./DownloadItChrome.sys.mjs";
 import { DownloadItIDMBridge } from "./DownloadItIDMBridge.sys.mjs";
 import {
   createDefaultLinkGroupSettings,
@@ -3745,8 +3748,9 @@ export class DownloadItService {
 
     unregisterLinkCollectorActor();
 
-    for (const controller of this.controllers.values()) {
+    for (const [window, controller] of this.controllers) {
       controller.destroy();
+      destroyDownloadItToasts(window);
     }
     this.controllers.clear();
     for (const controller of this.panelControllers.values()) {
@@ -3851,12 +3855,14 @@ export class DownloadItService {
       window.addEventListener("unload", () => {
         controller.destroy();
         panelController.destroy();
+        destroyDownloadItToasts(window);
         this.controllers.delete(window);
         this.panelControllers.delete(window);
       }, { once: true });
     } catch (error) {
       controller?.destroy();
       panelController?.destroy();
+      destroyDownloadItToasts(window);
       console.error("DownloadIt: browser window initialization failed", error);
     }
   }

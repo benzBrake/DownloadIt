@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { showDownloadItToast } from "../addon/chrome/content/DownloadItToast.sys.mjs";
+import {
+  destroyDownloadItToasts,
+  showDownloadItToast,
+} from "../addon/chrome/content/DownloadItChrome.sys.mjs";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const read = relativePath => fs.readFileSync(
+  path.join(projectRoot, relativePath),
+  "utf8",
+);
 
 class MockElement {
   constructor(localName, ownerDocument) {
@@ -109,6 +121,17 @@ test("toast is local to its browser document and exposes localized controls", ()
   const timers = [];
   const window = {
     document,
+    windowUtils: {
+      AUTHOR_SHEET: 1,
+      loadedSheets: [],
+      removedSheets: [],
+      loadSheetUsingURIString(url, type) {
+        this.loadedSheets.push({ url, type });
+      },
+      removeSheetUsingURIString(url, type) {
+        this.removedSheets.push({ url, type });
+      },
+    },
     requestAnimationFrame(callback) {
       callback();
     },
@@ -135,8 +158,36 @@ test("toast is local to its browser document and exposes localized controls", ()
     "downloadit-toast-close",
   ]);
   assert.equal(timers.at(-1).delay, 3500);
+  assert.deepEqual(window.windowUtils.loadedSheets, [{
+    url: "chrome://downloadit/content/chrome.css",
+    type: window.windowUtils.AUTHOR_SHEET,
+  }]);
+
+  destroyDownloadItToasts(window);
+  assert.equal(document.getElementById("downloadit-toast-host"), null);
+  assert.deepEqual(window.windowUtils.removedSheets, [{
+    url: "chrome://downloadit/content/chrome.css",
+    type: window.windowUtils.AUTHOR_SHEET,
+  }]);
 });
 
 test("toast declines windows without a document root", () => {
   assert.equal(showDownloadItToast({}, "message"), false);
+});
+
+test("toast uses the browser chrome stylesheet included in both package scripts", () => {
+  const toast = read("addon/chrome/content/DownloadItChrome.sys.mjs");
+  const styles = read("addon/chrome/content/chrome.css");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const powerShellPack = read("pack.ps1");
+  const bashPack = read("pack.sh");
+
+  assert.match(toast, /loadSheetUsingURIString/);
+  assert.match(toast, /removeSheetUsingURIString/);
+  assert.doesNotMatch(toast, /createElement\(document, "style"\)/);
+  assert.match(styles, /#downloadit-toast-host/);
+  assert.match(styles, /\.downloadit-toast-close/);
+  assert.match(service, /destroyDownloadItToasts\(window\)/);
+  assert.match(powerShellPack, /chrome\/content\/chrome\.css/);
+  assert.match(bashPack, /chrome\/content\/chrome\.css/);
 });
