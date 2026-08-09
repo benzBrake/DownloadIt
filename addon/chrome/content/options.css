@@ -64,6 +64,8 @@ body {
 
 button,
 #default-manager,
+#magnet-manager,
+#ed2k-manager,
 input,
 select,
 textarea {
@@ -76,6 +78,8 @@ button {
 
 button:disabled,
 #default-manager:disabled,
+#magnet-manager:disabled,
+#ed2k-manager:disabled,
 input:disabled {
   cursor: default;
   opacity: 0.55;
@@ -709,7 +713,9 @@ body[data-active-section="mirrors"] .content-scroll {
   gap: 9px;
 }
 
-#default-manager {
+#default-manager,
+#magnet-manager,
+#ed2k-manager {
   width: 100%;
   min-width: 0;
   min-height: 40px;
@@ -720,11 +726,15 @@ body[data-active-section="mirrors"] .content-scroll {
   color: var(--ink);
 }
 
-#default-manager > xul|menupopup > xul|menuitem {
+#default-manager > xul|menupopup > xul|menuitem,
+#magnet-manager > xul|menupopup > xul|menuitem,
+#ed2k-manager > xul|menupopup > xul|menuitem {
   color: var(--ink);
 }
 
 #default-manager:focus-visible,
+#magnet-manager:focus-visible,
+#ed2k-manager:focus-visible,
 button:focus-visible,
 input:focus-visible + .toggle-track {
   outline: 2px solid var(--accent);

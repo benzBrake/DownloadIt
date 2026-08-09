@@ -208,6 +208,7 @@ const state = {
 };
 
 let renderedManagerKeys = null;
+const renderedProtocolManagerKeys = new Map();
 let observedBuiltInRefresh = null;
 let developerModeDoubleClicks = 0;
 let developerModeLastGesture = 0;
@@ -235,6 +236,8 @@ function setLocalizedMessage(element, message) {
 function createSettingsState(snapshot) {
   return {
     defaultManager: snapshot.defaultManager,
+    magnetManager: snapshot.magnetManager || "",
+    ed2kManager: snapshot.ed2kManager || "",
     omitCookies: snapshot.omitCookies,
     autoStartTasks: snapshot.autoStartTasks,
     keepProfileDataOnUninstall: snapshot.keepProfileDataOnUninstall,
@@ -278,6 +281,19 @@ function bindEvents() {
     clearFeedback();
     render();
   });
+  for (const [id, key] of [
+    ["magnet-manager", "magnetManager"],
+    ["ed2k-manager", "ed2kManager"],
+  ]) {
+    document.getElementById(id).addEventListener("command", event => {
+      const item = event.target?.localName === "menuitem"
+        ? event.target
+        : event.currentTarget.selectedItem;
+      state.draft[key] = item?.downloadItManagerKey || "";
+      clearFeedback();
+      render();
+    });
+  }
   document.getElementById("send-cookies").addEventListener("change", event => {
     state.draft.omitCookies = !event.target.checked;
     clearFeedback();
@@ -998,6 +1014,8 @@ function renderManagers() {
     state.draft.defaultManager = selected?.key || "";
   }
   select.disabled = !available.length || state.busy || Boolean(snapshot?.defaultManagerLocked);
+  renderProtocolDefault("magnet", "magnetManager");
+  renderProtocolDefault("ed2k", "ed2kManager");
   refreshButton.disabled = state.busy || !snapshot?.serviceReady;
   refreshButton.querySelector(".button-glyph").textContent =
     state.scanState === "loading" ? "..." : "\u21bb";
@@ -1140,6 +1158,73 @@ function renderManagers() {
     }
     list.append(row);
   }
+}
+
+function renderProtocolDefault(protocol, draftKey) {
+  const select = document.getElementById(`${protocol}-manager`);
+  const popup = document.getElementById(`${protocol}-manager-popup`);
+  const lock = document.getElementById(`${protocol}-manager-lock`);
+  if (!select || !popup || !lock) {
+    return;
+  }
+  const available = draftDownloaders().filter(downloader =>
+    downloader.ref?.provider !== "native" &&
+    downloader.capabilities?.[protocol] === true &&
+    (downloader.available || downloader.enabled),
+  );
+  const optionKeys = [
+    "",
+    ...available.map(downloader => `${downloader.key}\u0000${downloader.name}`),
+  ];
+  const previousKeys = renderedProtocolManagerKeys.get(protocol);
+  const optionsChanged = !previousKeys ||
+    previousKeys.length !== optionKeys.length ||
+    previousKeys.some((key, index) => key !== optionKeys[index]);
+  if (optionsChanged) {
+    popup.replaceChildren();
+    const none = createXULElement(document, "menuitem", { value: "" });
+    none.downloadItManagerKey = "";
+    setLocalized(none, "downloadit-protocol-default-none");
+    popup.append(none);
+    for (const downloader of available) {
+      const item = createXULElement(document, "menuitem", {
+        label: downloader.name,
+        value: downloader.key,
+        manager: downloader.key,
+      });
+      item.downloadItManagerKey = downloader.key;
+      if (downloader.custom) {
+        setLocalized(item, "downloadit-custom-downloader-menu-label", {
+          name: downloader.name,
+        });
+      }
+      popup.append(item);
+    }
+    renderedProtocolManagerKeys.set(protocol, optionKeys);
+    Promise.resolve(document.l10n?.translateFragment?.(popup))
+      .then(() => syncProtocolDefaultSelection(select, popup, state.draft?.[draftKey] || ""))
+      .catch(console.error);
+  }
+  const selectedKey = state.draft?.[draftKey] || "";
+  syncProtocolDefaultSelection(select, popup, selectedKey);
+  select.disabled = state.busy || Boolean(
+    state.snapshot?.protocolDefaultLocks?.[draftKey],
+  );
+  lock.hidden = !state.snapshot?.protocolDefaultLocks?.[draftKey];
+}
+
+function syncProtocolDefaultSelection(select, popup, selectedKey) {
+  const selectedItem = [...popup.children].find(item =>
+    item.downloadItManagerKey === selectedKey,
+  ) || popup.children[0] || null;
+  if (!selectedItem) {
+    select.selectedItem = null;
+    select.selectedIndex = -1;
+    select.removeAttribute("value");
+    return;
+  }
+  select.selectedItem = selectedItem;
+  select.selectedIndex = [...popup.children].indexOf(selectedItem);
 }
 
 function createManagerCapabilities(capabilities = {}) {

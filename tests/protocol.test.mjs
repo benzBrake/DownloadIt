@@ -39,6 +39,7 @@ test("download target URLs are classified before provider dispatch", () => {
     "http://example.com/file.zip",
     "ftp://example.com/file.iso",
     "magnet:?xt=urn:btih:test",
+    "ed2k://|file|Example.bin|4|0123456789ABCDEF|/",
   ]) {
     assert.equal(classifyDownloadTargetURL(url), SUPPORTED, url);
     assert.equal(isSupportedURL(url), true, url);
@@ -51,6 +52,7 @@ test("download target URLs are classified before provider dispatch", () => {
     "resource://gre/modules/AppConstants.sys.mjs",
     "file:///C:/secret.txt",
     "mailto:user@example.com",
+    "maglink:?xt=urn:btih:test",
     "javascript:alert(1)",
     "view-source:https://example.com/",
     "not a URL",

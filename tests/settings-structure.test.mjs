@@ -176,6 +176,10 @@ test("settings dialog contains the current capability controls", () => {
   assert.match(markup, /xmlns:xul="http:\/\/www\.mozilla\.org\/keymaster\/gatekeeper\/there\.is\.only\.xul"/);
   assert.match(markup, /<xul:menulist id="default-manager"/);
   assert.match(markup, /<xul:menupopup id="default-manager-popup"/);
+  assert.match(markup, /<xul:menulist id="magnet-manager"/);
+  assert.match(markup, /<xul:menupopup id="magnet-manager-popup"/);
+  assert.match(markup, /<xul:menulist id="ed2k-manager"/);
+  assert.match(markup, /<xul:menupopup id="ed2k-manager-popup"/);
   assert.match(markup, /<link rel="localization" href="downloadit\.ftl"/);
   assert.match(markup, /<script[^>]+src="chrome:\/\/downloadit\/content\/options\.js"/);
   for (const id of [
@@ -293,6 +297,9 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /value\.key === key/);
   assert.match(script, /select\.selectedItem = selectedItem/);
   assert.match(script, /item => item\.downloadItManagerKey === selected\?\.key/);
+  assert.match(script, /renderedProtocolManagerKeys/);
+  assert.match(script, /syncProtocolDefaultSelection\(select, popup, selectedKey\)/);
+  assert.match(script, /select\.selectedIndex = \[\.\.\.popup\.children\]\.indexOf\(selectedItem\)/);
   assert.match(script, /refreshManagers\(\{ persistDefault: false \}\)/);
   assert.match(script, /await state\.service\.applySettings\(payload\)/);
   assert.match(script, /autoCaptureRules/);
@@ -321,6 +328,18 @@ test("settings refresh keeps default-manager persistence staged", () => {
   );
   assert.match(script, /\? window\.browsingContext : window/);
   assert.match(script, /picker\.init\(pickerParent, title, Ci\.nsIFilePicker\.modeOpen\)/);
+});
+
+test("protocol manager selectors reuse the default manager XUL styling", () => {
+  const styles = read("addon/chrome/content/options.css");
+  const enUS = read("addon/chrome/content/locales/en-US/downloadit.ftl");
+  const zhCN = read("addon/chrome/content/locales/zh-CN/downloadit.ftl");
+
+  for (const id of ["magnet-manager", "ed2k-manager"]) {
+    assert.match(styles, new RegExp(`#${id}[,\\s]`));
+  }
+  assert.match(enUS, /downloadit-protocol-default-none\s*=\s*\r?\n\s*\.label = Firefox native handling/);
+  assert.match(zhCN, /downloadit-protocol-default-none\s*=\s*\r?\n\s*\.label = Firefox 原生处理/);
 });
 
 test("built-in provider settings and guarded local protocols are wired end to end", () => {
@@ -617,6 +636,10 @@ test("settings dialog exposes a unified download-tool editor", () => {
   assert.match(script, /DOWNLOADER_CAPABILITY_KEYS/);
   assert.match(service, /getFlashGotDownloaderCapabilities/);
   assert.match(service, /getCustomDownloaderCapabilities/);
+  assert.match(
+    script,
+    /downloader\.capabilities\?\.\[protocol\] === true &&\s*\(downloader\.available \|\| downloader\.enabled\)/,
+  );
 });
 
 test("custom downloader persistence is profile-scoped and atomic", () => {

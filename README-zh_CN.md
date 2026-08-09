@@ -26,7 +26,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 可选将 [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) 等脚本/扩展发出的兼容 IDM 本地 HTTP 请求转交给当前默认下载器。
 - 在 Firefox 原生下载弹窗中为支持的下载加入 DownloadIt 选项。
 - 为文件类型自动接管提供白名单和黑名单，并由黑名单优先判定。
-- 支持 `http`、`https`、`ftp` 和 `magnet` 链接。
+- 支持 `http`、`https`、`ftp`、`magnet` 和 `ed2k` 链接。
 - 向外部下载工具传递 URL、文件名、Referer、Cookie 和 User-Agent；Firefox 内建下载器使用原生浏览与 Cookie 上下文。
 - 在 Firefox 设置对话框中管理默认下载工具、任务启动行为和 Cookie 转发策略。
 - 提供独立的“自动接管”设置标签页，用于编辑黑白名单并查看内置保护规则。
@@ -134,7 +134,7 @@ Linux：
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.7.3`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.8.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -169,7 +169,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 对于受支持的链接，直接选择 DownloadIt 右键子菜单中的下载工具只会使用该工具发送当前链接，不会更改已配置的默认下载工具。需要同时持久化所选工具时，使用独立的“设为默认并下载”子菜单。Firefox 策略可以禁用默认工具修改操作，而不会影响单次下载。
 
-设置页的已发现工具列表会显示当前 DownloadIt 集成路径的能力元数据：`+` 表示支持，`-` 表示不支持，`?` 表示目前尚不明确。标签分别表示 POST 请求正文、Cookie 处理、DownloadIt 批量提交、由调用方指定下载目录，以及控制提交任务是否自动开始。native provider 使用 Firefox 自己的请求上下文，FlashGot 能力取决于随附桥接程序实现的集成，JDownloader 和 Xtreme Download Manager 的能力取决于各自回环协议，自定义命令的能力根据参数占位符推导，aria2 的能力则取决于 JSON-RPC provider。这些标签描述的是 DownloadIt 能否通过当前路径传递相应数据，并不代表下载器本身提供的全部功能。
+设置页的已发现工具列表会显示当前 DownloadIt 集成路径的能力元数据：`+` 表示支持，`-` 表示不支持，`?` 表示目前尚不明确。标签分别表示 POST 请求正文、Cookie 处理、DownloadIt 批量提交、由调用方指定下载目录、控制提交任务是否自动开始，以及能否通过该路径传递 `magnet` 或 `ed2k` URL。native provider 使用 Firefox 自己的请求上下文，FlashGot 能力取决于随附桥接程序实现的集成，JDownloader 和 Xtreme Download Manager 的能力取决于各自回环协议，自定义命令的能力根据参数占位符推导，aria2 的能力则取决于 JSON-RPC provider。这些标签描述的是 DownloadIt 能否通过当前路径传递相应数据，并不代表下载器本身提供的全部功能。
 
 工具栏面板、右键菜单中的“DownloadIt 设置”或 `about:addons` 中的扩展设置都可以打开设置页面。
 
@@ -178,6 +178,8 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
 | `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"jdownloader","id":"jdownloader"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
+| `downloadit.magnetDM` | 字符串 | 标准 `magnet:` 链接的可选默认外部下载器 JSON 引用。值为空或引用无效时，链接保留在 Firefox 原生外部协议流程中处理。 |
+| `downloadit.ed2kDM` | 字符串 | `ed2k:` 链接的可选默认外部下载器 JSON 引用。值为空或引用无效时，链接保留在 Firefox 原生外部协议流程中处理。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
 | `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前由 JDownloader 和 AB Download Manager 使用。 |
 | `downloadit.keepProfileDataOnUninstall` | 布尔值 | 卸载扩展时保留 profile 下 `DownloadIt` 目录中的 JSON 配置和规则文件。无论此开关如何，随包提供的辅助二进制都会删除；默认值为 `true`。 |
@@ -230,7 +232,7 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 首次保存规则时才会创建该文件，并通过原子写入更新。JSON 无效、匹配项重复、ID 无效或版本不受支持时会保留原文件且禁止覆盖，同时停用自动接管，直到用户从设置页重新加载或明确重置。用户黑白名单规则可以在“自动接管”标签页添加、逐项移除或分别清空。
 
-自动接管按黑名单优先判定：内置和用户黑名单优先，用户白名单中的类型会被接管，未出现在两张名单中的类型继续进入 Firefox 原生下载提示。下载目标会先于用户规则分类：普通 `http`、`https`、`ftp` 和 `magnet` 目标可以转交；`blob:` 和 `data:` 资源的数据属于创建它的浏览器上下文，因此始终留在 Firefox 原生流程；其他不支持的协议则会被过滤。`.xpi` 是不可修改的内置黑名单条目。HTTP 和 HTTPS 目标的解码路径以 `.xpi` 结尾或包含独立 `xpinstall` 路径标记时，所有 DownloadIt 入口都会拒绝转交；URL 含糊时还会结合 Firefox 提供的文件名、主扩展名和 MIME 元数据执行相同保护。查询参数、fragment 或主机名中的普通 `xpinstall` 文本不会触发路径规则。这些目标限制由代码维护，当前扩展名规则和未来域名规则都不能覆盖；Referer 和来源页面 URL 会单独校验，不会被误当成下载目标。空扩展名同样保持原生处理；`.exe` 等可执行文件扩展名可以明确加入白名单。当 Firefox 内建下载器是默认项时，hook 会保留现有原生 launcher，不会再次请求同一地址。
+自动接管按黑名单优先判定：内置和用户黑名单优先，用户白名单中的类型会被接管，未出现在两张名单中的类型继续进入 Firefox 原生下载提示。下载目标会先于用户规则分类：普通 `http`、`https`、`ftp`、`magnet` 和 `ed2k` 目标可以转交；`magnet` 和 `ed2k` 链接还可以不依赖扩展名白名单，直接使用各自的协议默认下载器；`blob:` 和 `data:` 资源的数据属于创建它的浏览器上下文，因此始终留在 Firefox 原生流程；其他不支持的协议则会被过滤。`.xpi` 是不可修改的内置黑名单条目。HTTP 和 HTTPS 目标的解码路径以 `.xpi` 结尾或包含独立 `xpinstall` 路径标记时，所有 DownloadIt 入口都会拒绝转交；URL 含糊时还会结合 Firefox 提供的文件名、主扩展名和 MIME 元数据执行相同保护。查询参数、fragment 或主机名中的普通 `xpinstall` 文本不会触发路径规则。这些目标限制由代码维护，当前扩展名规则和未来域名规则都不能覆盖；Referer 和来源页面 URL 会单独校验，不会被误当成下载目标。空扩展名同样保持原生处理；`.exe` 等可执行文件扩展名可以明确加入白名单。当 Firefox 内建下载器是默认项时，hook 会保留现有原生 launcher，不会再次请求同一地址。
 
 ### 镜像适配器
 
@@ -321,7 +323,7 @@ Windows 上的自定义下载器默认隐藏进程窗口。取消“隐藏运行
 
 aria2 定义通过 HTTP 或 HTTPS JSON-RPC 连接，支持可选密钥和服务端下载目录；多链接使用 `system.multicall` 提交。本地启动配置可选填写 `executablePath` 和 `configurationPath`：只有启用自动启动时可执行文件才是必填项，配置文件可以始终留空；填写配置文件后，DownloadIt 会把解析后的路径作为 `--conf-path` 传给 aria2c。可选的 aria2c 自动启动仅适用于 HTTP 回环地址，DownloadIt 会管理配置文件路径、RPC 开关、监听地址、端口和密钥参数，等待最多五秒后重试一次请求。删除或禁用自定义条目以及 Firefox 退出时，DownloadIt 会关闭由自身启动的 aria2c 实例；不会强制终止外部管理的进程。RPC 密钥以明文保存在 JSON 文件中，但不会写入 DownloadIt 日志。
 
-`native:firefox` provider 接受 HTTP、HTTPS、批量链接和 POST 请求体。它会继承来源 frame 可用的 principal、Referer、容器、隐私浏览和 Cookie jar 上下文。下载直接进入 Firefox 首选下载目录，使用 `.part` 文件；目标文件已存在时按 `name(1).ext` 形式生成唯一名称。文件名优先使用显式名称，其次取 URL 最后一个路径段，最后回退为 `download`。DownloadIt 不会额外探测重定向或 `Content-Disposition`，因此签名 URL、一次性 URL 和 POST 地址只请求一次。该 provider 会显示在 DownloadIt 菜单和设置中，但不会出现在 Firefox 自己的下载弹窗里，因为其中已有等价的“保存文件”操作。FTP 和 magnet 链接需要使用外部 provider。
+`native:firefox` provider 接受 HTTP、HTTPS、批量链接和 POST 请求体。它会继承来源 frame 可用的 principal、Referer、容器、隐私浏览和 Cookie jar 上下文。下载直接进入 Firefox 首选下载目录，使用 `.part` 文件；目标文件已存在时按 `name(1).ext` 形式生成唯一名称。文件名优先使用显式名称，其次取 URL 最后一个路径段，最后回退为 `download`。DownloadIt 不会额外探测重定向或 `Content-Disposition`，因此签名 URL、一次性 URL 和 POST 地址只请求一次。该 provider 会显示在 DownloadIt 菜单和设置中，但不会出现在 Firefox 自己的下载弹窗里，因为其中已有等价的“保存文件”操作。FTP、magnet 和 ed2k 链接需要使用外部 provider。
 
 ## 项目结构
 

@@ -18,6 +18,10 @@ import {
   isDownloadDialogWindow,
 } from "./DownloadItDownloadDialog.sys.mjs";
 import {
+  registerDownloadItExternalProtocolHook,
+  unregisterDownloadItExternalProtocolHook,
+} from "./DownloadItExternalProtocol.sys.mjs";
+import {
   BUILT_IN_AUTO_CAPTURE_DENY,
   createEmptyAutoCaptureDocument,
   getAutoCaptureDisposition,
@@ -202,6 +206,8 @@ function isExecutableLocalFile(file, platform) {
 }
 
 const PREF_DEFAULT_MANAGER = "downloadit.defaultDM";
+const PREF_MAGNET_MANAGER = "downloadit.magnetDM";
+const PREF_ED2K_MANAGER = "downloadit.ed2kDM";
 const PREF_MANAGER_CACHE = "downloadit.detectedManagers";
 const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
@@ -233,6 +239,19 @@ const PREF_JDOWNLOADER_AUTO_LAUNCH = "downloadit.jdownloader.autoLaunch";
 const PREF_JDOWNLOADER_DETECTED_PATH = "downloadit.jdownloader.detectedPath";
 const PREF_JDOWNLOADER_DETECTED_JAVA_ARGS =
   "downloadit.jdownloader.detectedJavaArgs";
+
+function getDownloadProtocol(value) {
+  const scheme = String(value || "").match(
+    /^([a-z][a-z0-9+.-]*):/i,
+  )?.[1];
+  return scheme ? scheme.toLowerCase() : "";
+}
+
+function downloaderSupportsProtocol(downloader, value) {
+  const protocol = getDownloadProtocol(value);
+  return (protocol !== "magnet" && protocol !== "ed2k") ||
+    downloader?.capabilities?.[protocol] === true;
+}
 
 const JDOWNLOADER_REQUEST_TIMEOUT_MS = 3000;
 const JDOWNLOADER_RETRY_DELAY_MS = 8000;
@@ -425,6 +444,142 @@ export class DownloadItService {
     return parseDownloaderRef(
       Services.prefs.getStringPref(PREF_DEFAULT_MANAGER, ""),
     );
+  }
+
+  getProtocolDefaultPreference(protocol) {
+    const scheme = String(protocol || "").toLowerCase().replace(/:$/, "");
+    if (scheme === "magnet") {
+      return PREF_MAGNET_MANAGER;
+    }
+    if (scheme === "ed2k") {
+      return PREF_ED2K_MANAGER;
+    }
+    return "";
+  }
+
+  getProtocolDefaultRef(protocol) {
+    const preference = this.getProtocolDefaultPreference(protocol);
+    return preference
+      ? parseDownloaderRef(Services.prefs.getStringPref(preference, ""))
+      : null;
+  }
+
+  getBuiltInProtocolDownloader(ref) {
+    const protocol = BUILT_IN_PROTOCOLS.find(entry =>
+      entry.provider === ref?.provider && entry.downloaderId === ref?.id,
+    );
+    if (!protocol) {
+      return null;
+    }
+    const settings = this.getBuiltInProtocolSettings(protocol.id).settings;
+    if (protocol.provider === JDOWNLOADER_PROVIDER) {
+      return this.createJDownloaderDescriptor(settings);
+    }
+    if (protocol.provider === ABDM_PROVIDER) {
+      return this.createABDMDescriptor(settings);
+    }
+    if (protocol.provider === XDM_PROVIDER) {
+      return this.createXDMDescriptor(settings);
+    }
+    if (protocol.provider === UGET_PROVIDER) {
+      return this.createUGetDescriptor(settings);
+    }
+    if (protocol.provider === ARIA2NEXT_PROVIDER) {
+      return this.createAria2NextDescriptor(settings);
+    }
+    return null;
+  }
+
+  getConfiguredProtocolDefaultDownloader(protocol) {
+    const scheme = String(protocol || "").toLowerCase().replace(/:$/, "");
+    const ref = this.getProtocolDefaultRef(protocol);
+    if (!ref || ref.provider === NATIVE_PROVIDER) {
+      return null;
+    }
+    const downloader = this.resolveDownloader(ref) ||
+      this.getBuiltInProtocolDownloader(ref);
+    return downloader?.capabilities?.[scheme] === true ? downloader : null;
+  }
+
+  getProtocolDefaultDownloader(protocol) {
+    const downloader = this.getConfiguredProtocolDefaultDownloader(protocol);
+    return downloader?.available ? downloader : null;
+  }
+
+  getProtocolDefaultManager(protocol) {
+    return this.getProtocolDefaultDownloader(protocol)?.key || "";
+  }
+
+  getProtocolDefaultSettings() {
+    return {
+      magnetManager: this.getConfiguredProtocolDefaultDownloader("magnet")?.key || "",
+      ed2kManager: this.getConfiguredProtocolDefaultDownloader("ed2k")?.key || "",
+    };
+  }
+
+  getProtocolDefaultLocks() {
+    return {
+      magnetManager: Services.prefs.prefIsLocked(PREF_MAGNET_MANAGER),
+      ed2kManager: Services.prefs.prefIsLocked(PREF_ED2K_MANAGER),
+    };
+  }
+
+  clearProtocolDefaultForProvider(provider, id = "") {
+    for (const preference of [PREF_MAGNET_MANAGER, PREF_ED2K_MANAGER]) {
+      if (Services.prefs.prefIsLocked(preference)) {
+        continue;
+      }
+      const ref = parseDownloaderRef(
+        Services.prefs.getStringPref(preference, ""),
+      );
+      if (ref?.provider === provider && (!id || ref.id === id)) {
+        Services.prefs.clearUserPref(preference);
+      }
+    }
+  }
+
+  clearInvalidProtocolDefaults() {
+    for (const preference of [PREF_MAGNET_MANAGER, PREF_ED2K_MANAGER]) {
+      const protocol = preference === PREF_MAGNET_MANAGER ? "magnet" : "ed2k";
+      if (Services.prefs.prefIsLocked(preference)) {
+        continue;
+      }
+      const ref = parseDownloaderRef(
+        Services.prefs.getStringPref(preference, ""),
+      );
+      if (!ref || ref.provider === NATIVE_PROVIDER) {
+        if (ref) {
+          Services.prefs.clearUserPref(preference);
+        }
+        continue;
+      }
+      const builtInProtocol = BUILT_IN_PROTOCOLS.find(protocol =>
+        protocol.provider === ref.provider &&
+        protocol.downloaderId === ref.id,
+      );
+      if (builtInProtocol) {
+        // Built-in providers can be temporarily offline while their process
+        // or endpoint is being refreshed. Keep the user's route until the
+        // provider is explicitly disabled.
+        if (
+          this.getBuiltInProtocolSettings(builtInProtocol.id).settings.enabled
+        ) {
+          continue;
+        }
+        Services.prefs.clearUserPref(preference);
+        continue;
+      }
+      const configured = this.resolveDownloader(ref);
+      if (configured?.enabled && configured?.capabilities?.[protocol] === true) {
+        continue;
+      }
+      if (
+        configured?.capabilities?.[protocol] !== true ||
+        !configured?.available
+      ) {
+        Services.prefs.clearUserPref(preference);
+      }
+    }
   }
 
   get defaultDownloader() {
@@ -2744,6 +2899,8 @@ export class DownloadItService {
       defaultDownloader: this.defaultDownloader
         ? { ...this.defaultDownloader }
         : null,
+      ...this.getProtocolDefaultSettings(),
+      protocolDefaultLocks: this.getProtocolDefaultLocks(),
       detectedManagerCount: this.downloaders.filter(downloader =>
         downloader.ref.provider === FLASHGOT_PROVIDER &&
         downloader.available
@@ -2828,6 +2985,8 @@ export class DownloadItService {
 
   async applySettings({
     defaultManager = null,
+    magnetManager = null,
+    ed2kManager = null,
     omitCookies = false,
     autoStartTasks = null,
     keepProfileDataOnUninstall = null,
@@ -2846,6 +3005,13 @@ export class DownloadItService {
     const defaultManagerRequested = defaultManager !== null &&
       defaultManager !== undefined;
     const manager = defaultManagerRequested ? String(defaultManager || "") : "";
+    const currentProtocolDefaults = this.getProtocolDefaultSettings();
+    const requestedMagnetManager = magnetManager == null
+      ? currentProtocolDefaults.magnetManager
+      : String(magnetManager || "");
+    const requestedEd2kManager = ed2kManager == null
+      ? currentProtocolDefaults.ed2kManager
+      : String(ed2kManager || "");
     const currentAutoCaptureRules = this.autoCaptureRules;
     const requestedAutoCaptureRules = autoCaptureRules == null
       ? currentAutoCaptureRules
@@ -3035,6 +3201,40 @@ export class DownloadItService {
     if (defaultManagerRequested && manager && !requestedDownloader?.available) {
       throw new Error(`Unsupported download manager: ${manager}`);
     }
+    for (const [protocol, value] of [
+      ["magnet", requestedMagnetManager],
+      ["ed2k", requestedEd2kManager],
+    ]) {
+      if (!value) {
+        continue;
+      }
+      const ref = parseDownloaderRef(value);
+      const downloader = this.resolveDownloader(value, requestedCustomDownloaders) ||
+        this.getBuiltInProtocolDownloader(ref);
+      const configuredEnabled = downloader?.enabled === true;
+      if (
+        downloader?.ref?.provider === NATIVE_PROVIDER ||
+        downloader?.capabilities?.[protocol] !== true
+      ) {
+        throw new Error(`Unsupported ${protocol} download manager: ${value}`);
+      }
+      if (!downloader.available && !configuredEnabled) {
+        throw new Error(`Unsupported ${protocol} download manager: ${value}`);
+      }
+    }
+    const protocolDefaultLocks = this.getProtocolDefaultLocks();
+    if (
+      protocolDefaultLocks.magnetManager &&
+      requestedMagnetManager !== currentProtocolDefaults.magnetManager
+    ) {
+      throw new Error("The magnet download manager preference is locked");
+    }
+    if (
+      protocolDefaultLocks.ed2kManager &&
+      requestedEd2kManager !== currentProtocolDefaults.ed2kManager
+    ) {
+      throw new Error("The ed2k download manager preference is locked");
+    }
     const configuredCustomEntry = configuredDefaultRef?.provider === CUSTOM_PROVIDER
       ? effectiveCustomDownloaders.downloaders.find(
           downloader => downloader.id === configuredDefaultRef.id,
@@ -3147,6 +3347,14 @@ export class DownloadItService {
     }
 
     if (customDownloadersChanged) {
+      for (const entry of this.customDownloaderDocument.downloaders) {
+        const replacement = requestedCustomDownloaders.downloaders.find(
+          value => value.id === entry.id,
+        );
+        if (!replacement || !replacement.enabled) {
+          this.clearProtocolDefaultForProvider(CUSTOM_PROVIDER, entry.id);
+        }
+      }
       await this.shutdownRemovedAria2Downloaders(
         this.customDownloaderDocument,
         requestedCustomDownloaders,
@@ -3227,6 +3435,26 @@ export class DownloadItService {
     if (Boolean(omitCookies) !== currentOmitCookies) {
       Services.prefs.setBoolPref(PREF_OMIT_COOKIES, Boolean(omitCookies));
     }
+    if (requestedMagnetManager !== currentProtocolDefaults.magnetManager) {
+      if (requestedMagnetManager) {
+        Services.prefs.setStringPref(
+          PREF_MAGNET_MANAGER,
+          serializeDownloaderRef(parseDownloaderRef(requestedMagnetManager)),
+        );
+      } else if (Services.prefs.prefHasUserValue(PREF_MAGNET_MANAGER)) {
+        Services.prefs.clearUserPref(PREF_MAGNET_MANAGER);
+      }
+    }
+    if (requestedEd2kManager !== currentProtocolDefaults.ed2kManager) {
+      if (requestedEd2kManager) {
+        Services.prefs.setStringPref(
+          PREF_ED2K_MANAGER,
+          serializeDownloaderRef(parseDownloaderRef(requestedEd2kManager)),
+        );
+      } else if (Services.prefs.prefHasUserValue(PREF_ED2K_MANAGER)) {
+        Services.prefs.clearUserPref(PREF_ED2K_MANAGER);
+      }
+    }
     if (requestedAutoStartTasks !== currentAutoStartTasks) {
       Services.prefs.setBoolPref(PREF_AUTO_START_TASKS, requestedAutoStartTasks);
     }
@@ -3245,6 +3473,7 @@ export class DownloadItService {
       this.xdmProbePromise = null;
     }
     if (!requestedXDM.enabled) {
+      this.clearProtocolDefaultForProvider(XDM_PROVIDER, XDM_DOWNLOADER_ID);
       if (currentXDM.enabled) {
         this.clearXDMConfiguration();
       }
@@ -3257,6 +3486,7 @@ export class DownloadItService {
       Services.prefs.setBoolPref(PREF_UGET_ENABLED, requestedUGet.enabled);
     }
     if (!requestedUGet.enabled) {
+      this.clearProtocolDefaultForProvider(UGET_PROVIDER, UGET_DOWNLOADER_ID);
       if (currentUGet.enabled) {
         this.clearUGetConfiguration();
       }
@@ -3270,6 +3500,10 @@ export class DownloadItService {
       );
     }
     if (!requestedAria2Next.enabled) {
+      this.clearProtocolDefaultForProvider(
+        ARIA2NEXT_PROVIDER,
+        ARIA2NEXT_DOWNLOADER_ID,
+      );
       this.aria2NextOnline = false;
       if (currentAria2Next.enabled) {
         this.clearAria2NextConfiguration();
@@ -3313,6 +3547,7 @@ export class DownloadItService {
       }
     }
     if (!requestedABDM.enabled) {
+      this.clearProtocolDefaultForProvider(ABDM_PROVIDER, ABDM_DOWNLOADER_ID);
       if (currentABDM.enabled) {
         this.clearABDMConfiguration();
       }
@@ -3349,6 +3584,10 @@ export class DownloadItService {
       );
     }
     if (!requestedJDownloader.enabled) {
+      this.clearProtocolDefaultForProvider(
+        JDOWNLOADER_PROVIDER,
+        JDOWNLOADER_DOWNLOADER_ID,
+      );
       if (currentJDownloader.enabled) {
         this.clearJDownloaderConfiguration();
       }
@@ -3410,6 +3649,7 @@ export class DownloadItService {
         JSON.stringify(requestedMirrorSettings),
       );
     }
+    this.clearInvalidProtocolDefaults();
     // Revalidate enabled built-in protocols after their settings are saved.
     // The settings page observes this background probe and refreshes its snapshot.
     this.builtInRefreshPromise = null;
@@ -3427,6 +3667,7 @@ export class DownloadItService {
       ? await this.deployBinary()
       : "";
     await this.reloadCustomDownloaders();
+    this.clearInvalidProtocolDefaults();
     await this.reloadAutoCaptureRules();
     registerLinkCollectorActor();
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
@@ -3456,6 +3697,7 @@ export class DownloadItService {
     }
 
     registerDownloadItHelperAppHook(this);
+    registerDownloadItExternalProtocolHook(this);
 
     try {
       await this.refreshManagers();
@@ -3489,6 +3731,7 @@ export class DownloadItService {
     }
     await this.shutdownAria2NextIfEnabled();
     unregisterDownloadItHelperAppHook(this);
+    unregisterDownloadItExternalProtocolHook(this);
     try {
       Services.obs.removeObserver(this, "browser-delayed-startup-finished");
     } catch {}
@@ -4019,6 +4262,34 @@ export class DownloadItService {
     return this.downloadLinks([context], manager);
   }
 
+  async downloadProtocolURI({
+    uri,
+    principal = null,
+    browsingContext = null,
+    manager,
+  } = {}) {
+    const url = String(uri?.spec || "");
+    const protocol = getDownloadProtocol(url);
+    if (protocol !== "magnet" && protocol !== "ed2k") {
+      throw new DownloadItError("unsupported-url");
+    }
+
+    let browser = null;
+    try {
+      browser = browsingContext?.topFrameElement || null;
+    } catch {}
+    const pageURL = String(browser?.currentURI?.spec || "");
+    const principalURL = String(principal?.URI?.spec || "");
+    return this.downloadLink({
+      url,
+      description: url,
+      filename: "",
+      browser,
+      referer: isSupportedContextURL(principalURL) ? principalURL : pageURL,
+      downloadPageReferer: pageURL,
+    }, manager);
+  }
+
   getProviderDownloadOptions(downloader) {
     return {
       autoStartTask: downloader?.capabilities?.taskStart === true
@@ -4214,6 +4485,9 @@ export class DownloadItService {
     }
 
     if (links.length === 0) {
+      throw new DownloadItError("unsupported-url");
+    }
+    if (links.some(link => !downloaderSupportsProtocol(downloader, link.url))) {
       throw new DownloadItError("unsupported-url");
     }
 

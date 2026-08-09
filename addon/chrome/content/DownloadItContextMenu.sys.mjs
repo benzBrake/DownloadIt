@@ -11,6 +11,17 @@ function normalizeDownloader(value) {
     : value;
 }
 
+function getContextProtocol(url) {
+  return String(url || "").match(/^([a-z][a-z0-9+.-]*):/i)?.[1]
+    ?.toLowerCase() || "";
+}
+
+function downloaderSupportsContext(downloader, context) {
+  const protocol = getContextProtocol(context?.url);
+  return (protocol !== "magnet" && protocol !== "ed2k") ||
+    downloader?.capabilities?.[protocol] === true;
+}
+
 const DOWNLOAD_ERROR_MESSAGES = {
   "native-download-failed": "downloadit-error-native-start",
   "native-partial-failure": "downloadit-error-native-partial",
@@ -444,7 +455,8 @@ export class DownloadItContextMenuController {
       const item = createXULElement(this.document, "menuitem", {
         label: downloader.name,
         value: downloader.key,
-        disabled: !this.context,
+        disabled: !this.context ||
+          !downloaderSupportsContext(downloader, this.context),
       });
       item.downloadItManagerKey = downloader.key;
       if (downloader.custom) {
@@ -485,6 +497,8 @@ export class DownloadItContextMenuController {
           name: "downloadit-download-manager",
           value: downloader.key,
           checked: downloader.key === defaultManager ? "true" : null,
+          disabled: !this.context ||
+            !downloaderSupportsContext(downloader, this.context),
         });
         item.downloadItManagerKey = downloader.key;
         item.checked = downloader.key === defaultManager;
@@ -564,15 +578,14 @@ export class DownloadItContextMenuController {
     try {
       await this.service.downloadLink(this.context, manager);
     } catch (error) {
-      const messageId = error?.code === "unsupported-url"
-        ? "downloadit-unsupported"
-        : "downloadit-download-failed";
-      const args = messageId === "downloadit-download-failed"
-        ? {
-            manager: this.service.resolveDownloader?.(manager)?.name || manager,
-            error: await this.formatDownloadError(error),
-          }
-        : null;
+      if (error?.code === "unsupported-url") {
+        return;
+      }
+      const messageId = "downloadit-download-failed";
+      const args = {
+        manager: this.service.resolveDownloader?.(manager)?.name || manager,
+        error: await this.formatDownloadError(error),
+      };
       this.service.alert(
         this.window,
         await this.formatMessage(messageId, args),
@@ -587,15 +600,14 @@ export class DownloadItContextMenuController {
     try {
       await this.service.downloadLinks(this.selectionContext.links, manager);
     } catch (error) {
-      const messageId = error?.code === "unsupported-url"
-        ? "downloadit-unsupported"
-        : "downloadit-download-selection-failed";
-      const args = messageId === "downloadit-download-selection-failed"
-        ? {
-            manager: this.service.resolveDownloader?.(manager)?.name || manager,
-            error: await this.formatDownloadError(error),
-          }
-        : null;
+      if (error?.code === "unsupported-url") {
+        return;
+      }
+      const messageId = "downloadit-download-selection-failed";
+      const args = {
+        manager: this.service.resolveDownloader?.(manager)?.name || manager,
+        error: await this.formatDownloadError(error),
+      };
       this.service.alert(
         this.window,
         await this.formatMessage(messageId, args),

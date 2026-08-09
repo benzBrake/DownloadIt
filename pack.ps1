@@ -99,6 +99,7 @@ $requiredEntries = @(
     "chrome/content/DownloadItAriaNg.sys.mjs"
     "chrome/content/DownloadItAriaNgActor.sys.mjs"
     "chrome/content/DownloadItDownloaders.sys.mjs"
+    "chrome/content/DownloadItExternalProtocol.sys.mjs"
     "chrome/content/DownloadItGitHubMirror.sys.mjs"
     "chrome/content/DownloadItIDMBridge.sys.mjs"
     "chrome/content/DownloadItIDMProtocol.sys.mjs"

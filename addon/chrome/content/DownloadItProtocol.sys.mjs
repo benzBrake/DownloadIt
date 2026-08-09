@@ -6,6 +6,7 @@ const SUPPORTED_PROTOCOLS = new Set([
   "https:",
   "ftp:",
   "magnet:",
+  "ed2k:",
 ]);
 
 const BROWSER_NATIVE_ONLY_PROTOCOLS = new Set([
@@ -29,6 +30,10 @@ function parseURL(value) {
   try {
     return new URL(String(value || ""));
   } catch {
+    const raw = String(value || "");
+    if (/^ed2k:/i.test(raw)) {
+      return { protocol: "ed2k:", pathname: "", spec: raw };
+    }
     return null;
   }
 }

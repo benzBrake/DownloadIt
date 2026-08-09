@@ -745,6 +745,111 @@ test("helper-app hooks automatically hand off remembered extensions and restore 
   }
 });
 
+test("helper-app hooks route magnet and ed2k links through protocol defaults", async () => {
+  const originalComponents = globalThis.Components;
+  globalThis.Components = { results: { NS_BINDING_ABORTED: "aborted" } };
+  const calls = [];
+  const service = {
+    defaultManager: "generic",
+    getProtocolDefaultManager(protocol) {
+      return protocol === "magnet" ? "magnet-manager" : "ed2k-manager";
+    },
+    async downloadLauncher(args) {
+      calls.push(args);
+    },
+  };
+  class MockHelperDialog {
+    show() {
+      this.showCalls = (this.showCalls || 0) + 1;
+    }
+  }
+  const launchers = [
+    {
+      source: { spec: "magnet:?xt=urn:btih:test" },
+      suggestedFileName: "",
+      MIMEInfo: {},
+      cancel(reason) { this.cancelReason = reason; },
+    },
+    {
+      source: { spec: "ed2k://|file|Example.bin|4|0123456789ABCDEF|/" },
+      suggestedFileName: "",
+      MIMEInfo: {},
+      cancel(reason) { this.cancelReason = reason; },
+    },
+  ];
+  const dialog = new MockHelperDialog();
+  registerDownloadItHelperAppHook(service, {
+    helperDialogConstructor: MockHelperDialog,
+  });
+  try {
+    for (const launcher of launchers) {
+      dialog.show(launcher, null, 0);
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls.map(call => call.manager), [
+      "magnet-manager",
+      "ed2k-manager",
+    ]);
+    assert.equal(launchers[0].cancelReason, "aborted");
+    assert.equal(launchers[1].cancelReason, "aborted");
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+    if (originalComponents === undefined) {
+      delete globalThis.Components;
+    } else {
+      globalThis.Components = originalComponents;
+    }
+  }
+});
+
+test("helper-app hooks keep protocol links native when their protocol default is absent", async () => {
+  const originalComponents = globalThis.Components;
+  globalThis.Components = { results: { NS_BINDING_ABORTED: "aborted" } };
+  const calls = [];
+  let nativeShows = 0;
+  const service = {
+    defaultManager: "generic",
+    defaultDownloader: { ref: { provider: "flashgot" } },
+    getProtocolDefaultManager() {
+      return "";
+    },
+    getAutoCaptureDisposition() {
+      return "allow";
+    },
+    async downloadLauncher(args) {
+      calls.push(args);
+    },
+  };
+  class MockHelperDialog {
+    show() {
+      nativeShows += 1;
+    }
+  }
+  const launcher = {
+    source: { spec: "magnet:?xt=urn:btih:test" },
+    suggestedFileName: "Example.bin",
+    MIMEInfo: { primaryExtension: "bin" },
+    cancel(reason) { this.cancelReason = reason; },
+  };
+  registerDownloadItHelperAppHook(service, {
+    helperDialogConstructor: MockHelperDialog,
+  });
+  try {
+    new MockHelperDialog().show(launcher, null, 0);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(nativeShows, 1);
+    assert.equal(calls.length, 0);
+    assert.equal(launcher.cancelReason, undefined);
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+    if (originalComponents === undefined) {
+      delete globalThis.Components;
+    } else {
+      globalThis.Components = originalComponents;
+    }
+  }
+});
+
 test("helper-app hooks keep denied and browser-native targets in Firefox", async () => {
   class MockHelperDialog {
     show() {

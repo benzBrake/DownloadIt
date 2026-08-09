@@ -72,21 +72,51 @@ test("downloader capabilities are normalized as tri-state metadata", () => {
     batch: null,
     directory: null,
     taskStart: null,
+    magnet: false,
+    ed2k: false,
   });
 });
 
-test("FlashGot capability metadata is conservative for unknown managers", () => {
+test("FlashGot capability metadata is conservative without protocol declarations", () => {
   assert.deepEqual(
     getFlashGotDownloaderCapabilities("Internet Download Manager"),
-    { post: true, cookies: true, batch: true, directory: false, taskStart: false },
+    { post: true, cookies: true, batch: true, directory: false, taskStart: false, magnet: false, ed2k: false },
   );
   assert.deepEqual(
     getFlashGotDownloaderCapabilities("GetRight"),
-    { post: false, cookies: true, batch: true, directory: false, taskStart: false },
+    { post: false, cookies: true, batch: true, directory: false, taskStart: false, magnet: false, ed2k: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("Neat Download Manager"),
+    { post: true, cookies: true, batch: true, directory: false, taskStart: false, magnet: false, ed2k: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("GetGo"),
+    { post: false, cookies: false, batch: true, directory: false, taskStart: false, magnet: false, ed2k: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("AB Download Manager"),
+    { post: false, cookies: true, batch: true, directory: false, taskStart: false, magnet: false, ed2k: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("Free Download Manager"),
+    { post: false, cookies: true, batch: true, directory: false, taskStart: false, magnet: false, ed2k: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("BitComet"),
+    { post: false, cookies: false, batch: true, directory: false, taskStart: false, magnet: true, ed2k: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("Download Master"),
+    { post: false, cookies: true, batch: true, directory: false, taskStart: false, magnet: true, ed2k: false },
+  );
+  assert.deepEqual(
+    getFlashGotDownloaderCapabilities("Thunder"),
+    { post: false, cookies: true, batch: true, directory: false, taskStart: false, magnet: true, ed2k: true },
   );
   assert.deepEqual(
     getFlashGotDownloaderCapabilities("Future Download Manager"),
-    { post: null, cookies: null, batch: null, directory: false, taskStart: false },
+    { post: null, cookies: null, batch: null, directory: false, taskStart: false, magnet: false, ed2k: false },
   );
 });
 
@@ -102,6 +132,8 @@ test("custom downloader capabilities follow command placeholders and provider fe
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: true,
+    ed2k: true,
   });
   assert.deepEqual(getCustomDownloaderCapabilities({
     type: "command",
@@ -112,6 +144,8 @@ test("custom downloader capabilities follow command placeholders and provider fe
     batch: true,
     directory: false,
     taskStart: false,
+    magnet: true,
+    ed2k: true,
   });
   assert.deepEqual(getCustomDownloaderCapabilities({ type: "aria2" }), {
     post: false,
@@ -119,6 +153,8 @@ test("custom downloader capabilities follow command placeholders and provider fe
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: true,
+    ed2k: false,
   });
 });
 
@@ -130,6 +166,8 @@ test("native downloader policy supports Firefox HTTP downloads", () => {
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: false,
+    ed2k: false,
   });
   assert.equal(isNativeDownloadURL("https://example.com/file.zip"), true);
   assert.equal(isNativeDownloadURL("http://example.com/file.zip"), true);
@@ -265,6 +303,8 @@ test("AB Download Manager uses an independent loopback JSON protocol", () => {
     batch: true,
     directory: false,
     taskStart: true,
+    magnet: false,
+    ed2k: false,
   });
   assert.equal(
     normalizeABDMEndpoint("http://localhost:15151"),
@@ -342,6 +382,8 @@ test("Xtreme Download Manager uses its fixed local browser protocol", () => {
     batch: true,
     directory: false,
     taskStart: false,
+    magnet: false,
+    ed2k: false,
   });
   const job = {
     referer: "https://example.com/page",
@@ -409,6 +451,8 @@ test("uGet builds one quiet CLI invocation per link", () => {
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: false,
+    ed2k: false,
   });
   const job = {
     referer: "https://example.com/page\r\nignored",
@@ -462,6 +506,8 @@ test("Aria2Next capabilities and defaults match the built-in RPC profile", () =>
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: true,
+    ed2k: true,
   });
 });
 
@@ -559,6 +605,8 @@ test("JDownloader capabilities are explicit and task-start aware", () => {
     batch: true,
     directory: true,
     taskStart: true,
+    magnet: true,
+    ed2k: true,
   });
 });
 
@@ -756,6 +804,16 @@ test("aria2 requests place secrets in actual calls and support multicall", () =>
   assert.equal(multi.params[0].length, 2);
   assert.equal(multi.params[0][0].params[0], "token:secret");
   assert.deepEqual(multi.params[0][1].params[2], { dir: "D:\\Downloads" });
+
+  const ed2k = buildAria2Request([{
+    url: "ed2k://|file|Example.bin|4|0123456789ABCDEF|/",
+    filename: "Example.bin",
+    referer: "https://example.test/",
+    userAgent: "Browser",
+    cookies: "session=value",
+  }], config, "ed2k");
+  assert.equal(ed2k.method, "aria2.addUri");
+  assert.deepEqual(ed2k.params[2], { dir: "D:\\Downloads" });
 });
 
 test("aria2 response errors redact secrets and partial multicalls are counted", () => {

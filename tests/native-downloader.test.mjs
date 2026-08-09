@@ -1755,6 +1755,134 @@ test("built-in protocol settings use a UI view while persisting through provider
   assert.equal(service.readSettings().detectedManagerCount, 1);
 });
 
+test("protocol default downloaders persist independently and clear when disabled", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+  service.isLocalExecutable = () => true;
+  service.customDownloaderDocument = {
+    version: 1,
+    downloaders: [{
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Protocol Manager",
+      enabled: true,
+      type: "command",
+      command: {
+        executablePath: "C:\\Tools\\protocol-manager.exe",
+        argumentsTemplate: "[URL]",
+      },
+    }],
+  };
+  const manager = JSON.stringify({
+    provider: "custom",
+    id: "11111111-1111-4111-8111-111111111111",
+  });
+
+  let snapshot = await service.applySettings({
+    magnetManager: manager,
+    ed2kManager: manager,
+  });
+  assert.equal(preferenceValues.get("downloadit.magnetDM"), manager);
+  assert.equal(preferenceValues.get("downloadit.ed2kDM"), manager);
+  assert.equal(snapshot.magnetManager, manager);
+  assert.equal(snapshot.ed2kManager, manager);
+  assert.deepEqual(service.getProtocolDefaultDownloader("magnet").ref, {
+    provider: "custom",
+    id: "11111111-1111-4111-8111-111111111111",
+  });
+
+  preferenceLocks.add("downloadit.magnetDM");
+  await assert.rejects(
+    service.applySettings({ magnetManager: "" }),
+    /magnet download manager preference is locked/i,
+  );
+  preferenceLocks.clear();
+
+  snapshot = await service.applySettings({
+    magnetManager: "",
+    ed2kManager: "",
+  });
+  assert.equal(snapshot.magnetManager, "");
+  assert.equal(snapshot.ed2kManager, "");
+  assert.equal(preferenceValues.has("downloadit.magnetDM"), false);
+  assert.equal(preferenceValues.has("downloadit.ed2kDM"), false);
+});
+
+test("protocol defaults survive a temporary built-in provider outage", () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+  const aria2Next = JSON.stringify({
+    provider: "aria2next",
+    id: "aria2next",
+  });
+
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  preferenceValues.set("downloadit.magnetDM", aria2Next);
+  preferenceValues.set("downloadit.ed2kDM", aria2Next);
+  service.clearInvalidProtocolDefaults();
+  assert.equal(preferenceValues.get("downloadit.magnetDM"), aria2Next);
+  assert.equal(preferenceValues.get("downloadit.ed2kDM"), aria2Next);
+
+  preferenceValues.set("downloadit.aria2next.enabled", false);
+  service.clearInvalidProtocolDefaults();
+  assert.equal(preferenceValues.has("downloadit.magnetDM"), false);
+  assert.equal(preferenceValues.has("downloadit.ed2kDM"), false);
+});
+
+test("offline enabled Aria2Next remains selectable as a protocol default", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  preferenceValues.set("downloadit.aria2next.enabled", true);
+  const service = createSettingsService();
+  const aria2Next = JSON.stringify({
+    provider: "aria2next",
+    id: "aria2next",
+  });
+
+  const snapshot = await service.applySettings({
+    magnetManager: aria2Next,
+    ed2kManager: aria2Next,
+  });
+  assert.equal(snapshot.magnetManager, aria2Next);
+  assert.equal(snapshot.ed2kManager, aria2Next);
+  assert.equal(service.createAria2NextDescriptor().available, false);
+  assert.equal(service.getProtocolDefaultManager("magnet"), "");
+  assert.equal(service.getProtocolDefaultManager("ed2k"), "");
+});
+
+test("enabled custom protocol routes persist while the custom downloader is offline", async () => {
+  preferenceValues.clear();
+  preferenceLocks.clear();
+  const service = createSettingsService();
+  service.isLocalExecutable = () => false;
+  service.customDownloaderDocument = {
+    version: 1,
+    downloaders: [{
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Offline custom manager",
+      enabled: true,
+      type: "command",
+      command: {
+        executablePath: "C:\\Missing\\manager.exe",
+        argumentsTemplate: "[URL]",
+      },
+    }],
+  };
+  const manager = JSON.stringify({
+    provider: "custom",
+    id: "22222222-2222-4222-8222-222222222222",
+  });
+
+  const snapshot = await service.applySettings({
+    magnetManager: manager,
+    ed2kManager: manager,
+  });
+  assert.equal(snapshot.magnetManager, manager);
+  assert.equal(snapshot.ed2kManager, manager);
+  assert.equal(service.resolveDownloader(manager).available, false);
+});
+
 test("developer mode is hidden by default, persists activation, and honors locks", () => {
   preferenceValues.clear();
   preferenceLocks.clear();
@@ -3086,6 +3214,14 @@ test("uGet uses a configured launcher for one quiet process per link", async () 
     "downloadit.defaultDM",
     JSON.stringify({ provider: "uget", id: "uget" }),
   );
+  preferenceValues.set(
+    "downloadit.magnetDM",
+    JSON.stringify({ provider: "uget", id: "uget" }),
+  );
+  preferenceValues.set(
+    "downloadit.ed2kDM",
+    JSON.stringify({ provider: "uget", id: "uget" }),
+  );
   const disabled = await service.applySettings({ uget: { enabled: false } });
   assert.equal(preferenceValues.get("downloadit.uget.enabled"), false);
   assert.equal(preferenceValues.has("downloadit.uget.launchPath"), false);
@@ -3097,6 +3233,8 @@ test("uGet uses a configured launcher for one quiet process per link", async () 
     provider: "native",
     id: "firefox",
   });
+  assert.equal(preferenceValues.has("downloadit.magnetDM"), false);
+  assert.equal(preferenceValues.has("downloadit.ed2kDM"), false);
 
   preferenceLocks.add("downloadit.uget.launchPath");
   await assert.rejects(

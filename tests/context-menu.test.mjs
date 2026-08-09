@@ -388,6 +388,32 @@ test("context menu separates one-time downloads from default changes", async () 
   assert.equal(downloads[0].manager, "custom-manager");
 });
 
+test("context menu disables managers that cannot handle magnet and ed2k links", () => {
+  const { controller } = createPopupController({
+    context: { url: "magnet:?xt=urn:btih:example" },
+    managers: [
+      {
+        key: "idm",
+        name: "Internet Download Manager",
+        custom: false,
+        capabilities: { magnet: false, ed2k: false },
+      },
+      {
+        key: "aria2",
+        name: "Aria2",
+        custom: false,
+        capabilities: { magnet: true, ed2k: true },
+      },
+    ],
+    defaultManager: "idm",
+  });
+
+  assert.equal(controller.popup.children[0].disabled, true);
+  assert.equal(controller.popup.children[1].disabled, false);
+  assert.equal(controller.defaultManagerItems[0].disabled, true);
+  assert.equal(controller.defaultManagerItems[1].disabled, false);
+});
+
 test("default-and-download changes the preference before downloading", async () => {
   const { controller, events, service } = createPopupController();
 

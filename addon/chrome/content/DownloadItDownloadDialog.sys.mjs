@@ -144,6 +144,13 @@ function launcherAutoCaptureDisposition(service, launcher) {
 
 function shouldAutomaticallyHandle (service, launcher) {
   try {
+    const protocol = String(launcher?.source?.spec || "")
+      .split(":", 1)[0]
+      .toLowerCase();
+    if (protocol === "magnet" || protocol === "ed2k") {
+      return typeof service?.getProtocolDefaultManager === "function" &&
+        Boolean(service.getProtocolDefaultManager(protocol));
+    }
     const extension = getLauncherExtension(launcher);
     return Boolean(
       service?.defaultManager &&
@@ -175,7 +182,12 @@ function startAutomaticDownload ({
   }
 
   state.pendingLaunchers.add(launcher);
-  const manager = service.defaultManager;
+  const protocol = String(launcher?.source?.spec || "")
+    .split(":", 1)[0]
+    .toLowerCase();
+  const manager = (protocol === "magnet" || protocol === "ed2k")
+    ? service.getProtocolDefaultManager(protocol)
+    : service.defaultManager;
   Promise.resolve().then(() => service.downloadLauncher({
     launcher,
     context,

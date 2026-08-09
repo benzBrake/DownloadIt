@@ -63,6 +63,8 @@ export const DOWNLOADER_CAPABILITY_KEYS = Object.freeze([
   "batch",
   "directory",
   "taskStart",
+  "magnet",
+  "ed2k",
 ]);
 
 const FLASHGOT_DEFAULT_CAPABILITIES = Object.freeze({
@@ -71,6 +73,8 @@ const FLASHGOT_DEFAULT_CAPABILITIES = Object.freeze({
   batch: null,
   directory: false,
   taskStart: false,
+  magnet: null,
+  ed2k: null,
 });
 
 // These describe the current Grabby-FlashGot bridge, not the applications in
@@ -108,11 +112,18 @@ const FLASHGOT_CAPABILITIES = Object.freeze({
   TrueDownloader: { post: false, cookies: true, batch: true },
   "wxDownload Fast": { post: false, cookies: false, batch: true },
 });
+const FLASHGOT_PROTOCOL_CAPABILITIES = Object.freeze({
+  BitComet: { magnet: true, ed2k: false },
+  "Download Master": { magnet: true, ed2k: false },
+  Thunder: { magnet: true, ed2k: true },
+});
 
 export function normalizeDownloaderCapabilities(value = {}) {
   const normalized = {};
   for (const key of DOWNLOADER_CAPABILITY_KEYS) {
-    normalized[key] = typeof value?.[key] === "boolean" ? value[key] : null;
+    normalized[key] = typeof value?.[key] === "boolean"
+      ? value[key]
+      : key === "magnet" || key === "ed2k" ? false : null;
   }
   return normalized;
 }
@@ -122,10 +133,13 @@ export function getFlashGotDownloaderCapabilities(name) {
   if (!values) {
     return normalizeDownloaderCapabilities(FLASHGOT_DEFAULT_CAPABILITIES);
   }
+  const protocolCapabilities = FLASHGOT_PROTOCOL_CAPABILITIES[String(name || "")] ||
+    { magnet: false, ed2k: false };
   return normalizeDownloaderCapabilities({
     ...values,
     directory: false,
     taskStart: false,
+    ...protocolCapabilities,
   });
 }
 
@@ -137,6 +151,8 @@ export function getCustomDownloaderCapabilities(downloader) {
       batch: true,
       directory: true,
       taskStart: false,
+      magnet: true,
+      ed2k: false,
     });
   }
   if (downloader?.type !== "command") {
@@ -153,6 +169,8 @@ export function getCustomDownloaderCapabilities(downloader) {
     batch: true,
     directory: placeholders.has("FOLDER"),
     taskStart: false,
+    magnet: true,
+    ed2k: true,
   });
 }
 
@@ -163,6 +181,8 @@ export function getNativeDownloaderCapabilities() {
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: false,
+    ed2k: false,
   });
 }
 
@@ -182,6 +202,8 @@ export function getJDownloaderCapabilities() {
     batch: true,
     directory: true,
     taskStart: true,
+    magnet: true,
+    ed2k: true,
   });
 }
 
@@ -200,7 +222,7 @@ export function getABDMCapabilities() {
     cookies: true,
     batch: true,
     directory: false,
-    taskStart: true,
+    taskStart: true
   });
 }
 
@@ -239,6 +261,8 @@ export function getUGetCapabilities() {
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: false,
+    ed2k: false,
   });
 }
 
@@ -258,6 +282,8 @@ export function getAria2NextCapabilities() {
     batch: true,
     directory: true,
     taskStart: false,
+    magnet: true,
+    ed2k: true,
   });
 }
 
@@ -1086,12 +1112,15 @@ export function buildAria2NextStartupArguments(config, downloadDirectory = "", m
 
 export function buildAria2AddUriCall(link, config, includeToken = true) {
   const url = String(link?.url || "");
-  const protocol = new URL(url).protocol;
+  const scheme = url.match(/^([a-z][a-z0-9+.-]*):/i)?.[1];
+  const protocol = scheme
+    ? `${scheme.toLowerCase()}:`
+    : "";
   const options = {};
   if (config.downloadDirectory) {
     options.dir = config.downloadDirectory;
   }
-  if (protocol !== "magnet:") {
+  if (protocol !== "magnet:" && protocol !== "ed2k:") {
     if (link.filename) {
       options.out = String(link.filename);
     }
