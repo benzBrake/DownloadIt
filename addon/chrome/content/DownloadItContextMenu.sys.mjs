@@ -22,6 +22,10 @@ function downloaderSupportsContext(downloader, context) {
     downloader?.capabilities?.[protocol] === true;
 }
 
+function isRoutedProtocol(protocol) {
+  return protocol === "magnet" || protocol === "ed2k";
+}
+
 const DOWNLOAD_ERROR_MESSAGES = {
   "native-download-failed": "downloadit-error-native-start",
   "native-partial-failure": "downloadit-error-native-partial",
@@ -174,7 +178,7 @@ export class DownloadItContextMenuController {
       style: "--menuitem-icon: url(chrome://downloadit/content/icons/downloadit.svg); list-style-image: url(chrome://downloadit/content/icons/downloadit.svg);",
     });
     this.downloadItem.addEventListener("command", () => {
-      this.download(this.service.defaultManager);
+      this.downloadContext(this.context);
     });
     this.selectionDownloadItem = createXULElement(this.document, "menuitem", {
       id: DOWNLOADIT_SELECTION_ID,
@@ -337,7 +341,9 @@ export class DownloadItContextMenuController {
     } : null;
     this.selectionContext = null;
     this.downloadItem.hidden = !this.context;
-    this.downloadItem.disabled = !this.context || !this.service.defaultManager;
+    this.downloadItem.disabled = !this.context ||
+      (!this.resolveContextManager(this.context) &&
+        !isRoutedProtocol(getContextProtocol(this.context.url)));
     const hasTextSelection = contextMenu?.isTextSelected === true;
     this.selectionDownloadItem.hidden = !hasTextSelection;
     this.selectionDownloadItem.disabled = true;
@@ -352,6 +358,66 @@ export class DownloadItContextMenuController {
     this.linksDownloadItem.hidden = false;
     this.linksDownloadItem.disabled = !this.linksContext || this.service.managers.length === 0;
     this.menu.hidden = false;
+  }
+
+  resolveContextManager(context) {
+    const protocol = getContextProtocol(context?.url);
+    if (isRoutedProtocol(protocol)) {
+      try {
+        return this.service.getProtocolDefaultManager?.(protocol) || "";
+      } catch (error) {
+        console.error(
+          "DownloadIt: protocol default lookup failed",
+          error,
+        );
+        return "";
+      }
+    }
+
+    const manager = this.service.defaultManager;
+    if (!manager) {
+      return "";
+    }
+    const downloader = this.service.resolveDownloader?.(manager);
+    return downloaderSupportsContext(downloader || { key: manager }, context)
+      ? manager
+      : "";
+  }
+
+  async downloadContext(context) {
+    if (!context) {
+      return;
+    }
+    const protocol = getContextProtocol(context.url);
+    const manager = this.resolveContextManager(context);
+    if (manager) {
+      await this.download(manager);
+      return;
+    }
+    if (isRoutedProtocol(protocol)) {
+      this.openNativeProtocol(context);
+    }
+  }
+
+  openNativeProtocol(context) {
+    if (
+      !context?.url ||
+      typeof this.window.openTrustedLinkIn !== "function"
+    ) {
+      return;
+    }
+    try {
+      this.window.openTrustedLinkIn(context.url, "current", {
+        triggeringPrincipal: context.loadingPrincipal || null,
+        referrerInfo: context.referrerInfo || null,
+        userContextId: context.userContextId || 0,
+      });
+    } catch (error) {
+      console.error(
+        "DownloadIt: native external protocol handling failed",
+        error,
+      );
+    }
   }
 
   openLinksDialog() {

@@ -106,6 +106,7 @@ function createPopupController({
   context = { url: "https://example.com/file.zip" },
   defaultChangeError = null,
   downloadError = null,
+  protocolDefaults = {},
 } = {}) {
   const document = createMockMenuDocument();
   const events = [];
@@ -137,6 +138,9 @@ function createPopupController({
     resolveDownloader(manager) {
       return managers.find(value => value.key === manager) || null;
     },
+    getProtocolDefaultManager(protocol) {
+      return protocolDefaults[protocol] || "";
+    },
     alert(_window, message) {
       alerts.push(message);
     },
@@ -145,12 +149,27 @@ function createPopupController({
     },
     openSettings() {},
   };
-  const window = { document };
+  const nativeProtocols = [];
+  const window = {
+    document,
+    openTrustedLinkIn(url, where, params) {
+      nativeProtocols.push({ url, where, params });
+    },
+  };
   const controller = new DownloadItContextMenuController(service, window, null);
   controller.context = context;
   controller.popup = document.createXULElement("menupopup");
   controller.rebuildPopup();
-  return { alerts, controller, document, downloads, events, service };
+  return {
+    alerts,
+    controller,
+    document,
+    downloads,
+    events,
+    nativeProtocols,
+    service,
+    window,
+  };
 }
 
 test("context menu insertion prefers the current Firefox media group", () => {
@@ -412,6 +431,139 @@ test("context menu disables managers that cannot handle magnet and ed2k links", 
   assert.equal(controller.popup.children[1].disabled, false);
   assert.equal(controller.defaultManagerItems[0].disabled, true);
   assert.equal(controller.defaultManagerItems[1].disabled, false);
+});
+
+test("top-level magnet downloads use the protocol default manager", async () => {
+  const { controller, downloads } = createPopupController({
+    context: { url: "magnet:?xt=urn:btih:example" },
+    managers: [
+      {
+        key: "idm",
+        name: "Internet Download Manager",
+        custom: false,
+        capabilities: { magnet: false, ed2k: false },
+      },
+      {
+        key: "aria2",
+        name: "Aria2",
+        custom: false,
+        capabilities: { magnet: true, ed2k: true },
+      },
+    ],
+    defaultManager: "idm",
+    protocolDefaults: { magnet: "aria2" },
+  });
+
+  assert.equal(controller.resolveContextManager(controller.context), "aria2");
+  await controller.downloadContext(controller.context);
+  assert.deepEqual(downloads.map(download => download.manager), ["aria2"]);
+});
+
+test("top-level ed2k downloads use the protocol default manager", async () => {
+  const { controller, downloads } = createPopupController({
+    context: { url: "ed2k://|file|Example.bin|4|0123456789ABCDEF|/" },
+    managers: [
+      {
+        key: "idm",
+        name: "Internet Download Manager",
+        custom: false,
+        capabilities: { magnet: false, ed2k: false },
+      },
+      {
+        key: "aria2",
+        name: "Aria2",
+        custom: false,
+        capabilities: { magnet: true, ed2k: true },
+      },
+    ],
+    defaultManager: "idm",
+    protocolDefaults: { ed2k: "aria2" },
+  });
+
+  await controller.downloadContext(controller.context);
+  assert.deepEqual(downloads.map(download => download.manager), ["aria2"]);
+});
+
+test("top-level command resolves the current protocol default at click time", async () => {
+  const protocolDefaults = { magnet: "aria2" };
+  const { controller, downloads } = createPopupController({
+    context: { url: "magnet:?xt=urn:btih:example" },
+    managers: [
+      {
+        key: "aria2",
+        name: "Aria2",
+        custom: false,
+        capabilities: { magnet: true, ed2k: true },
+      },
+      {
+        key: "jdownloader",
+        name: "JDownloader",
+        custom: false,
+        capabilities: { magnet: true, ed2k: true },
+      },
+    ],
+    defaultManager: "aria2",
+    protocolDefaults,
+  });
+
+  protocolDefaults.magnet = "jdownloader";
+  await controller.downloadContext(controller.context);
+
+  assert.deepEqual(downloads.map(download => download.manager), ["jdownloader"]);
+});
+
+test("unconfigured protocol links return to Firefox native handling", async () => {
+  const { controller, downloads, nativeProtocols } = createPopupController({
+    context: { url: "magnet:?xt=urn:btih:example" },
+    managers: [{
+      key: "idm",
+      name: "Internet Download Manager",
+      custom: false,
+      capabilities: { magnet: false, ed2k: false },
+    }],
+    defaultManager: "idm",
+  });
+
+  await controller.downloadContext(controller.context);
+
+  assert.deepEqual(downloads, []);
+  assert.deepEqual(nativeProtocols, [{
+    url: "magnet:?xt=urn:btih:example",
+    where: "current",
+    params: {
+      triggeringPrincipal: null,
+      referrerInfo: null,
+      userContextId: 0,
+    },
+  }]);
+});
+
+test("top-level protocol items remain enabled when Firefox handles the fallback", () => {
+  const { controller, document, window } = createPopupController({
+    context: { url: "ed2k://|file|Example.bin|4|0123456789ABCDEF|/" },
+    managers: [{
+      key: "idm",
+      name: "Internet Download Manager",
+      custom: false,
+      capabilities: { magnet: false, ed2k: false },
+    }],
+    defaultManager: "idm",
+  });
+  controller.downloadItem = document.createXULElement("menuitem");
+  controller.selectionDownloadItem = document.createXULElement("menuitem");
+  controller.linksDownloadItem = document.createXULElement("menuitem");
+  controller.menu = document.createXULElement("menu");
+  window.gContextMenu = {
+    onLink: true,
+    linkURL: "ed2k://|file|Example.bin|4|0123456789ABCDEF|/",
+    linkTextStr: "Example.bin",
+    linkDownload: "",
+    contentData: {},
+  };
+
+  controller.updateContext();
+
+  assert.equal(controller.downloadItem.disabled, false);
 });
 
 test("default-and-download changes the preference before downloading", async () => {
