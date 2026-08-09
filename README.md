@@ -20,6 +20,8 @@ The project is currently being migrated. It supports Windows and Linux, and the 
 - Supports AB Download Manager directly through its loopback HTTP API without routing requests through `FlashGot.exe`.
 - Supports Xtreme Download Manager directly through its built-in loopback API without routing requests through `FlashGot.exe`.
 - Supports uGet directly through its cross-platform quiet command-line interface without routing requests through `FlashGot.exe`.
+- Supports the bundled Aria2Next directly through JSON-RPC on Windows and Linux x86_64 without routing requests through `FlashGot.exe`.
+- Registers the bundled AriaNg standard frontend asset bundle as an internal `moz-extension://` page with loopback-only RPC access.
 - Supports custom command-line downloaders and aria2 JSON-RPC without routing them through `FlashGot.exe`.
 - Optionally redirects compatible IDM local HTTP requests from extensions such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift) to the current default downloader.
 - Embeds a DownloadIt choice in Firefox's native download prompt for supported downloads.
@@ -54,6 +56,7 @@ DownloadIt background service
         ├── abdm provider ── loopback HTTP `/queues` and `/add`
         ├── xdm provider ── loopback HTTP `/sync`, `/download`, and `/link`
         ├── uget provider ── uGet quiet command line ── native Firefox process API
+        ├── aria2next provider ── bundled native process ── JSON-RPC
         ├── custom command provider ── native Firefox process API
         └── custom aria2 provider ── JSON-RPC
 ```
@@ -63,11 +66,11 @@ On Windows, extension startup deploys `FlashGot.exe` from the XPI to `DownloadIt
 - `--list-json`: detects available download managers;
 - `--job-json`: submits a single- or multi-link download task.
 
-Linux skips deployment and never runs the packaged Windows helper. The rest of the service, including Firefox native downloads, custom commands, aria2, JDownloader, Xtreme Download Manager, toolbar and context-menu UI, the native download prompt, automatic capture, and protocol services, initializes normally.
+Linux skips deployment and never runs the packaged Windows FlashGot helper. On Linux x86_64, DownloadIt deploys the bundled Aria2Next executable with mode `0755`; the rest of the service initializes normally on every supported Linux installation.
 
 ## Platform support
 
-One universal XPI is published for both supported platforms. It contains the Windows helper so the same artifact remains complete, but Linux ignores that file at runtime.
+One universal XPI is published for both supported platforms. It contains the Windows helpers and the Linux x86_64 Aria2Next executable; runtime platform and ABI checks select only the applicable binary.
 
 macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 
@@ -80,6 +83,7 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 | AB Download Manager loopback API | Supported | Supported |
 | Xtreme Download Manager loopback API | Supported | Supported |
 | uGet quiet command-line provider | Supported | Supported |
+| Bundled Aria2Next provider | Supported | Supported on x86_64 |
 | FlashGot manager discovery and task submission | Supported | Not used |
 | Packaged `FlashGot.exe` deployment | Enabled | Skipped |
 
@@ -92,9 +96,11 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 - Snap and Flatpak Firefox packages are not supported in the first Linux release because their Loader installation, host-file access, and process sandbox boundaries differ from non-sandboxed Firefox;
 - External download managers are optional because the Firefox downloader is always available;
 - If `addon/FlashGot.exe` is missing during the build, both packaging scripts download the latest successful [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly artifact. They use the GitHub Actions API when `GITHUB_TOKEN` or `GH_TOKEN` is available and otherwise download through nightly.link. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
+- Missing Aria2Next assets are downloaded from the pinned [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` release. Existing or downloaded Windows x86_64 and Linux x86_64 assets must match their fixed size and SHA-256 values before packaging;
+- Missing or stale AriaNg assets are downloaded from the pinned [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` standard release through GitHub CLI. The archive, extracted `index.html`, and required external CSS, JS, and Font Awesome WOFF2 asset are verified before packaging; the page contains no inline scripts and runs without `unsafe-eval`;
 - Node.js 18 or later for development and testing;
 - PowerShell 7 (`pwsh`) for building on Windows;
-- Bash, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. The authenticated GitHub API path additionally requires `jq`.
+- Bash, GitHub CLI, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. The authenticated GitHub API path additionally requires `jq`.
 
 ## Build
 
@@ -103,7 +109,7 @@ Run the command for your platform from the repository root.
 Windows:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\pack.ps1
+pwsh -ExecutionPolicy Bypass -File .\pack.ps1
 ```
 
 Linux:
@@ -117,13 +123,18 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 - `bootstrap.js`;
 - `install.rdf`;
 - `chrome.manifest`;
-- `FlashGot.exe`.
+- `FlashGot.exe`;
+- `aria2-next.exe`;
+- `aria2-next-linux-x86_64`;
+- `ariang/index.html` and `ariang/manifest.json`;
+- `licenses/aria2-next-COPYING` and `licenses/ariang-LICENSE`;
+- `chrome/content/DownloadItAriaNg.sys.mjs`.
 
-`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe` is also excluded from version control. When it is missing, both scripts use `GITHUB_TOKEN` first and then `GH_TOKEN` to access the latest successful nightly artifact through the GitHub Actions API. With neither token set, they download the same artifact through nightly.link. Nightly builds still publish one universal XPI rather than separate platform artifacts.
+`addon.xpi` is a build artifact and is ignored by `.gitignore` by default. `addon/FlashGot.exe`, `addon/aria2-next.exe`, `addon/aria2-next-linux-x86_64`, and the generated AriaNg standard asset tree are also excluded from version control. Missing Aria2Next assets and missing or stale AriaNg assets are downloaded from their pinned upstream releases; invalid final assets fail the build instead of being packaged. Nightly builds still publish one universal XPI rather than separate platform artifacts.
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.6.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.7.2`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -135,7 +146,7 @@ Tests use Node.js's built-in test runner:
 node --test .\tests\*.test.mjs
 ```
 
-The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link type, suffix, and magnet filtering, selected-link copy formatting, selection state, download-manager parsing, JDownloader, AB Download Manager, and Xtreme Download Manager local protocol validation and request construction, the toolbar PanelView and context-menu insertion point, allow/deny automatic-capture matching and fallback, IDM local endpoint and byte-level message parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
+The test suite covers single- and multi-link download-task JSON, URL and filename validation, selection and page-link extraction, batch-link filtering and copying, download-manager parsing, JDownloader, AB Download Manager, Xtreme Download Manager, uGet, Aria2Next platform deployment and JSON-RPC behavior, the embedded AriaNg lifecycle and permission boundary, the toolbar PanelView and context-menu insertion point, automatic capture, IDM local protocol parsing, the native download prompt integration, Fluent resources, and the staged settings page structure.
 
 DownloadIt Links collects explicit `a[href]` and `area[href]` links from the current DOM, including child frames and open shadow roots. Its type and suffix filters accept multiple selections, using OR within each filter and AND with the search field. The independent **Magnet links only** filter also combines with those conditions. Classification is based on the download filename or URL suffix; media element sources and network-level media sniffing are outside this feature. Selected links can be copied as newline-separated URLs, tab-separated titles and URLs, or Markdown links without contacting a downloader.
 
@@ -162,7 +173,7 @@ The discovered-tool list in settings shows capability metadata for the active Do
 
 Open the settings page from the toolbar panel, from “DownloadIt Settings” in the context menu, or from the extension settings in `about:addons`.
 
-The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader, AB Download Manager, Xtreme Download Manager, and uGet are singletons: configuring one reopens its entry. Removing a built-in protocol disables it and clears its namespaced settings. AB Download Manager and XDM become selectable when their local service responds or an absolute launcher path is configured; XDM also accepts a JAR path. uGet becomes selectable only after it is enabled and an absolute launcher path is configured for the current system. Loopback providers start configured launchers only for explicit tests or submissions; uGet directly invokes its quiet CLI for each task and does not probe a background API. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
+The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader, AB Download Manager, Xtreme Download Manager, uGet, and Aria2Next are singletons: configuring one reopens its entry. Removing a built-in protocol disables it and clears its namespaced settings. AB Download Manager and XDM become selectable when their local service responds or an absolute launcher path is configured; XDM also accepts a JAR path. uGet becomes selectable only after it is enabled and an absolute launcher path is configured for the current system. Aria2Next becomes selectable only after it is enabled on a supported platform and ABI and its `aria2.getVersion` probe succeeds. Loopback providers start configured launchers only for explicit tests or submissions; uGet directly invokes its quiet CLI for each task and does not probe a background API. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
 
 | Preference | Type | Description |
 | --- | --- | --- |
@@ -177,6 +188,12 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.xdm.launchPath` | String | Optional absolute path to an XDM launcher or JAR. Linux JAR paths are run with the system Java runtime; when the API is offline, this path is used only for an explicit connection test or a submitted download. |
 | `downloadit.uget.enabled` | Boolean | Enables the uGet quiet command-line provider. New installations remain disabled until uGet is configured. |
 | `downloadit.uget.launchPath` | String | Absolute path to the uGet launcher for the current system. DownloadIt invokes it with `--quiet` once per submitted link. |
+| `downloadit.aria2next.enabled` | Boolean | Enables the bundled Aria2Next provider on Windows or Linux x86_64. |
+| `downloadit.aria2next.rpcPort` | Integer | Loopback JSON-RPC port; the default is `6800`. |
+| `downloadit.aria2next.secret` | String | Optional RPC secret, stored as plain text and passed as an aria2 token. |
+| `downloadit.aria2next.downloadDir` | String | Optional download directory; Firefox's preferred download directory is used when empty. |
+| `downloadit.aria2next.extraArgs` | String | Additional process arguments that do not replace DownloadIt-managed RPC arguments. |
+| `downloadit.aria2next.exitOnClose` | Boolean | Sends `aria2.shutdown` when Firefox exits and terminates only the Aria2Next process started by DownloadIt if graceful shutdown fails. |
 | `downloadit.jdownloader.enabled` | Boolean | Controls whether the JDownloader built-in-protocol integration is configured and shown. New installations default to `false`; existing JDownloader preferences or a JDownloader default selection are treated as an enabled legacy configuration until explicitly removed. |
 | `downloadit.jdownloader.endpoint` | String | JDownloader FlashGot endpoint. The default is `http://127.0.0.1:9666/flashgot`. |
 | `downloadit.jdownloader.launchPath` | String | Optional absolute path to a JDownloader Windows `.exe`, Linux executable launcher, or `.jar`; a manual value overrides detected installation data. |
@@ -252,6 +269,18 @@ The `uget:uget` provider invokes the configured uGet executable directly through
 
 Each link is submitted as a separate `uget --quiet` process. DownloadIt conditionally passes the preferred Firefox download directory, filename, Referer, User-Agent, Cookie, and non-empty POST body as individual `--option=value` arguments, then appends the URL unchanged. A batch therefore creates one uGet CLI invocation per link. The provider reports POST, Cookie, batch, and directory capabilities, but it does not consume `downloadit.autoStartTasks`; uGet's CLI has no per-task start switch. A successful process launch is treated as acceptance by uGet; later downloader failures are outside Firefox's process API boundary.
 
+### Aria2Next provider
+
+The `aria2next:aria2next` provider deploys the pinned Aria2Next `v2.5.5` binary from the universal XPI and communicates with it over `http://127.0.0.1:<port>/jsonrpc`. Windows keeps the existing `DownloadIt\aria2-next.exe` profile path. Linux x86_64 uses `DownloadIt/aria2-next`; runtime integrity checks verify its size and SHA-256 and Firefox sets mode `0755` before starting it directly with the native process API. Other Linux architectures cannot enable this bundled provider, but the custom aria2 JSON-RPC provider remains available for an externally managed service.
+
+### Embedded AriaNg page
+
+DownloadIt starts the pinned AriaNg `1.3.14` standard page bundle as an embedded Firefox WebExtension with the internal ID `downloadit-ariang@downloadit.invalid`. Firefox assigns and persists the profile-specific UUID, registers the resulting `moz-extension://<uuid>/index.html` origin in parent and content processes, and unregisters it during DownloadIt shutdown. The DownloadIt PanelView shows an **Open AriaNg** entry only after Aria2Next is enabled on a supported platform and its RPC probe succeeds; it opens the active URL in a trusted tab and is disabled until registration succeeds. The entry obtains its URL through the internal `getAriaNgURL()` API and does not hardcode the UUID. When Aria2Next is enabled, the AriaNg Actor synchronizes its default RPC profile from DownloadIt's current loopback settings on page load while leaving other AriaNg preferences and extra RPC profiles intact.
+
+The embedded manifest grants host access only to `127.0.0.1` and `localhost`. Its CSP permits only same-origin scripts, so the standard bundle's external scripts run without `unsafe-inline` or `unsafe-eval`; packaging adds Angular's `ng-csp="no-unsafe-eval"` marker to select its CSP-compatible expression parser. The page retains inline styles required by AriaNg and limits HTTP and WebSocket connections to those loopback hosts. Remote aria2 RPC hosts are intentionally unsupported by this embedded page.
+
+DownloadIt owns the loopback address, port, optional secret, and download-directory arguments, then waits for `aria2.getVersion` before exposing the provider. Submitted links use `system.multicall` and can carry filenames, Referer, User-Agent, cookies, and a download directory. When shutdown-on-exit is enabled, DownloadIt sends `aria2.shutdown`, waits briefly, and only force-terminates the process instance that it started. Removing or disabling Aria2Next also sends `aria2.shutdown` even when shutdown-on-exit is disabled, so a process left running across Firefox restarts can be closed from settings.
+
 ### IDM local protocol compatibility
 
 When enabled under **Request & privacy**, DownloadIt recognizes the IDM local HTTP request form used by compatible extension clients such as [hmjz100/LinkSwift](https://github.com/hmjz100/LinkSwift): `POST http://127.0.0.1:1001/client/<id>?seq=<seq>`. It requires a Firefox extension principal and validates the byte-length-prefixed `MSG#` payload, then redirects the request to a temporary loopback listener owned by DownloadIt. The task is submitted to the current default downloader, and the requesting client receives the expected sequence response after the downloader accepts or rejects the task.
@@ -289,7 +318,7 @@ On Windows, custom downloaders hide process windows by default. Clear **Hide pro
 
 Command-line downloaders select an executable and an arguments template. On Linux the selected file must have execute permission. The editor provides quick templates for `aria2c`, `wget`, and `curl`. DownloadIt invokes the executable directly with Firefox's native process API. When Firefox cannot enumerate a Linux executable, DownloadIt uses `/bin/sh` only as a fixed-argument fallback: it checks the path with `test -f "$1" && test -x "$1"`, then launches it through `exec "$@"`. The executable path and template arguments are always separate process arguments and are never interpolated into shell code. Supported FlashGot-compatible placeholders are `URL`, `FNAME`, `COMMENT`, `REFERER`, `COOKIE`, `CFILE`, `FOLDER`, `POST`, `RAWPOST`, `HEADERS`, `ULIST`, `UFILE`, `USERPASS`, and `UA`. A template containing `ULIST` or `UFILE` starts one process for the batch; otherwise one process is started per link. URL-list and Netscape-cookie temporary files use CRLF on Windows and LF on Linux; HTTP header blocks retain protocol-required CRLF on both platforms.
 
-aria2 definitions connect to an HTTP or HTTPS JSON-RPC endpoint and support an optional secret and server-side download directory. Multiple links are submitted with `system.multicall`. The optional local-startup settings include `executablePath` and `configurationPath`; the executable becomes required only when automatic startup is enabled, while the configuration file may remain empty. When supplied, DownloadIt passes the resolved configuration file as `--conf-path`. Optional aria2c startup is restricted to HTTP loopback endpoints; DownloadIt controls the configuration path, RPC enablement, listen address, port, and secret arguments, waits up to five seconds for readiness, and retries the request once. RPC secrets are stored as plain text in the JSON file and are never written to DownloadIt logs.
+aria2 definitions connect to an HTTP or HTTPS JSON-RPC endpoint and support an optional secret and server-side download directory. Multiple links are submitted with `system.multicall`. The optional local-startup settings include `executablePath` and `configurationPath`; the executable becomes required only when automatic startup is enabled, while the configuration file may remain empty. When supplied, DownloadIt passes the resolved configuration file as `--conf-path`. Optional aria2c startup is restricted to HTTP loopback endpoints; DownloadIt controls the configuration path, RPC enablement, listen address, port, and secret arguments, waits up to five seconds for readiness, and retries the request once. DownloadIt shuts down aria2c instances that it started when their custom entry is removed, disabled, or Firefox exits; it never force-terminates an externally managed process. RPC secrets are stored as plain text in the JSON file and are never written to DownloadIt logs.
 
 The `native:firefox` provider accepts HTTP and HTTPS links, including batches and POST bodies. It inherits the available principal, referrer, container, private-browsing, and cookie-jar context from the source frame. Downloads go directly to Firefox's preferred download directory, use `.part` files, and receive a unique `name(1).ext`-style target when a file already exists. Explicit filenames take priority over the final URL path segment, with `download` as the fallback. DownloadIt does not make a separate redirect or `Content-Disposition` probe, so signed, one-time, and POST URLs are requested only once. The provider remains available in DownloadIt menus and settings but is omitted from Firefox's own download prompt, where the existing **Save File** action already provides the native flow. FTP and magnet links require an external provider.
 
@@ -301,7 +330,17 @@ addon/
 ├── install.rdf                           # Bootstrapped XPI metadata
 ├── chrome.manifest                       # chrome://downloadit registration
 ├── FlashGot.exe                          # Download-manager bridge
+├── aria2-next.exe                        # Pinned Windows x86_64 Aria2Next binary
+├── aria2-next-linux-x86_64               # Pinned Linux x86_64 Aria2Next binary
+├── licenses/aria2-next-COPYING           # Aria2Next GPL-2.0 license text
+├── licenses/ariang-LICENSE               # AriaNg MIT license text
+├── ariang/
+│   ├── manifest.json                     # Loopback-only embedded WebExtension manifest
+│   ├── index.html                        # Verified AriaNg standard entry page
+│   ├── css/ and js/                      # External stylesheets and scripts
+│   └── fonts/                            # Includes Font Awesome WOFF2
 └── chrome/content/
+    ├── DownloadItAriaNg.sys.mjs         # Embedded WebExtension lifecycle and URL access
     ├── DownloadItService.sys.mjs        # Service, process, and preference management
     ├── DownloadItAutoCapture.sys.mjs    # Versioned typed rules and built-in capture protections
     ├── DownloadItPanelView.sys.mjs      # Native toolbar panel behavior
@@ -339,5 +378,9 @@ tests/                                    # Node.js unit tests
 DownloadIt is an unofficial modern port based on the original FlashGot extension. FlashGot was created by Giorgio Maone and is licensed under GPL-2.0-or-later. See [`addon/THIRD_PARTY_NOTICES.txt`](addon/THIRD_PARTY_NOTICES.txt) for related notices.
 
 The bundled `FlashGot.exe` is based on [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) and is licensed under GPL-3.0. Each XPI contains `chrome/content/DownloadItBinaryMetadata.sys.mjs`, whose metadata matches the bundled binary and is used for runtime integrity verification.
+
+The bundled Windows and Linux x86_64 Aria2Next `v2.5.5` binaries come from [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) and are licensed under GPL-2.0. The corresponding license text and pinned source location are included in the XPI notices, and generated metadata records the verified size and SHA-256 of both assets.
+
+The embedded AriaNg `1.3.14` standard asset bundle comes from [mayswind/AriaNg](https://github.com/mayswind/AriaNg) and is licensed under MIT. Its license and pinned source location are included in the XPI notices; packaging verifies the upstream archive, entry page, and required external assets.
 
 For the Chinese version, see [README-zh_CN.md](README-zh_CN.md).

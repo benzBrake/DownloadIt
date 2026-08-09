@@ -6,7 +6,11 @@ import {
   ABDM_DOWNLOADER_ID,
   ABDM_PROVIDER,
   ABDMConfigError,
+  ARIA2NEXT_DEFAULT_RPC_PORT,
+  ARIA2NEXT_DOWNLOADER_ID,
+  ARIA2NEXT_PROVIDER,
   buildAria2Request,
+  buildAria2NextStartupArguments,
   buildABDMRequest,
   buildUGetArguments,
   buildXDMRequest,
@@ -23,6 +27,7 @@ import {
   expandCommandTemplate,
   getCustomDownloaderCapabilities,
   getABDMCapabilities,
+  getAria2NextCapabilities,
   getUGetCapabilities,
   getXDMCapabilities,
   getFlashGotDownloaderCapabilities,
@@ -447,6 +452,19 @@ test("uGet builds one quiet CLI invocation per link", () => {
   );
 });
 
+test("Aria2Next capabilities and defaults match the built-in RPC profile", () => {
+  assert.equal(ARIA2NEXT_PROVIDER, "aria2next");
+  assert.equal(ARIA2NEXT_DOWNLOADER_ID, "aria2next");
+  assert.equal(ARIA2NEXT_DEFAULT_RPC_PORT, 6800);
+  assert.deepEqual(getAria2NextCapabilities(), {
+    post: false,
+    cookies: true,
+    batch: true,
+    directory: true,
+    taskStart: false,
+  });
+});
+
 test("built-in protocol catalog keeps singleton provider identity in code", () => {
   assert.deepEqual(BUILT_IN_PROTOCOLS, [{
     id: "jdownloader",
@@ -471,6 +489,12 @@ test("built-in protocol catalog keeps singleton provider identity in code", () =
     provider: "uget",
     downloaderId: "uget",
     name: "uGet",
+    singleton: true,
+  }, {
+    id: "aria2next",
+    provider: "aria2next",
+    downloaderId: "aria2next",
+    name: "Aria2Next",
     singleton: true,
   }]);
   assert.equal(Object.isFrozen(BUILT_IN_PROTOCOLS), true);
@@ -786,6 +810,49 @@ test("aria2 startup arguments protect DownloadIt-managed RPC options", () => {
     }),
     error => error.code === "aria2-autostart-local-only",
   );
+});
+
+test("Aria2Next startup arguments reject managed overrides", () => {
+  const config = {
+    rpcPort: 6800,
+    secret: "secret",
+    extraArgs: "--continue=true",
+  };
+  assert.deepEqual(buildAria2NextStartupArguments(config, "D:\\Downloads"), [
+    "--continue=true",
+    "--enable-rpc=true",
+    "--rpc-listen-all=false",
+    "--rpc-listen-port=6800",
+    "--rpc-secret=secret",
+    "--dir=D:\\Downloads",
+  ]);
+  assert.deepEqual(
+    buildAria2NextStartupArguments({
+      ...config,
+      extraArgs: '--header="Cookie: session=\\"value with spaces\\"" --user-agent \'DownloadIt Test\'',
+    }),
+    [
+      '--header=Cookie: session="value with spaces"',
+      "--user-agent",
+      "DownloadIt Test",
+      "--enable-rpc=true",
+      "--rpc-listen-all=false",
+      "--rpc-listen-port=6800",
+      "--rpc-secret=secret",
+    ],
+  );
+  for (const argument of [
+    "--enable-rpc=false",
+    "--rpc-listen-all=true",
+    "--rpc-listen-port=1",
+    "--rpc-secret=override",
+    "--dir=C:\\Other",
+  ]) {
+    assert.throws(
+      () => buildAria2NextStartupArguments({ ...config, extraArgs: argument }),
+      error => error.code === "aria2-managed-argument",
+    );
+  }
 });
 
 test("provider registry keeps provider-local IDs separate", async () => {

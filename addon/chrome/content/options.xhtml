@@ -564,6 +564,72 @@
                 <span id="uget-test-state" role="status"></span>
               </div>
             </div>
+
+            <div data-built-in-protocol-fields="aria2next">
+              <div class="protocol-status-line">
+                <span id="aria2next-status-dot" class="manager-dot is-error" aria-hidden="true"></span>
+                <span class="protocol-status-copy">
+                  <strong data-l10n-id="downloadit-aria2next-title"></strong>
+                  <span id="aria2next-status" data-l10n-id="downloadit-aria2next-status-disabled"></span>
+                </span>
+                <span id="aria2next-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
+              </div>
+
+              <label class="toggle-row compact-toggle" for="aria2next-enabled">
+                <input id="aria2next-enabled" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-l10n-id="downloadit-aria2next-enabled-title"></strong>
+                  <small data-l10n-id="downloadit-aria2next-enabled-help"></small>
+                </span>
+              </label>
+
+              <label class="toggle-row compact-toggle" for="aria2next-exit-on-close">
+                <input id="aria2next-exit-on-close" type="checkbox" />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="toggle-copy">
+                  <strong data-l10n-id="downloadit-aria2next-exit-on-close-title"></strong>
+                  <small data-l10n-id="downloadit-aria2next-exit-on-close-help"></small>
+                </span>
+              </label>
+
+              <div class="editor-field">
+                <label for="aria2next-rpc-port" data-l10n-id="downloadit-aria2next-rpc-port-label"></label>
+                <input id="aria2next-rpc-port" type="number" min="1024" max="65535" />
+              </div>
+
+              <div class="editor-field">
+                <label for="aria2next-secret" data-l10n-id="downloadit-aria2next-secret-label"></label>
+                <input id="aria2next-secret" type="password" autocomplete="off" />
+              </div>
+
+              <div class="editor-field">
+                <label for="aria2next-download-dir" data-l10n-id="downloadit-aria2next-download-dir-label"></label>
+                <div class="input-action-row">
+                  <input id="aria2next-download-dir" type="text" />
+                  <button id="browse-aria2next-download-dir" class="secondary-button path-action-button" type="button" data-l10n-id="downloadit-browse"></button>
+                </div>
+              </div>
+
+              <div class="editor-field">
+                <label for="aria2next-conf-path" data-l10n-id="downloadit-aria2next-conf-path-label"></label>
+                <div class="input-action-row">
+                  <input id="aria2next-conf-path" type="text" />
+                  <button id="browse-aria2next-conf-path" class="secondary-button path-action-button" type="button" data-l10n-id="downloadit-browse"></button>
+                </div>
+                <small class="field-help" data-l10n-id="downloadit-aria2next-conf-path-help"></small>
+              </div>
+
+              <div class="editor-field">
+                <label for="aria2next-extra-args" data-l10n-id="downloadit-aria2next-extra-args-label"></label>
+                <input id="aria2next-extra-args" type="text" spellcheck="false" />
+              </div>
+
+              <div class="connection-row">
+                <button id="test-aria2next" class="secondary-button" type="button" data-l10n-id="downloadit-aria2next-test"></button>
+                <span id="aria2next-test-state" role="status"></span>
+              </div>
+            </div>
           </section>
 
           <section id="tool-editor-custom" class="tool-editor-panel" role="tabpanel" aria-labelledby="tool-kind-custom" hidden="hidden">

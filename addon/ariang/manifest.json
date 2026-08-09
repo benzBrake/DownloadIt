@@ -1,0 +1,17 @@
+{
+  "manifest_version": 2,
+  "name": "DownloadIt AriaNg",
+  "version": "1.3.14",
+  "description": "Embedded AriaNg frontend for DownloadIt's loopback Aria2Next service.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "downloadit-ariang@downloadit.invalid",
+      "strict_min_version": "136.0"
+    }
+  },
+  "permissions": [
+    "*://127.0.0.1/*",
+    "*://localhost/*"
+  ],
+  "content_security_policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* http://localhost:* https://localhost:* ws://localhost:* wss://localhost:*; object-src 'none';"
+}

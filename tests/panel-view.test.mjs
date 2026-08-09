@@ -155,7 +155,14 @@ class MockDocument {
 }
 
 class MockService {
-  constructor({ managers = null, defaultManager = "flashgot:idm", locked = false } = {}) {
+  constructor({
+    managers = null,
+    defaultManager = "flashgot:idm",
+    locked = false,
+    aria2NextEnabled = true,
+    aria2NextSupported = true,
+    aria2NextOnline = true,
+  } = {}) {
     this.managers = managers ?? [
       {
         key: "flashgot:idm",
@@ -175,6 +182,10 @@ class MockService {
     this.settingsWindow = null;
     this.selectionError = null;
     this.refreshCalls = 0;
+    this.ariaNgURL = "moz-extension://profile-uuid/index.html";
+    this.aria2NextEnabled = aria2NextEnabled;
+    this.aria2NextSupported = aria2NextSupported;
+    this.aria2NextOnline = aria2NextOnline;
   }
 
   get defaultManager() {
@@ -193,6 +204,9 @@ class MockService {
       managers: this.managers.map(manager => ({ ...manager })),
       defaultManager: this.selectedManager,
       defaultManagerLocked: this.locked,
+      aria2next: { enabled: this.aria2NextEnabled },
+      aria2NextSupported: this.aria2NextSupported,
+      aria2NextOnline: this.aria2NextOnline,
     };
   }
 
@@ -204,6 +218,10 @@ class MockService {
   openSettings(window) {
     this.settingsWindow = window;
   }
+
+  getAriaNgURL() {
+    return this.ariaNgURL;
+  }
 }
 
 function createController(service = new MockService(), {
@@ -211,6 +229,7 @@ function createController(service = new MockService(), {
 } = {}) {
   const document = new MockDocument();
   const dialogCalls = [];
+  const ariaNgCalls = [];
   const window = {
     document,
     gBrowser: { selectedBrowser: browser },
@@ -229,6 +248,10 @@ function createController(service = new MockService(), {
       dialogCalls.push(args);
       return { opened: true };
     },
+    openTrustedLinkIn(...args) {
+      ariaNgCalls.push(args);
+      return { opened: true };
+    },
   };
   const controller = new DownloadItPanelViewController(
     service,
@@ -236,7 +259,7 @@ function createController(service = new MockService(), {
     async () => {},
   );
   controller.init();
-  return { controller, dialogCalls, document, service, window };
+  return { controller, dialogCalls, ariaNgCalls, document, service, window };
 }
 
 test("panel view builds native links, manager, refresh, and settings controls", () => {
@@ -250,6 +273,7 @@ test("panel view builds native links, manager, refresh, and settings controls", 
   );
   assert.match(controller.view.getAttribute("class"), /PanelUI-subView/);
   assert.equal(controller.view.children[0].children[0], controller.linksButton);
+  assert.equal(controller.view.children[0].children[1], controller.ariaNgButton);
   assert.equal(controller.status.localName, "hbox");
   assert.equal(controller.status.children[0], controller.statusIcon);
   assert.equal(controller.status.children[1], controller.statusText);
@@ -265,11 +289,18 @@ test("panel view builds native links, manager, refresh, and settings controls", 
     controller.linksButton.getAttribute("data-l10n-id"),
     "downloadit-download-links",
   );
+  assert.equal(
+    controller.ariaNgButton.getAttribute("data-l10n-id"),
+    "downloadit-open-ariang",
+  );
   assert.match(
     controller.linksButton.getAttribute("image"),
     /chrome:\/\/downloadit\/content\/icons\/downloadit\.svg$/,
   );
   assert.equal(controller.linksButton.disabled, false);
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), null);
+  assert.equal(controller.ariaNgButton.disabled, false);
   assert.equal(
     controller.managerButtons[1].getAttribute("data-l10n-id"),
     "downloadit-custom-downloader-menu-label",
@@ -280,6 +311,77 @@ test("panel view builds native links, manager, refresh, and settings controls", 
     controller.settingsButton.getAttribute("data-l10n-id"),
     "downloadit-settings",
   );
+});
+
+test("panel AriaNg command opens the internal page in a trusted tab", () => {
+  const { controller, ariaNgCalls } = createController();
+
+  controller.handleEvent({ type: "command", target: controller.ariaNgButton });
+
+  assert.deepEqual(ariaNgCalls, [[
+    "moz-extension://profile-uuid/index.html",
+    "tab",
+  ]]);
+});
+
+test("panel hides AriaNg until Aria2Next is enabled, then updates on refresh and show", async () => {
+  const service = new MockService({ aria2NextEnabled: false });
+  const { controller, ariaNgCalls } = createController(service);
+
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), "true");
+  assert.equal(controller.ariaNgButton.disabled, true);
+  assert.equal(controller.openAriaNg(), null);
+  assert.deepEqual(ariaNgCalls, []);
+
+  service.aria2NextEnabled = true;
+  controller.onViewShowing();
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), null);
+  assert.equal(controller.ariaNgButton.disabled, false);
+
+  service.aria2NextEnabled = false;
+  await controller.refreshManagers();
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.disabled, true);
+});
+
+test("panel hides AriaNg when the platform does not support Aria2Next", () => {
+  const service = new MockService({ aria2NextSupported: false });
+  const { controller, ariaNgCalls } = createController(service);
+
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), "true");
+  controller.handleEvent({ type: "command", target: controller.ariaNgButton });
+  assert.deepEqual(ariaNgCalls, []);
+});
+
+test("panel hides AriaNg while an enabled Aria2Next is offline", () => {
+  const service = new MockService({ aria2NextOnline: false });
+  const { controller, ariaNgCalls } = createController(service);
+
+  assert.equal(controller.ariaNgButton.hidden, true);
+  assert.equal(controller.ariaNgButton.disabled, true);
+  assert.equal(controller.openAriaNg(), null);
+  assert.deepEqual(ariaNgCalls, []);
+
+  service.aria2NextOnline = true;
+  controller.onViewShowing();
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.disabled, false);
+});
+
+test("panel AriaNg entry is disabled when registration is unavailable", () => {
+  const service = new MockService();
+  service.ariaNgURL = "";
+  const { controller, ariaNgCalls } = createController(service);
+
+  assert.equal(controller.ariaNgButton.hidden, false);
+  assert.equal(controller.ariaNgButton.getAttribute("hidden"), null);
+  assert.equal(controller.ariaNgButton.disabled, true);
+  assert.equal(controller.ariaNgButton.getAttribute("disabled"), "true");
+  assert.equal(controller.openAriaNg(), null);
+  assert.deepEqual(ariaNgCalls, []);
 });
 
 test("panel links command opens the batch selector for the active browser", () => {

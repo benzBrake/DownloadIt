@@ -70,7 +70,47 @@ test("packaging scripts select the authenticated API or nightly.link", () => {
   }
   assert.match(packPowerShell, /if \(\$hasGitHubToken\)/);
   assert.match(packShell, /if \[\[ -n "\$\{github_token\}" \]\]/);
-  assert.doesNotMatch(packShell, /releases\/expanded_assets|releases\/download|FlashGot-v/);
+  assert.doesNotMatch(packShell, /releases\/expanded_assets|FlashGot-v/);
+});
+
+test("Aria2Next packaging pins and verifies universal XPI assets", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const options = read("addon/chrome/content/options.js");
+  const packPowerShell = read("pack.ps1");
+  const packShell = read("pack.sh");
+  const notices = read("addon/THIRD_PARTY_NOTICES.txt");
+  const license = read("addon/licenses/aria2-next-COPYING");
+
+  const expectedValues = [
+    "AnInsomniacy/aria2-next",
+    "2.5.5",
+    "aria2-next-2.5.5-windows-x86_64.exe",
+    "aria2-next-2.5.5-linux-x86_64",
+    "4555264",
+    "3852672",
+    "554f2f81ca53731dc9e01710cfb16081a34759f3276ff16eb4b12656c1b6e5b9",
+    "b6f2cdadcd34ba16dd7fcb29de4b84c36f893f9b223a9a05157d1892687a45a0",
+  ];
+  for (const source of [packPowerShell, packShell]) {
+    for (const value of expectedValues) {
+      assert.match(source, new RegExp(value.replaceAll(".", "\\.")));
+    }
+    for (const entry of [
+      "aria2-next.exe",
+      "aria2-next-linux-x86_64",
+      "licenses/aria2-next-COPYING",
+    ]) {
+      assert.match(source, new RegExp(entry.replaceAll(".", "\\.")));
+    }
+    assert.match(source, /ARIA2NEXT_BINARY_METADATA/);
+  }
+
+  assert.match(service, /Services\.appinfo\.XPCOMABI/);
+  assert.match(service, /aria2NextSupported: this\.isAria2NextSupported\(\)/);
+  assert.match(service, /IOUtils\.setPermissions\(destination, 0o755\)/);
+  assert.match(options, /downloadit-aria2next-status-unsupported/);
+  assert.match(notices, /Aria2Next[\s\S]*v2\.5\.5[\s\S]*GPL-2\.0/);
+  assert.match(license, /GNU GENERAL PUBLIC LICENSE[\s\S]*Version 2, June 1991/);
 });
 
 test("Windows and Linux share one runtime capability matrix and universal XPI", () => {
@@ -261,6 +301,10 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /downloadit-remove-auto-deny/);
   assert.match(script, /reloadAutoCaptureRules/);
   assert.match(script, /resetAutoCaptureRules/);
+  assert.match(
+    script,
+    /const builtInProviders = new Set\([\s\S]*?BUILT_IN_PROTOCOLS\.map\(protocol => protocol\.provider\)[\s\S]*?\);[\s\S]*?!builtInProviders\.has\(downloader\.ref\?\.provider\)/,
+  );
   assert.match(script, /customDownloaders/);
   assert.match(script, /reloadCustomDownloaders/);
   assert.match(script, /testAria2Configuration/);
@@ -342,7 +386,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
   assert.match(downloaders, /params\.set\("autostart"/);
   assert.match(downloaders, /jdownloader-mixed-post-data/);
   assert.match(script, /createJDownloaderDescriptor\(jDownloaderDraft\)/);
-  assert.match(script, /provider !== XDM_PROVIDER/);
+  assert.match(script, /!builtInProviders\.has\(downloader\.ref\?\.provider\)/);
   assert.match(script, /createXDMDescriptor\(xdmDraft\)/);
   assert.match(script, /createUGetDescriptor\(uGetDraft\)/);
   assert.match(

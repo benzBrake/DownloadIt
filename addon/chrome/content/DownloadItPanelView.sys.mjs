@@ -7,6 +7,7 @@ export const DOWNLOADIT_PANEL_VIEW_ID = "downloadit-panel-view";
 const MANAGER_LIST_ID = "downloadit-panel-manager-list";
 const STATUS_ID = "downloadit-panel-status";
 const LINKS_ID = "downloadit-panel-links";
+const ARIANG_ID = "downloadit-panel-ariang";
 const REFRESH_ID = "downloadit-panel-refresh";
 const SETTINGS_ID = "downloadit-panel-settings";
 const STATUS_ICON_ID = "downloadit-panel-status-icon";
@@ -40,6 +41,7 @@ export class DownloadItPanelViewController {
     this.statusText = null;
     this.stylesheetLoaded = false;
     this.linksButton = null;
+    this.ariaNgButton = null;
     this.refreshButton = null;
     this.settingsButton = null;
     this.managerButtons = [];
@@ -93,6 +95,11 @@ export class DownloadItPanelViewController {
       image: "chrome://downloadit/content/icons/downloadit.svg",
     });
     this.setLocalized(this.linksButton, "downloadit-download-links");
+    this.ariaNgButton = createXULElement(this.document, "toolbarbutton", {
+      id: ARIANG_ID,
+      class: "subviewbutton subviewbutton-iconic",
+    });
+    this.setLocalized(this.ariaNgButton, "downloadit-open-ariang");
     this.refreshButton = createXULElement(this.document, "toolbarbutton", {
       id: REFRESH_ID,
       class: "subviewbutton subviewbutton-iconic",
@@ -107,6 +114,7 @@ export class DownloadItPanelViewController {
       { class: "panel-subview-body" },
       [
         this.linksButton,
+        this.ariaNgButton,
         createXULElement(this.document, "toolbarseparator"),
         heading,
         this.managerList,
@@ -157,6 +165,7 @@ export class DownloadItPanelViewController {
     this.statusIcon = null;
     this.statusText = null;
     this.linksButton = null;
+    this.ariaNgButton = null;
     this.refreshButton = null;
     this.settingsButton = null;
   }
@@ -168,6 +177,8 @@ export class DownloadItPanelViewController {
     const target = event.target;
     if (target === this.linksButton) {
       this.openLinksDialog();
+    } else if (target === this.ariaNgButton) {
+      this.openAriaNg();
     } else if (target === this.refreshButton) {
       this.refreshManagers();
     } else if (target === this.settingsButton) {
@@ -204,6 +215,52 @@ export class DownloadItPanelViewController {
     });
   }
 
+  getAriaNgURL() {
+    try {
+      return this.service.getAriaNgURL?.() || "";
+    } catch {
+      return "";
+    }
+  }
+
+  isAria2NextAvailable(snapshot) {
+    return Boolean(
+      snapshot?.aria2next?.enabled &&
+      snapshot?.aria2NextSupported &&
+      snapshot?.aria2NextOnline,
+    );
+  }
+
+  updateAriaNgVisibility(snapshot) {
+    if (!this.ariaNgButton) {
+      return;
+    }
+    const hidden = !this.isAria2NextAvailable(snapshot);
+    this.ariaNgButton.hidden = hidden;
+    if (hidden) {
+      this.ariaNgButton.setAttribute("hidden", "true");
+    } else {
+      this.ariaNgButton.removeAttribute("hidden");
+    }
+  }
+
+  openAriaNg() {
+    let snapshot;
+    try {
+      snapshot = this.service.readSettings();
+    } catch {
+      return null;
+    }
+    if (!this.isAria2NextAvailable(snapshot)) {
+      return null;
+    }
+    const url = this.getAriaNgURL();
+    if (!url || typeof this.window.openTrustedLinkIn !== "function") {
+      return null;
+    }
+    return this.window.openTrustedLinkIn(url, "tab");
+  }
+
   renderManagers() {
     if (!this.managerList) {
       return;
@@ -211,6 +268,7 @@ export class DownloadItPanelViewController {
     const snapshot = this.service.readSettings();
     const managers = snapshot.managers || [];
     this.defaultManagerLocked = Boolean(snapshot.defaultManagerLocked);
+    this.updateAriaNgVisibility(snapshot);
     this.managerButtons = [];
     this.managerList.replaceChildren();
 
@@ -344,6 +402,15 @@ export class DownloadItPanelViewController {
         this.linksButton.setAttribute("disabled", "true");
       } else {
         this.linksButton.removeAttribute("disabled");
+      }
+    }
+    if (this.ariaNgButton) {
+      const disabled = this.ariaNgButton.hidden || !this.getAriaNgURL();
+      this.ariaNgButton.disabled = disabled;
+      if (disabled) {
+        this.ariaNgButton.setAttribute("disabled", "true");
+      } else {
+        this.ariaNgButton.removeAttribute("disabled");
       }
     }
     if (this.view) {
