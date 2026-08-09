@@ -324,6 +324,11 @@ downloadit-idm-title = IDM 本地协议
 downloadit-idm-bridge-title = 接管兼容的 IDM HTTP 请求
 downloadit-idm-bridge-help = 将发往 IDM 本地端点的兼容扩展请求转交给当前默认下载管理器；支持 <a data-l10n-name="linkswift">hmjz100/LinkSwift</a>，无需安装 IDM 浏览器扩展。
 downloadit-idm-bridge-locked = 此设置已由 Firefox 策略锁定。
+downloadit-uninstall-eyebrow = 卸载行为
+downloadit-uninstall-title = 配置数据
+downloadit-keep-profile-data-title = 卸载时保留 DownloadIt 配置
+downloadit-keep-profile-data-help = 保留已保存的 DownloadIt 设置和规则文件；随包提供的辅助二进制始终会删除。
+downloadit-error-locked-profile-data = 配置数据保留偏好已由 Firefox 策略锁定。
 downloadit-automatic-eyebrow = 自动处理
 downloadit-automatic-title = 随任务传递的信息
 downloadit-referer-title = Referer

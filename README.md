@@ -134,7 +134,7 @@ Both scripts package `addon/` into the same universal `addon.xpi` format in the 
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.7.2`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.7.3`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -180,6 +180,7 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"native","id":"firefox"}`, `{"provider":"jdownloader","id":"jdownloader"}`, `{"provider":"flashgot","id":"Internet Download Manager"}`, or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
 | `downloadit.autoStartTasks` | Boolean | Requests automatic start for providers with the task-start capability. The default is `true`; JDownloader and AB Download Manager consume it. |
+| `downloadit.keepProfileDataOnUninstall` | Boolean | Keeps JSON configuration and rule files under the profile's `DownloadIt` directory when the extension is uninstalled. Bundled helper binaries are removed regardless. The default is `true`. |
 | `downloadit.abdm.enabled` | Boolean | Enables the AB Download Manager loopback provider. |
 | `downloadit.abdm.endpoint` | String | AB Download Manager API endpoint. Only HTTP loopback URLs are accepted; the default is `http://127.0.0.1:15151/`. |
 | `downloadit.abdm.apiKey` | String | Optional API key sent as `X-Api-Key`; it is not shared with JDownloader or FlashGot. |

@@ -208,6 +208,8 @@ const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 const PREF_LINK_GROUPS = "downloadit.linkGroups";
 const PREF_MIRRORS = "downloadit.mirrors";
 const PREF_DEVELOPER_MODE = "downloadit.developerMode";
+const PREF_KEEP_PROFILE_DATA_ON_UNINSTALL =
+  "downloadit.keepProfileDataOnUninstall";
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
 const PREF_ABDM_ENABLED = "downloadit.abdm.enabled";
 const PREF_ABDM_ENDPOINT = "downloadit.abdm.endpoint";
@@ -2761,6 +2763,10 @@ export class DownloadItService {
         : null,
       omitCookies: Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false),
       autoStartTasks: Services.prefs.getBoolPref(PREF_AUTO_START_TASKS, true),
+      keepProfileDataOnUninstall: Services.prefs.getBoolPref(
+        PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
+        true,
+      ),
       builtInProtocols: this.getBuiltInProtocols(),
       abdm: this.getABDMSettings(),
       abdmLocked: this.getABDMLocks(),
@@ -2803,6 +2809,9 @@ export class DownloadItService {
       defaultManagerLocked: Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER),
       omitCookiesLocked: Services.prefs.prefIsLocked(PREF_OMIT_COOKIES),
       autoStartTasksLocked: Services.prefs.prefIsLocked(PREF_AUTO_START_TASKS),
+      keepProfileDataOnUninstallLocked: Services.prefs.prefIsLocked(
+        PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
+      ),
       idmBridgeLocked: Services.prefs.prefIsLocked(PREF_IDM_BRIDGE),
       linkGroupsLocked: this.linkGroupsLocked,
       mirrorSettingsLocked: this.mirrorSettingsLocked,
@@ -2821,6 +2830,7 @@ export class DownloadItService {
     defaultManager = null,
     omitCookies = false,
     autoStartTasks = null,
+    keepProfileDataOnUninstall = null,
     builtInProtocols = null,
     abdm = null,
     xdm = null,
@@ -2860,6 +2870,13 @@ export class DownloadItService {
     const requestedAutoStartTasks = autoStartTasks == null
       ? currentAutoStartTasks
       : Boolean(autoStartTasks);
+    const currentKeepProfileDataOnUninstall = Services.prefs.getBoolPref(
+      PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
+      true,
+    );
+    const requestedKeepProfileDataOnUninstall = keepProfileDataOnUninstall == null
+      ? currentKeepProfileDataOnUninstall
+      : Boolean(keepProfileDataOnUninstall);
     const currentJDownloader = this.getJDownloaderSettings();
     const builtInJDownloader = builtInProtocols &&
       typeof builtInProtocols === "object" &&
@@ -3068,6 +3085,12 @@ export class DownloadItService {
     ) {
       throw new Error("The task start preference is locked");
     }
+    if (
+      Services.prefs.prefIsLocked(PREF_KEEP_PROFILE_DATA_ON_UNINSTALL) &&
+      requestedKeepProfileDataOnUninstall !== currentKeepProfileDataOnUninstall
+    ) {
+      throw new Error("The profile data preference is locked");
+    }
     const jDownloaderLocks = this.getJDownloaderLocks();
     for (const key of ["enabled", "endpoint", "launchPath", "autoLaunch"]) {
       if (jDownloaderLocks[key] && requestedJDownloader[key] !== currentJDownloader[key]) {
@@ -3206,6 +3229,12 @@ export class DownloadItService {
     }
     if (requestedAutoStartTasks !== currentAutoStartTasks) {
       Services.prefs.setBoolPref(PREF_AUTO_START_TASKS, requestedAutoStartTasks);
+    }
+    if (requestedKeepProfileDataOnUninstall !== currentKeepProfileDataOnUninstall) {
+      Services.prefs.setBoolPref(
+        PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
+        requestedKeepProfileDataOnUninstall,
+      );
     }
     if (requestedABDM.enabled !== currentABDM.enabled) {
       Services.prefs.setBoolPref(PREF_ABDM_ENABLED, requestedABDM.enabled);

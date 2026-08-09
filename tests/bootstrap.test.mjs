@@ -17,12 +17,32 @@ function createBootstrapContext({
   serviceUnregister = () => {},
   ariaNgStartup = async () => {},
   ariaNgShutdown = async () => {},
+  keepProfileData = true,
 } = {}) {
   const events = [];
   const reportedErrors = [];
   const unloadedModules = [];
   let unregisteredService = null;
   const asyncShutdownBlockers = [];
+  const removedPaths = [];
+
+  function createProfileFile(path) {
+    return {
+      path,
+      exists() {
+        return true;
+      },
+      append(name) {
+        this.path += `\\${name}`;
+      },
+      clone() {
+        return createProfileFile(this.path);
+      },
+      remove(recursive) {
+        removedPaths.push({ path: this.path, recursive });
+      },
+    };
+  }
 
   const serviceInstance = {
     async startup() {
@@ -103,7 +123,18 @@ function createBootstrapContext({
     },
     console,
     Promise,
-    Services: {},
+    Services: {
+      dirsvc: {
+        get() {
+          return createProfileFile("C:\\Profile");
+        },
+      },
+      prefs: {
+        getBoolPref(_name, fallback) {
+          return keepProfileData ?? fallback;
+        },
+      },
+    },
   });
   vm.runInContext(bootstrapSource, context, { filename: "bootstrap.js" });
 
@@ -113,6 +144,7 @@ function createBootstrapContext({
     events,
     reportedErrors,
     serviceInstance,
+    removedPaths,
     unloadedModules,
     get unregisteredService() {
       return unregisteredService;
@@ -303,11 +335,32 @@ test("async shutdown barrier awaits the shutdown promise", async () => {
   await blockerPromise;
 });
 
-test("uninstall removes the async shutdown barrier", async () => {
+test("uninstall removes managed binaries and keeps profile data by default", async () => {
   const fixture = createBootstrapContext();
 
   await fixture.context.startup({ version: "test" });
-  fixture.context.uninstall({}, fixture.context.ADDON_UNINSTALL);
+  await fixture.context.uninstall({}, fixture.context.ADDON_UNINSTALL);
 
   assert.equal(fixture.asyncShutdownBlockers[0].removed, true);
+  assert.deepEqual(fixture.removedPaths, [
+    { path: "C:\\Profile\\DownloadIt\\FlashGot.exe", recursive: false },
+    { path: "C:\\Profile\\DownloadIt\\aria2-next.exe", recursive: false },
+    { path: "C:\\Profile\\DownloadIt\\aria2-next", recursive: false },
+  ]);
+  assert.equal(
+    fixture.removedPaths.some(item => item.recursive),
+    false,
+  );
+});
+
+test("uninstall removes the profile directory when retention is disabled", async () => {
+  const fixture = createBootstrapContext({ keepProfileData: false });
+
+  await fixture.context.startup({ version: "test" });
+  await fixture.context.uninstall({}, fixture.context.ADDON_UNINSTALL);
+
+  assert.deepEqual(fixture.removedPaths.at(-1), {
+    path: "C:\\Profile\\DownloadIt",
+    recursive: true,
+  });
 });

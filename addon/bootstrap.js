@@ -10,6 +10,8 @@ const Services = globalThis.Services || ChromeUtils.importESModule(
 const MODULE_URI = "chrome://downloadit/content/DownloadItService.sys.mjs";
 const ARIANG_MODULE_URI = "chrome://downloadit/content/DownloadItAriaNg.sys.mjs";
 const PROFILE_DIRECTORY = "DownloadIt";
+const PROFILE_DATA_PREF = "downloadit.keepProfileDataOnUninstall";
+const MANAGED_BINARY_NAMES = ["FlashGot.exe", "aria2-next.exe", "aria2-next"];
 
 let service = null;
 let startupPromise = null;
@@ -139,13 +141,42 @@ function uninstall(data, reason) {
     asyncShutdownBlocker = null;
   }
 
-  try {
-    const profileDirectory = Services.dirsvc.get("ProfD", Ci.nsIFile);
-    profileDirectory.append(PROFILE_DIRECTORY);
-    if (profileDirectory.exists()) {
-      profileDirectory.remove(true);
+  const cleanup = async () => {
+    // Ensure managed child processes release profile binaries before removal.
+    await shutdown(data, reason);
+    try {
+      const profileDirectory = Services.dirsvc.get("ProfD", Ci.nsIFile);
+      profileDirectory.append(PROFILE_DIRECTORY);
+      if (!profileDirectory.exists()) {
+        return;
+      }
+      for (const name of MANAGED_BINARY_NAMES) {
+        const binary = profileDirectory.clone();
+        binary.append(name);
+        if (binary.exists()) {
+          try {
+            binary.remove(false);
+          } catch (error) {
+            Cu.reportError(error);
+          }
+        }
+      }
+      const keepProfileData = Services.prefs?.getBoolPref?.(
+        PROFILE_DATA_PREF,
+        true,
+      ) ?? true;
+      if (!keepProfileData && profileDirectory.exists()) {
+        try {
+          profileDirectory.remove(true);
+        } catch (error) {
+          Cu.reportError(error);
+        }
+      }
+    } catch (error) {
+      Cu.reportError(error);
     }
-  } catch (error) {
-    Cu.reportError(error);
-  }
+  };
+  const cleanupPromise = cleanup();
+  cleanupPromise.catch(Cu.reportError);
+  return cleanupPromise;
 }

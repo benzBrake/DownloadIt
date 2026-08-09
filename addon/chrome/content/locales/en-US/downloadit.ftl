@@ -357,6 +357,11 @@ downloadit-idm-title = IDM local protocol
 downloadit-idm-bridge-title = Intercept compatible IDM HTTP requests
 downloadit-idm-bridge-help = Forward compatible extension requests for IDM's localhost endpoint to the current default manager. Supports <a data-l10n-name="linkswift">hmjz100/LinkSwift</a> without the IDM browser extension.
 downloadit-idm-bridge-locked = This setting is locked by a Firefox policy.
+downloadit-uninstall-eyebrow = uninstall behavior
+downloadit-uninstall-title = Profile data
+downloadit-keep-profile-data-title = Keep DownloadIt configuration on uninstall
+downloadit-keep-profile-data-help = Keep saved DownloadIt settings and rule files; bundled helper binaries are always removed.
+downloadit-error-locked-profile-data = The profile-data retention preference is locked by a Firefox policy.
 downloadit-automatic-eyebrow = automatic handling
 downloadit-automatic-title = Forwarded with each task
 downloadit-referer-title = Referer

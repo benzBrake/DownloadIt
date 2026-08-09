@@ -1623,8 +1623,11 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
   );
   const service = createSettingsService();
 
+  assert.equal(service.readSettings().keepProfileDataOnUninstall, true);
+
   const snapshot = await service.applySettings({
     autoStartTasks: false,
+    keepProfileDataOnUninstall: false,
     jdownloader: {
       endpoint: "http://localhost:9777/",
       launchPath: "C:\\JD\\JDownloader.exe",
@@ -1633,6 +1636,10 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
   });
 
   assert.equal(preferenceValues.get("downloadit.autoStartTasks"), false);
+  assert.equal(
+    preferenceValues.get("downloadit.keepProfileDataOnUninstall"),
+    false,
+  );
   assert.equal(
     preferenceValues.get("downloadit.jdownloader.endpoint"),
     "http://localhost:9777/flashgot",
@@ -1648,6 +1655,7 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
     false,
   );
   assert.equal(snapshot.autoStartTasks, false);
+  assert.equal(snapshot.keepProfileDataOnUninstall, false);
   assert.equal(snapshot.jdownloader.endpoint, "http://localhost:9777/flashgot");
   assert.equal(snapshot.jdownloader.launchPath, "C:\\JD\\JDownloader.exe");
   assert.equal(snapshot.jdownloader.autoLaunch, false);
@@ -1658,6 +1666,14 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
     /task start preference is locked/i,
   );
   assert.equal(service.readSettings().autoStartTasksLocked, true);
+  preferenceLocks.clear();
+
+  preferenceLocks.add("downloadit.keepProfileDataOnUninstall");
+  await assert.rejects(
+    service.applySettings({ keepProfileDataOnUninstall: true }),
+    /profile data preference is locked/i,
+  );
+  assert.equal(service.readSettings().keepProfileDataOnUninstallLocked, true);
   preferenceLocks.clear();
 
   preferenceLocks.add("downloadit.jdownloader.endpoint");

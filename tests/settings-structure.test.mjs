@@ -234,6 +234,8 @@ test("settings dialog contains the current capability controls", () => {
     "send-cookies",
     "idm-bridge",
     "idm-bridge-lock",
+    "keep-profile-data-on-uninstall",
+    "keep-profile-data-on-uninstall-lock",
     "section-about",
     "apply",
     "cancel",

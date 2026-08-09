@@ -237,6 +237,7 @@ function createSettingsState(snapshot) {
     defaultManager: snapshot.defaultManager,
     omitCookies: snapshot.omitCookies,
     autoStartTasks: snapshot.autoStartTasks,
+    keepProfileDataOnUninstall: snapshot.keepProfileDataOnUninstall,
     builtInProtocols: Object.fromEntries(
       snapshot.builtInProtocols.map(protocol => [
         protocol.id,
@@ -287,6 +288,14 @@ function bindEvents() {
     clearFeedback();
     render();
   });
+  document.getElementById("keep-profile-data-on-uninstall").addEventListener(
+    "change",
+    event => {
+      state.draft.keepProfileDataOnUninstall = event.target.checked;
+      clearFeedback();
+      render();
+    },
+  );
   document.getElementById("idm-bridge").addEventListener("change", event => {
     state.draft.idmBridgeEnabled = event.target.checked;
     clearFeedback();
@@ -1180,6 +1189,8 @@ function renderPrivacy() {
   const cookieLock = document.getElementById("cookie-lock");
   const idmBridge = document.getElementById("idm-bridge");
   const idmBridgeLock = document.getElementById("idm-bridge-lock");
+  const keepProfileData = document.getElementById("keep-profile-data-on-uninstall");
+  const keepProfileDataLock = document.getElementById("keep-profile-data-on-uninstall-lock");
   sendCookies.checked = Boolean(state.draft && !state.draft.omitCookies);
   sendCookies.disabled = state.busy || !snapshot || Boolean(snapshot.omitCookiesLocked);
   cookieLock.hidden = !snapshot?.omitCookiesLocked;
@@ -1188,6 +1199,10 @@ function renderPrivacy() {
     !snapshot ||
     Boolean(snapshot.idmBridgeLocked);
   idmBridgeLock.hidden = !snapshot?.idmBridgeLocked;
+  keepProfileData.checked = Boolean(state.draft?.keepProfileDataOnUninstall);
+  keepProfileData.disabled = state.busy || !snapshot ||
+    Boolean(snapshot.keepProfileDataOnUninstallLocked);
+  keepProfileDataLock.hidden = !snapshot?.keepProfileDataOnUninstallLocked;
 }
 
 function parseAutoCaptureInput(value) {
@@ -1643,6 +1658,9 @@ function localizedError(error) {
   }
   if (/task start preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-task-start");
+  }
+  if (/profile data preference is locked/i.test(message)) {
+    return localizedMessage("downloadit-error-locked-profile-data");
   }
   if (/JDownloader .* preference is locked/i.test(message)) {
     return localizedMessage("downloadit-error-locked-jdownloader");
