@@ -12,7 +12,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 
 - 在网页链接的右键菜单中提供 DownloadIt 菜单。
 - 在有选区且选区包含链接时，在其下方提供“使用 DownloadIt 下载选中链接”。
-- 提供“使用 DownloadIt 批量下载”链接选择器，可收集、筛选（包括磁力链接）、复制选中链接并批量下载当前文档及其 frame 中的显式页面链接。
+- 提供“使用 DownloadIt 批量下载”链接选择器，可收集、筛选（包括磁力和 ed2k 链接）、复制选中链接并批量下载当前文档及其 frame 中的显式页面链接。
 - 在 Windows 上自动检测 `FlashGot.exe` 支持的可用下载管理器，并允许选择默认工具。
 - 显示每个下载器对 POST、Cookie、批量提交、下载目录和任务启动控制的支持情况。
 - 提供始终可用且不经过 `FlashGot.exe` 的 Firefox 内建下载器。
@@ -136,7 +136,7 @@ Nightly workflow 会替换 GitHub `nightly` 预发布中的资产。稳定下载
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.11.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.12.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本和生成的 `update.rdf` 的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -150,7 +150,7 @@ node --test .\tests\*.test.mjs
 
 测试覆盖单链接和多链接下载任务 JSON、URL 和文件名校验、选区及页面链接提取、批量链接筛选与复制、下载管理器解析、JDownloader、AB Download Manager、Xtreme Download Manager、uGet、Aria2Next 平台部署与 JSON-RPC 行为、嵌入式 AriaNg 生命周期和权限边界、工具栏 PanelView 与右键菜单插入点、自动接管、IDM 本地协议解析、原生下载弹窗集成、Fluent 资源，以及设置页面的暂存结构。
 
-DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。独立的“仅磁力链接”筛选也会与这些条件组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。选中的链接可以复制为每行一个 URL、制表符分隔的标题与 URL，或 Markdown 链接，且不会请求下载器。
+DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中收集显式的 `a[href]` 与 `area[href]` 链接。类型和后缀筛选均支持多选：同一筛选器内按“或”匹配，并与搜索条件按“且”组合。“协议”分段控件在互斥的“全部”“磁力”和“ed2k”模式间选择，并与这些条件组合。分类依据下载文件名或 URL 后缀判断；媒体元素资源和网络层媒体嗅探不属于此功能。选中的链接可以复制为每行一个 URL、制表符分隔的标题与 URL，或 Markdown 链接，且不会请求下载器。
 
 设置页的“链接分组”标签可以启用或禁用各个内置后缀分组，也可以修改其管理的后缀。自定义分组必须填写显示名称、唯一的 kebab-case key 和至少一个后缀；启用后会出现在类型筛选器中。每个后缀只能属于一个分组，禁用的分组也参与冲突检查，以保证以后重新启用时不会产生含糊的分类规则。禁用分组中的后缀和未命中的后缀会归入“其他”。
 

@@ -263,6 +263,10 @@ export function isMagnetURL(value) {
   }
 }
 
+export function isEd2kURL(value) {
+  return /^ed2k:/i.test(String(value || ""));
+}
+
 function createLinkRecordWithTypes(link, index, extensionTypes) {
   const url = String(link?.url || "");
   const description = String(link?.description || "").trim() || url;
@@ -276,6 +280,7 @@ function createLinkRecordWithTypes(link, index, extensionTypes) {
     extension,
     type: extensionTypes.get(extension) || "other",
     isMagnet: isMagnetURL(url),
+    isEd2k: isEd2kURL(url),
     searchText: `${description}\n${filename}\n${url}`.toLowerCase(),
   };
   if (Number.isInteger(link?.browsingContextId) && link.browsingContextId > 0) {
@@ -307,19 +312,28 @@ function normalizeFilterValues(values, allowedValues = null) {
   return normalized;
 }
 
+function normalizeProtocolFilter(value) {
+  const protocol = String(value || "").trim().toLowerCase();
+  return protocol === "magnet" || protocol === "ed2k" ? protocol : "";
+}
+
 export function filterLinkRecords(records, {
   types = [],
   extensions = [],
-  magnetOnly = false,
+  protocol = "",
   search = "",
 } = {}) {
   const normalizedTypes = normalizeFilterValues(types);
   const normalizedExtensions = normalizeFilterValues(extensions);
+  const normalizedProtocol = normalizeProtocolFilter(protocol);
   const normalizedSearch = String(search || "").trim().toLowerCase();
   return records.filter(record =>
     (normalizedTypes.size === 0 || normalizedTypes.has(record.type)) &&
     (normalizedExtensions.size === 0 || normalizedExtensions.has(record.extension)) &&
-    (!magnetOnly || record.isMagnet) &&
+    (
+      !normalizedProtocol ||
+      (normalizedProtocol === "magnet" ? record.isMagnet : record.isEd2k)
+    ) &&
     (!normalizedSearch || record.searchText.includes(normalizedSearch))
   );
 }

@@ -182,35 +182,80 @@ h1 {
   font-weight: 600;
 }
 
-.magnet-filter,
-.magnet-filter span {
-  user-select: none;
+.protocol-filter-field {
+  min-width: 224px;
 }
 
-.magnet-filter {
-  display: inline-flex;
-  align-items: center;
-  align-self: end;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 10px;
+.protocol-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(64px, 1fr));
+  min-width: 224px;
+  height: 34px;
+  overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 4px;
   background: var(--surface);
+}
+
+.protocol-filter-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 9px;
   color: var(--ink);
+  cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  user-select: none;
   white-space: nowrap;
 }
 
-.magnet-filter:hover {
-  border-color: var(--focus);
+.protocol-filter-option + .protocol-filter-option {
+  border-left: 1px solid var(--line);
+}
+
+.protocol-filter-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  opacity: 0;
+}
+
+.protocol-filter-option:not(:has(input:disabled)):hover {
   background: color-mix(in srgb, var(--focus) 6%, var(--surface));
 }
 
-.magnet-filter:has(input:focus-visible) {
+.protocol-filter-option:has(input:checked) {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-weight: 700;
+}
+
+.protocol-segmented:has(input:focus-visible) {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.protocol-segmented:has(input:disabled) {
+  opacity: 0.52;
+}
+
+.protocol-segmented:has(input:disabled) .protocol-filter-option {
+  cursor: default;
+}
+
+@media (max-width: 860px) {
+  .filterbar {
+    grid-template-columns: minmax(220px, 1fr) minmax(130px, 170px) minmax(130px, 170px);
+  }
+
+  .protocol-filter-field {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
 }
 
 input[type="search"],

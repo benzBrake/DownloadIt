@@ -69,10 +69,23 @@
             <button id="clear-extension-filter" class="multi-select-clear" type="button" data-l10n-id="downloadit-links-show-all-extensions"></button>
           </div>
         </div>
-        <label class="magnet-filter" for="magnet-filter">
-          <input id="magnet-filter" type="checkbox" />
-          <span data-l10n-id="downloadit-links-magnet-only"></span>
-        </label>
+        <div class="filter-field protocol-filter-field">
+          <span id="protocol-filter-label" data-l10n-id="downloadit-links-protocol-label"></span>
+          <div id="protocol-filter" class="protocol-segmented" role="radiogroup" aria-labelledby="protocol-filter-label">
+            <label class="protocol-filter-option" for="protocol-filter-all">
+              <input id="protocol-filter-all" name="protocol-filter" type="radio" value="" checked="checked" />
+              <span data-l10n-id="downloadit-links-protocol-all"></span>
+            </label>
+            <label class="protocol-filter-option" for="protocol-filter-magnet">
+              <input id="protocol-filter-magnet" name="protocol-filter" type="radio" value="magnet" />
+              <span data-l10n-id="downloadit-links-protocol-magnet"></span>
+            </label>
+            <label class="protocol-filter-option" for="protocol-filter-ed2k">
+              <input id="protocol-filter-ed2k" name="protocol-filter" type="radio" value="ed2k" />
+              <span data-l10n-id="downloadit-links-protocol-ed2k"></span>
+            </label>
+          </div>
+        </div>
       </section>
 
       <section class="link-pane" data-l10n-id="downloadit-links-list-region" data-l10n-attrs="aria-label">

@@ -48,7 +48,10 @@ downloadit-links-extensions-selected =
        *[other] { NUMBER($count) } suffixes selected
     }
 downloadit-links-show-all-extensions = Show all suffixes
-downloadit-links-magnet-only = Magnet links only
+downloadit-links-protocol-label = Protocol
+downloadit-links-protocol-all = All
+downloadit-links-protocol-magnet = Magnet
+downloadit-links-protocol-ed2k = ed2k
 downloadit-links-list-region =
     .aria-label = Page links
 downloadit-links-select-visible =

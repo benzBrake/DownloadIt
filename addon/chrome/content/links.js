@@ -90,7 +90,7 @@ const state = {
   filters: {
     types: new Set(),
     extensions: new Set(),
-    magnetOnly: false,
+    protocol: "",
     search: "",
   },
   loading: true,
@@ -311,8 +311,12 @@ function bindEvents() {
     state.filters.search = event.target.value;
     renderLinks();
   });
-  document.getElementById("magnet-filter").addEventListener("change", event => {
-    state.filters.magnetOnly = event.target.checked;
+  document.getElementById("protocol-filter").addEventListener("change", event => {
+    const option = event.target.closest("input[name=\"protocol-filter\"]");
+    if (!option) {
+      return;
+    }
+    state.filters.protocol = option.value;
     renderLinks();
   });
   document.getElementById("type-filter").addEventListener("click", () => {
@@ -660,8 +664,10 @@ function renderSelectionState(visible = state.model.visible(state.filters)) {
     state.busy || state.managers.length === 0;
   document.getElementById("cancel").disabled = state.busy;
   document.getElementById("search").disabled = state.loading || state.busy;
-  document.getElementById("magnet-filter").disabled =
-    state.loading || state.busy || state.model.records.length === 0;
+  for (const option of document.querySelectorAll("input[name=\"protocol-filter\"]")) {
+    option.disabled =
+      state.loading || state.busy || state.model.records.length === 0;
+  }
   for (const name of Object.keys(FILTER_CONTROLS)) {
     const { toggle, menu, clear } = filterElements(name);
     toggle.disabled = state.loading || state.busy || state.model.records.length === 0;

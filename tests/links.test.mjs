@@ -8,6 +8,7 @@ import {
   formatLinkCopyPayload,
   getExtensionOptions,
   getLinkExtension,
+  isEd2kURL,
   isMagnetURL,
   LinkSelectionModel,
   PAGE_LINKS_QUERY,
@@ -28,32 +29,58 @@ test("link extensions prefer download filenames and ignore URL queries", () => {
   }), "");
 });
 
-test("magnet links are recognized and filter independently from link types", () => {
+test("protocol modes recognize and filter magnet and ed2k links", () => {
   const model = new LinkSelectionModel([
     { url: "https://example.com/release.iso", description: "HTTP release" },
     {
       url: "magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release",
       description: "Ubuntu magnet",
     },
+    {
+      url: "ed2k://|file|Example.iso|4|0123456789ABCDEF|/",
+      description: "Example ed2k",
+    },
     { url: "ftp://example.com/release.iso", description: "FTP release" },
   ]);
 
   assert.equal(isMagnetURL("MAGNET:?xt=urn:btih:test"), true);
   assert.equal(isMagnetURL("https://example.com/magnet"), false);
+  assert.equal(isEd2kURL("ed2k://|file|Example.iso|4|0123456789ABCDEF|/"), true);
+  assert.equal(isEd2kURL("ED2K://|file|Example.iso|4|0123456789ABCDEF|/"), true);
+  assert.equal(isEd2kURL("https://example.com/?protocol=ed2k:"), false);
   assert.equal(model.records[1].isMagnet, true);
+  assert.equal(model.records[2].isEd2k, true);
   assert.deepEqual(
-    filterLinkRecords(model.records, { magnetOnly: true }).map(record => record.url),
+    filterLinkRecords(model.records, { protocol: "magnet" }).map(record => record.url),
     ["magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release"],
   );
   assert.deepEqual(
+    filterLinkRecords(model.records, { protocol: "ed2k" }).map(record => record.url),
+    ["ed2k://|file|Example.iso|4|0123456789ABCDEF|/"],
+  );
+  assert.deepEqual(
     filterLinkRecords(model.records, {
-      magnetOnly: true,
+      protocol: "magnet",
       types: ["other"],
       search: "ubuntu",
     }).map(record => record.url),
     ["magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release"],
   );
-  model.setVisibleSelected({ magnetOnly: true }, true);
+  assert.deepEqual(
+    filterLinkRecords(model.records, {
+      protocol: "ed2k",
+      types: ["other"],
+      search: "example ed2k",
+    }).map(record => record.url),
+    ["ed2k://|file|Example.iso|4|0123456789ABCDEF|/"],
+  );
+  assert.deepEqual(filterLinkRecords(model.records, { protocol: "invalid" }), model.records);
+  model.setVisibleSelected({ protocol: "ed2k" }, true);
+  assert.deepEqual(model.selectedLinks().map(link => link.url), [
+    "ed2k://|file|Example.iso|4|0123456789ABCDEF|/",
+  ]);
+  model.clearSelection();
+  model.setVisibleSelected({ protocol: "magnet" }, true);
   assert.deepEqual(model.selectedLinks().map(link => link.url), [
     "magnet:?xt=urn:btih:0123456789abcdef&dn=Ubuntu+release",
   ]);
