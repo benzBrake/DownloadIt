@@ -136,7 +136,7 @@ The nightly workflow replaces the assets of the `nightly` GitHub prerelease. Its
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.10.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.11.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page and the generated `update.rdf`. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -159,11 +159,11 @@ The **Link groups** settings tab can enable or disable each built-in suffix grou
 1. Install `userChrome.js-Loader` and confirm that it is active in the target Firefox profile.
 2. Run the build command to generate `addon.xpi`.
 3. In Firefox, open `about:addons`, choose “Install Add-on From File…” from the gear menu, and select `addon.xpi`.
-4. Restart Firefox so that the extension and context menus can finish initializing.
+4. When installation completes, DownloadIt asks whether to restart Firefox. Choose OK to restart immediately, or Cancel to continue and restart later.
 
 On Linux, perform these steps with a distribution-native or Mozilla tarball Firefox build. Confirm that the Loader can access the profile and that every configured local launcher is executable. Snap and Flatpak packages are outside the supported installation path.
 
-To upgrade, install the newly built `addon.xpi` or the [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) over the existing installation. `install.rdf` publishes the legacy `update.rdf` location, but the current userChrome.js Loader does not perform update checks or automatic installation, so upgrades remain manual. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
+To upgrade, install the newly built `addon.xpi` or the [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) over the existing installation. DownloadIt asks whether to restart Firefox after the upgrade; choose OK to apply it immediately or Cancel to restart later. `install.rdf` publishes the legacy `update.rdf` location, but the current userChrome.js Loader does not perform update checks or automatic installation, so upgrades remain manual. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
 
 ## Configuration
 

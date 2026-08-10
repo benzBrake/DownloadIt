@@ -136,7 +136,7 @@ Nightly workflow 会替换 GitHub `nightly` 预发布中的资产。稳定下载
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.10.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.11.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本和生成的 `update.rdf` 的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -159,11 +159,11 @@ DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中�
 1. 先安装并确认 `userChrome.js-Loader` 已在目标 Firefox profile 中生效。
 2. 执行构建命令生成 `addon.xpi`。
 3. 在 Firefox 打开 `about:addons`，选择齿轮菜单中的“从文件安装附加组件”，选中 `addon.xpi`。
-4. 重启 Firefox，使扩展和浏览器窗口中的右键菜单完成初始化。
+4. 安装完成后，DownloadIt 会询问是否重启 Firefox。点击“确定”立即重启，点击“取消”可继续使用并稍后手动重启。
 
 Linux 上请使用发行版原生包或 Mozilla tarball 版 Firefox 完成以上步骤，并确认 Loader 能访问目标 profile，所有已配置的本地启动器也具有可执行权限。Snap 和 Flatpak 不属于当前支持的安装方式。
 
-升级时使用新构建的 `addon.xpi` 或 [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) 覆盖安装即可。`install.rdf` 已声明 legacy `update.rdf` 的位置，但当前 userChrome.js Loader 不执行更新检查或自动安装，因此仍需手动升级。若扩展未启动，请先确认 Loader 版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
+升级时使用新构建的 `addon.xpi` 或 [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) 覆盖安装即可。升级完成后 DownloadIt 会询问是否重启 Firefox；点击“确定”立即应用，点击“取消”可稍后重启。`install.rdf` 已声明 legacy `update.rdf` 的位置，但当前 userChrome.js Loader 不执行更新检查或自动安装，因此仍需手动升级。若扩展未启动，请先确认 Loader 版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
 
 ## 配置
 

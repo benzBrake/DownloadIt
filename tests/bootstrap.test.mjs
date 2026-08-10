@@ -18,13 +18,32 @@ function createBootstrapContext({
   ariaNgStartup = async () => {},
   ariaNgShutdown = async () => {},
   keepProfileData = true,
+  browserWindow,
+  confirmRestart = false,
+  localizationError = null,
 } = {}) {
   const events = [];
   const reportedErrors = [];
   const unloadedModules = [];
   let unregisteredService = null;
+  let promptArguments = null;
   const asyncShutdownBlockers = [];
   const removedPaths = [];
+
+  const promptWindow = browserWindow === undefined
+    ? {
+        closed: false,
+        document: {
+          l10n: {
+            async formatValue(id) {
+              events.push(`l10n:${id}`);
+              return id;
+            },
+          },
+        },
+      }
+    : browserWindow;
+  const restartModes = [];
 
   function createProfileFile(path) {
     return {
@@ -81,9 +100,20 @@ function createBootstrapContext({
       return ariaNgShutdown(reason);
     },
   };
+  const localizationModule = {
+    async initializeDownloadItLocalization() {
+      events.push("localization-ready");
+      if (localizationError) {
+        throw localizationError;
+      }
+    },
+  };
   const context = vm.createContext({
     ADDON_DISABLE: 4,
+    ADDON_DOWNGRADE: 8,
+    ADDON_INSTALL: 5,
     ADDON_UNINSTALL: 6,
+    ADDON_UPGRADE: 7,
     APP_SHUTDOWN: 2,
     APP_STARTUP: 1,
     AsyncShutdown: {
@@ -104,9 +134,13 @@ function createBootstrapContext({
         if (spec.includes("AsyncShutdown")) {
           return { AsyncShutdown: context.AsyncShutdown };
         }
-        return spec.includes("DownloadItAriaNg")
-          ? ariaNgModule
-          : serviceModule;
+        if (spec.includes("DownloadItAriaNg")) {
+          return ariaNgModule;
+        }
+        if (spec.includes("DownloadItLocalization")) {
+          return localizationModule;
+        }
+        return serviceModule;
       },
       unloadESModule(spec) {
         unloadedModules.push(spec);
@@ -114,7 +148,12 @@ function createBootstrapContext({
     },
     Components: {
       classes: {},
-      interfaces: {},
+      interfaces: {
+        nsIAppStartup: {
+          eAttemptQuit: 1,
+          eRestart: 2,
+        },
+      },
       utils: {
         reportError(error) {
           reportedErrors.push(error);
@@ -124,6 +163,24 @@ function createBootstrapContext({
     console,
     Promise,
     Services: {
+      wm: {
+        getMostRecentWindow() {
+          return promptWindow;
+        },
+      },
+      prompt: {
+        confirm(window, title, message) {
+          promptArguments = { window, title, message };
+          events.push("prompt-confirm");
+          return confirmRestart;
+        },
+      },
+      startup: {
+        quit(mode) {
+          restartModes.push(mode);
+          events.push("restart");
+        },
+      },
       dirsvc: {
         get() {
           return createProfileFile("C:\\Profile");
@@ -142,9 +199,13 @@ function createBootstrapContext({
     asyncShutdownBlockers,
     context,
     events,
+    get promptArguments() {
+      return promptArguments;
+    },
     reportedErrors,
     serviceInstance,
     removedPaths,
+    restartModes,
     unloadedModules,
     get unregisteredService() {
       return unregisteredService;
@@ -166,6 +227,91 @@ test("bootstrap starts AriaNg before the DownloadIt service", async () => {
     "service-registered",
     "service-startup",
   ]);
+});
+
+test("bootstrap prompts for restart after installation and restarts on confirmation", async () => {
+  const fixture = createBootstrapContext({ confirmRestart: true });
+
+  await fixture.context.startup(
+    { version: "test" },
+    fixture.context.ADDON_INSTALL,
+  );
+
+  assert.deepEqual(fixture.events, [
+    "ariang-startup:ADDON_INSTALL",
+    "service-constructed",
+    "service-registered",
+    "service-startup",
+    "localization-ready",
+    "l10n:downloadit-restart-required-title",
+    "l10n:downloadit-restart-after-install",
+    "prompt-confirm",
+    "restart",
+  ]);
+  assert.equal(fixture.promptArguments.title, "downloadit-restart-required-title");
+  assert.equal(
+    fixture.promptArguments.message,
+    "downloadit-restart-after-install",
+  );
+  assert.deepEqual(fixture.restartModes, [
+    fixture.context.Components.interfaces.nsIAppStartup.eAttemptQuit |
+      fixture.context.Components.interfaces.nsIAppStartup.eRestart,
+  ]);
+});
+
+test("bootstrap shows the upgrade message and keeps Firefox open when cancelled", async () => {
+  const fixture = createBootstrapContext();
+
+  await fixture.context.startup(
+    { version: "test" },
+    fixture.context.ADDON_UPGRADE,
+  );
+
+  assert.equal(fixture.promptArguments.title, "downloadit-restart-required-title");
+  assert.equal(
+    fixture.promptArguments.message,
+    "downloadit-restart-after-upgrade",
+  );
+  assert.deepEqual(fixture.restartModes, []);
+});
+
+test("bootstrap does not prompt after a downgrade", async () => {
+  const fixture = createBootstrapContext({ confirmRestart: true });
+
+  await fixture.context.startup(
+    { version: "test" },
+    fixture.context.ADDON_DOWNGRADE,
+  );
+
+  assert.equal(fixture.promptArguments, null);
+  assert.deepEqual(fixture.restartModes, []);
+});
+
+test("bootstrap skips the install restart prompt without a browser window", async () => {
+  const fixture = createBootstrapContext({ browserWindow: null });
+
+  await fixture.context.startup(
+    { version: "test" },
+    fixture.context.ADDON_INSTALL,
+  );
+
+  assert.equal(fixture.promptArguments, null);
+  assert.deepEqual(fixture.restartModes, []);
+  assert.equal(fixture.unregisteredService, null);
+});
+
+test("install restart prompt errors do not roll back a started service", async () => {
+  const promptError = new Error("localization unavailable");
+  const fixture = createBootstrapContext({ localizationError: promptError });
+
+  await fixture.context.startup(
+    { version: "test" },
+    fixture.context.ADDON_INSTALL,
+  );
+
+  assert.deepEqual(fixture.reportedErrors, [promptError]);
+  assert.equal(fixture.unregisteredService, null);
+  assert.deepEqual(fixture.restartModes, []);
 });
 
 test("bootstrap startup rolls back AriaNg when the service fails", async () => {

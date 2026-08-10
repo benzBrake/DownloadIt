@@ -151,6 +151,7 @@ test("runtime text uses Fluent resources instead of inline localization maps", (
   const panelScript = read("addon/chrome/content/DownloadItPanelView.sys.mjs");
   const dialogScript = read("addon/chrome/content/DownloadItDownloadDialog.sys.mjs");
   const serviceScript = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const bootstrapScript = read("addon/bootstrap.js");
   const ids = messageIds(read("addon/chrome/content/locales/en-US/downloadit.ftl"));
   const nonMessageIds = new Set([
     "downloadit-context-menu",
@@ -176,6 +177,8 @@ test("runtime text uses Fluent resources instead of inline localization maps", (
     ...[...panelScript.matchAll(/this\.setStatus\("(downloadit-[a-z0-9-]+)"/g)]
       .map(match => match[1]),
     ...[...serviceScript.matchAll(/l10nId:\s*"(downloadit-[a-z0-9-]+)"/g)]
+      .map(match => match[1]),
+    ...[...bootstrapScript.matchAll(/"(downloadit-[a-z0-9-]+)"/g)]
       .map(match => match[1]),
   ]);
 
