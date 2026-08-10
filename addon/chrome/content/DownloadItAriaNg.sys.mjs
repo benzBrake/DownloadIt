@@ -66,6 +66,7 @@ function createAriaNgAddonData(addonData) {
     type: "extension",
     resourceURI: Services.io.newURI(resourceURL),
     isPrivileged: false,
+    locationHidden: true,
     temporarilyInstalled: Boolean(addonData.temporarilyInstalled),
     blocklistState: addonData.blocklistState,
     startupData: {},
