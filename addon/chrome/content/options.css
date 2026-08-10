@@ -88,6 +88,7 @@ input:disabled {
 input[type="text"],
 input[type="url"],
 input[type="password"],
+input[type="number"],
 select,
 textarea {
   width: 100%;
@@ -101,6 +102,7 @@ textarea {
 input[type="text"],
 input[type="url"],
 input[type="password"],
+input[type="number"],
 select {
   min-height: 38px;
   padding: 0 10px;

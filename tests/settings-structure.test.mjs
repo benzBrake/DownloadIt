@@ -358,6 +358,22 @@ test("protocol manager selectors reuse the default manager XUL styling", () => {
   assert.match(zhCN, /downloadit-protocol-default-none\s*=\s*\r?\n\s*\.label = Firefox 原生处理/);
 });
 
+test("numeric settings inputs reuse the shared form styling without hiding spin controls", () => {
+  const styles = read("addon/chrome/content/options.css");
+
+  assert.match(
+    styles,
+    /input\[type="password"\],\s*\r?\n\s*input\[type="number"\],\s*\r?\n\s*select,\s*\r?\n\s*textarea\s*\{/,
+  );
+  assert.match(
+    styles,
+    /input\[type="password"\],\s*\r?\n\s*input\[type="number"\],\s*\r?\n\s*select\s*\{/,
+  );
+  assert.doesNotMatch(styles, /appearance\s*:\s*textfield/i);
+  assert.doesNotMatch(styles, /::-(?:moz|webkit)-number-spin-box/i);
+  assert.doesNotMatch(styles, /::\-webkit-(?:inner|outer)-spin-button/i);
+});
+
 test("built-in provider settings and guarded local protocols are wired end to end", () => {
   const markup = read("addon/chrome/content/options.xhtml");
   const script = read("addon/chrome/content/options.js");
