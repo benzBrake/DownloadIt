@@ -15,8 +15,8 @@ const copy =
         install: "查看安装指南",
         nightly: `下载 Nightly v${product.version}`,
         prerelease: "预发布",
-        loader: "需要定制的 userChrome.js Loader",
-        loaderAction: "查看 Loader",
+        loaderLead: "需要兼容的 Loader：",
+        loaderSeparator: "；Dev/Nightly 可使用",
         screenshotAlt: "Firefox 中的 DownloadIt 下载管理器设置页面",
       }
     : {
@@ -26,8 +26,8 @@ const copy =
         install: "Read the installation guide",
         nightly: `Download Nightly v${product.version}`,
         prerelease: "Pre-release",
-        loader: "Requires the customized userChrome.js Loader",
-        loaderAction: "View the Loader",
+        loaderLead: "Requires a compatible Loader: ",
+        loaderSeparator: "; Bootstrap Loader is available on Dev/Nightly",
         screenshotAlt: "DownloadIt download manager settings inside Firefox",
       };
 ---
@@ -63,9 +63,14 @@ const copy =
     </div>
     <div class="hero-requirement">
       <ShieldCheck size={17} strokeWidth={2} aria-hidden="true" />
-      <span>{copy.loader}</span>
+      <span>{copy.loaderLead}</span>
       <a href={product.loaderUrl} rel="noreferrer">
-        {copy.loaderAction}
+        userChrome.js-Loader
+        <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
+      </a>
+      <span>{copy.loaderSeparator}</span>
+      <a href={product.bootstrapLoaderUrl} rel="noreferrer">
+        Bootstrap Loader
         <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
       </a>
     </div>

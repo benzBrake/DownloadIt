@@ -1,6 +1,6 @@
 ---
 title: 安装与升级
-description: 安装所需的 userChrome.js Loader，将 DownloadIt Nightly XPI 加入 Firefox，重启浏览器并升级现有安装。
+description: 选择兼容的 Loader，将 DownloadIt Nightly XPI 加入 Firefox，重启浏览器并升级现有安装。
 sidebar:
   order: 1
   label: 安装与升级
@@ -9,23 +9,46 @@ sidebar:
 import NightlyLink from "../../../../components/NightlyLink.astro";
 import ProductValue from "../../../../components/ProductValue.astro";
 
-DownloadIt 是使用 Firefox 内部 API 的 bootstrapped 扩展。它不是 AMO WebExtension，Firefox 必须先安装定制的 `userChrome.js-Loader` 才能加载。
+DownloadIt 是使用 Firefox 内部 API 的 bootstrapped 扩展。它不是 AMO WebExtension，Firefox 必须先安装兼容的 Loader 才能加载。
 
 ## 开始前确认
 
 - Firefox <ProductValue field="firefoxMinVersion" /> 或更高版本。
 - Windows，或使用发行版原生包/Mozilla tarball 的 Linux。
-- 可以安装定制 Loader 的 Firefox profile。
+- 可以安装兼容 Loader 的 Firefox profile。
 - 当前不支持 Snap Firefox、Flatpak Firefox 和 macOS。
 
-## 1. 安装 Loader
+## 1. 安装依赖环境
+
+所有受支持的 Firefox 版本都可以使用定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader/releases)。Firefox Developer Edition 和 Nightly 也可以改用 [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/)。
+
+### userChrome.js-Loader
 
 从 [`userChrome.js-Loader` 项目](https://github.com/benzBrake/userChrome.js-Loader/releases)下载兼容版本。Firefox 135 及以上建议使用 `20250219` 之后发布的版本。
 
 将 Loader 的 `program` 文件解压到 `firefox.exe` 所在目录，将 `profile` 文件解压到准备使用的 Firefox profile。重启 Firefox，并确认 Loader 已生效。
 
 :::caution
-Loader 会修改 Firefox 的程序和 profile 文件。安装前请使用专用 profile，或备份受影响的文件。
+`userChrome.js-Loader` 会修改 Firefox 的程序和 profile 文件。安装前请使用专用 profile，或备份受影响的文件。
+:::
+
+### Bootstrap Loader
+
+该替代方案仅适用于 Firefox Developer Edition 和 Nightly。Firefox Release、Beta 和 ESR 不支持 WebExtension Experiments。
+
+1. 打开 `about:config`，接受警告，然后设置：
+
+   ```text
+   xpinstall.signatures.required = false
+   extensions.experiments.enabled = true
+   ```
+
+2. 从最新 Release 资产下载 [`BootstrapLoader.xpi`](https://github.com/benzBrake/BootstrapLoader/releases/download/latest/BootstrapLoader.xpi)。
+3. 打开 `about:addons`，从齿轮菜单选择“从文件安装附加组件…”，再选择该 XPI。
+4. 重启 Firefox，并确认 Bootstrap Loader 已生效。
+
+:::caution
+这些偏好会降低 Firefox 对附加组件签名和 WebExtension Experiment 的限制。请只在专用的 Developer Edition 或 Nightly profile 中使用 Bootstrap Loader。
 :::
 
 ## 2. 下载 DownloadIt
@@ -47,7 +70,7 @@ Loader 会修改 Firefox 的程序和 profile 文件。安装前请使用专用 
 
 下载最新 Nightly XPI，并使用同一个 `about:addons` 命令覆盖安装。升级后 DownloadIt 会提示重启 Firefox。
 
-扩展虽然发布了 legacy 更新清单，但当前 Loader 不会检查或自动安装更新，因此仍需手动升级。
+扩展虽然发布了 legacy 更新清单，但支持的 Loader 都不会检查或自动安装更新，因此仍需手动升级。
 
 ## Linux 注意事项
 

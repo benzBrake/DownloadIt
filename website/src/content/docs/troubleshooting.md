@@ -8,7 +8,7 @@ sidebar:
 ## DownloadIt does not start
 
 1. Confirm that Firefox meets the minimum version in [Platform compatibility](../reference/compatibility/).
-2. Confirm that the customized `userChrome.js-Loader` is installed in the same Firefox application and profile you are opening.
+2. Confirm that the selected Loader is installed for the Firefox application and profile you are opening. Firefox Developer Edition and Nightly can use [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/) instead of the customized `userChrome.js-Loader`.
 3. Check that DownloadIt is enabled in `about:addons`.
 4. Restart Firefox after installation or upgrade.
 5. If you use several profiles, open `about:support` and verify the active profile directory.

@@ -1,6 +1,6 @@
 ---
 title: Installation and upgrade
-description: Install the required userChrome.js Loader, add the DownloadIt nightly XPI to Firefox, restart the browser, and upgrade an existing installation.
+description: Choose a compatible Loader, add the DownloadIt nightly XPI to Firefox, restart the browser, and upgrade an existing installation.
 sidebar:
   order: 1
   label: Installation and upgrade
@@ -9,23 +9,46 @@ sidebar:
 import NightlyLink from "../../../components/NightlyLink.astro";
 import ProductValue from "../../../components/ProductValue.astro";
 
-DownloadIt is a bootstrapped Firefox extension that uses internal browser APIs. It is not an AMO WebExtension and requires the customized `userChrome.js-Loader` before Firefox can load it.
+DownloadIt is a bootstrapped Firefox extension that uses internal browser APIs. It is not an AMO WebExtension and requires a compatible Loader before Firefox can load it.
 
 ## Before you start
 
 - Firefox <ProductValue field="firefoxMinVersion" /> or later.
 - Windows, or Linux with a distribution-native Firefox package or Mozilla tarball.
-- A Firefox profile where you can install the customized Loader.
+- A Firefox profile where you can install a compatible Loader.
 - Snap Firefox, Flatpak Firefox, and macOS are not currently supported.
 
-## 1. Install the Loader
+## 1. Install the dependency environment
+
+All supported Firefox channels can use the customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader/releases). For Firefox Developer Edition and Nightly, you may use [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/) instead.
+
+### userChrome.js-Loader
 
 Download a compatible build from the [`userChrome.js-Loader` project](https://github.com/benzBrake/userChrome.js-Loader/releases). Versions released after `20250219` are recommended for Firefox 135 and later.
 
 Extract the Loader's `program` files beside `firefox.exe` and its `profile` files into the Firefox profile you intend to use. Restart Firefox and confirm the Loader is active before continuing.
 
 :::caution
-The Loader changes Firefox's application and profile files. Use a dedicated profile or back up the affected files before installing it.
+`userChrome.js-Loader` changes Firefox's application and profile files. Use a dedicated profile or back up the affected files before installing it.
+:::
+
+### Bootstrap Loader
+
+This alternative is available only on Firefox Developer Edition and Nightly. WebExtension Experiments are not available in Firefox Release, Beta, or ESR.
+
+1. Open `about:config`, accept the warning, and set:
+
+   ```text
+   xpinstall.signatures.required = false
+   extensions.experiments.enabled = true
+   ```
+
+2. Download [`BootstrapLoader.xpi`](https://github.com/benzBrake/BootstrapLoader/releases/download/latest/BootstrapLoader.xpi) from the latest release assets.
+3. Open `about:addons`, choose **Install Add-on From File…** from the gear menu, and select the XPI.
+4. Restart Firefox and confirm that Bootstrap Loader is active.
+
+:::caution
+These preferences reduce Firefox's add-on signature and WebExtension Experiment restrictions. Use Bootstrap Loader only in a dedicated Developer Edition or Nightly profile.
 :::
 
 ## 2. Download DownloadIt
@@ -47,7 +70,7 @@ After restart, the DownloadIt button is added to the navigation toolbar. Firefox
 
 Download the latest Nightly XPI and install it over the existing copy using the same `about:addons` command. DownloadIt prompts for a restart after an upgrade.
 
-The extension publishes a legacy update manifest, but the current Loader does not check or install updates automatically. Upgrades are manual.
+The extension publishes a legacy update manifest, but the supported Loaders do not check or install updates automatically. Upgrades are manual.
 
 ## Linux notes
 

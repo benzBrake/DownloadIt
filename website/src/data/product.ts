@@ -9,6 +9,7 @@ export interface ProductMetadata {
   downloadUrl: string;
   repositoryUrl: string;
   loaderUrl: string;
+  bootstrapLoaderUrl: string;
 }
 
 const repositoryUrl = "https://github.com/benzBrake/DownloadIt";
@@ -71,6 +72,7 @@ function readProductMetadata(): ProductMetadata {
     downloadUrl: `${repositoryUrl}/releases/download/nightly/addon.xpi`,
     repositoryUrl,
     loaderUrl: "https://github.com/benzBrake/userChrome.js-Loader",
+    bootstrapLoaderUrl: "https://github.com/benzBrake/BootstrapLoader/",
   });
 }
 

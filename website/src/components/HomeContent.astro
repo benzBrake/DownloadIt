@@ -57,6 +57,7 @@ const copy = isZh
       platformTitle: "先确认环境，再安装",
       platforms: [
         ["Firefox Release / Beta / ESR", "支持", "必须先装载定制 userChrome.js Loader", true],
+        ["Firefox Developer Edition / Nightly", "支持", "可使用 Bootstrap Loader 替代，安装更简便", true],
         ["Windows", "支持", "可使用 FlashGot.exe 检测外部下载器", true],
         ["Linux 原生包 / Mozilla tarball", "支持", "命令行下载器需具备可执行权限", true],
         ["macOS / Snap / Flatpak", "暂不支持", "等待后续适配", false],
@@ -64,7 +65,7 @@ const copy = isZh
       installLabel: "安装摘要",
       installTitle: "四步进入可用状态",
       installSteps: [
-        ["01", "装载 Loader", "按 Loader 项目说明安装 program 与 profile 文件。"],
+        ["01", "装载 Loader", "Release/Beta/ESR 使用 userChrome.js Loader；Dev/Nightly 可使用 Bootstrap Loader。"],
         ["02", "下载 Nightly", "Nightly 是当前唯一发布通道，并明确标记为预发布。"],
         ["03", "从文件安装 XPI", "在 about:addons 的齿轮菜单中选择 addon.xpi。"],
         ["04", "重启并选择下载器", "打开设置页，确认服务状态和默认下载管理器。"],
@@ -110,6 +111,7 @@ const copy = isZh
       platformTitle: "Confirm the environment before installing",
       platforms: [
         ["Firefox Release / Beta / ESR", "Supported", "Load the customized userChrome.js Loader first", true],
+        ["Firefox Developer Edition / Nightly", "Supported", "Bootstrap Loader is an alternative with a simpler installation", true],
         ["Windows", "Supported", "FlashGot.exe can detect supported external managers", true],
         ["Native Linux package / Mozilla tarball", "Supported", "Command-line managers must be executable", true],
         ["macOS / Snap / Flatpak", "Not yet", "Awaiting a future compatibility pass", false],
@@ -117,7 +119,7 @@ const copy = isZh
       installLabel: "Installation summary",
       installTitle: "Four steps to a working setup",
       installSteps: [
-        ["01", "Load the Loader", "Install the program and profile files from the Loader project."],
+        ["01", "Load the Loader", "Use userChrome.js Loader on Release/Beta/ESR; Bootstrap Loader is available on Dev/Nightly."],
         ["02", "Download Nightly", "Nightly is the only current release channel and is marked pre-release."],
         ["03", "Install the XPI", "Choose addon.xpi from the gear menu in about:addons."],
         ["04", "Restart and choose", "Open settings and confirm service status and the default manager."],

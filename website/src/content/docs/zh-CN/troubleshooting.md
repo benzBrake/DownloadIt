@@ -8,7 +8,7 @@ sidebar:
 ## DownloadIt 没有启动
 
 1. 确认 Firefox 满足[平台兼容性](../reference/compatibility/)中的最低版本。
-2. 确认定制 `userChrome.js-Loader` 安装在当前打开的 Firefox 程序和同一个 profile 中。
+2. 确认所选 Loader 已安装在当前打开的 Firefox 程序和同一个 profile 中。Firefox Developer Edition 和 Nightly 可以使用 [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/) 替代定制 `userChrome.js-Loader`。
 3. 在 `about:addons` 检查 DownloadIt 是否启用。
 4. 安装或升级后重启 Firefox。
 5. 使用多个 profile 时，打开 `about:support` 核对当前 profile 目录。

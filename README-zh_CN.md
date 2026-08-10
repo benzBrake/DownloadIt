@@ -6,7 +6,7 @@
 
 **官网与用户文档：** [benzbrake.github.io/DownloadIt/zh-CN](https://benzbrake.github.io/DownloadIt/zh-CN/)
 
-DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。它通过定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) 加载 bootstrapped XPI，并把网页链接交给外部下载管理器处理。
+DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。它通过兼容的 Loader 加载 bootstrapped XPI，并把网页链接交给外部下载管理器处理：定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader)，或在 Firefox Developer Edition 和 Nightly 上使用的 [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/)。
 
 当前版本处于迁移阶段，支持 Windows 和 Linux，Firefox 最低版本为 136.0。
 
@@ -93,7 +93,7 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 
 - Windows，或使用发行版原生包/Mozilla tarball 的 Linux；
 - Firefox 136.0 或更高版本；
-- 已安装并正常配置的定制 `userChrome.js-Loader`。建议使用该 Loader 20250219 之后的版本（兼容 Firefox 135+）；
+- 已安装并正常配置的 Loader。所有受支持的 Firefox 版本都可以使用定制的 `userChrome.js-Loader`（Firefox 135+ 建议使用 20250219 之后的版本）；Firefox Developer Edition 和 Nightly 也可以改用 [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/)，但需先在 `about:config` 将 `xpinstall.signatures.required` 设为 `false`、将 `extensions.experiments.enabled` 设为 `true`；
 - Linux 上为自定义命令、aria2 自动启动或 JDownloader 自动启动选择的文件必须具有 Unix 可执行权限，例如 `chmod +x /path/to/launcher`；
 - Linux 首版不支持 Snap 和 Flatpak Firefox，因为其 Loader 安装、宿主文件访问和进程沙箱边界与非沙箱 Firefox 不同；
 - Firefox 内建下载器始终可用，因此外部下载管理器不是必需项；
@@ -158,14 +158,14 @@ DownloadIt 批量下载会从当前 DOM、子 frame 和开放的 Shadow DOM 中�
 
 ## 安装与升级
 
-1. 先安装并确认 `userChrome.js-Loader` 已在目标 Firefox profile 中生效。
+1. 先安装依赖环境并确认其已在目标 Firefox profile 中生效。所有 Firefox 版本都可以使用定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader)。Firefox Developer Edition 和 Nightly 也可以改用 [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/)；先在 `about:config` 将 `xpinstall.signatures.required` 设为 `false`、将 `extensions.experiments.enabled` 设为 `true`，再从 `about:addons` 安装其 XPI。
 2. 执行构建命令生成 `addon.xpi`。
 3. 在 Firefox 打开 `about:addons`，选择齿轮菜单中的“从文件安装附加组件”，选中 `addon.xpi`。
 4. 安装完成后，DownloadIt 会询问是否重启 Firefox。点击“确定”立即重启，点击“取消”可继续使用并稍后手动重启。
 
 Linux 上请使用发行版原生包或 Mozilla tarball 版 Firefox 完成以上步骤，并确认 Loader 能访问目标 profile，所有已配置的本地启动器也具有可执行权限。Snap 和 Flatpak 不属于当前支持的安装方式。
 
-升级时使用新构建的 `addon.xpi` 或 [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) 覆盖安装即可。升级完成后 DownloadIt 会询问是否重启 Firefox；点击“确定”立即应用，点击“取消”可稍后重启。`install.rdf` 已声明 legacy `update.rdf` 的位置，但当前 userChrome.js Loader 不执行更新检查或自动安装，因此仍需手动升级。若扩展未启动，请先确认 Loader 版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
+升级时使用新构建的 `addon.xpi` 或 [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) 覆盖安装即可。升级完成后 DownloadIt 会询问是否重启 Firefox；点击“确定”立即应用，点击“取消”可稍后重启。`install.rdf` 已声明 legacy `update.rdf` 的位置，但当前 Loader 不执行更新检查或自动安装，因此仍需手动升级。若扩展未启动，请先确认 Loader 版本、Firefox 版本和 profile 是否匹配，再检查 `about:addons` 中的扩展状态。
 
 ## 配置
 

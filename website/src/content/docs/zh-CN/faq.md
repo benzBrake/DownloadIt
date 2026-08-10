@@ -12,7 +12,7 @@ DownloadIt 使用 Firefox 内部 API 和 legacy bootstrapped-XPI 生命周期，
 
 ## 可以从 Mozilla Add-ons 安装吗？
 
-不可以。DownloadIt 不是 AMO WebExtension。请先安装定制 `userChrome.js-Loader`，再从 `about:addons` 选择本地 XPI 安装。
+不可以。DownloadIt 不是 AMO WebExtension。请先安装兼容的 Loader，再从 `about:addons` 选择本地 XPI 安装。Firefox Developer Edition 和 Nightly 可以使用 [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/) 替代定制 `userChrome.js-Loader`。
 
 ## 有稳定版吗？
 

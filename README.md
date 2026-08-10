@@ -6,7 +6,7 @@
 
 **Website and user documentation:** [benzbrake.github.io/DownloadIt](https://benzbrake.github.io/DownloadIt/)
 
-DownloadIt is a port of FlashGot's download-bridge extension for modern Firefox. It uses a customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) to load a bootstrapped XPI and forward web links to an external download manager.
+DownloadIt is a port of FlashGot's download-bridge extension for modern Firefox. It uses a compatible Loader to load a bootstrapped XPI and forward web links to an external download manager: the customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader), or [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/) on Firefox Developer Edition and Nightly.
 
 The project is currently being migrated. It supports Windows and Linux, and the minimum supported Firefox version is 136.0.
 
@@ -93,7 +93,7 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 
 - Windows, or Linux using a distribution-native Firefox package or Mozilla tarball;
 - Firefox 136.0 or later;
-- A configured custom `userChrome.js-Loader` that is active in the target profile. The version released after 20250219 is recommended because it supports Firefox 135+;
+- A configured Loader that is active in the target profile. All supported Firefox channels can use the customized `userChrome.js-Loader` (the version released after 20250219 is recommended for Firefox 135+); Firefox Developer Edition and Nightly can alternatively use [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/) after setting `xpinstall.signatures.required=false` and `extensions.experiments.enabled=true` in `about:config`;
 - Linux executables selected for custom commands, aria2 startup, or JDownloader startup must have Unix execute permission, for example `chmod +x /path/to/launcher`;
 - Snap and Flatpak Firefox packages are not supported in the first Linux release because their Loader installation, host-file access, and process sandbox boundaries differ from non-sandboxed Firefox;
 - External download managers are optional because the Firefox downloader is always available;
@@ -158,14 +158,14 @@ The **Link groups** settings tab can enable or disable each built-in suffix grou
 
 ## Installation and upgrade
 
-1. Install `userChrome.js-Loader` and confirm that it is active in the target Firefox profile.
+1. Install the dependency environment and confirm that it is active in the target Firefox profile. All Firefox channels can use the customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader). Firefox Developer Edition and Nightly can alternatively use [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/); first set `xpinstall.signatures.required=false` and `extensions.experiments.enabled=true` in `about:config`, then install its XPI from `about:addons`.
 2. Run the build command to generate `addon.xpi`.
 3. In Firefox, open `about:addons`, choose “Install Add-on From File…” from the gear menu, and select `addon.xpi`.
 4. When installation completes, DownloadIt asks whether to restart Firefox. Choose OK to restart immediately, or Cancel to continue and restart later.
 
 On Linux, perform these steps with a distribution-native or Mozilla tarball Firefox build. Confirm that the Loader can access the profile and that every configured local launcher is executable. Snap and Flatpak packages are outside the supported installation path.
 
-To upgrade, install the newly built `addon.xpi` or the [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) over the existing installation. DownloadIt asks whether to restart Firefox after the upgrade; choose OK to apply it immediately or Cancel to restart later. `install.rdf` publishes the legacy `update.rdf` location, but the current userChrome.js Loader does not perform update checks or automatic installation, so upgrades remain manual. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
+To upgrade, install the newly built `addon.xpi` or the [nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) over the existing installation. DownloadIt asks whether to restart Firefox after the upgrade; choose OK to apply it immediately or Cancel to restart later. `install.rdf` publishes the legacy `update.rdf` location, but the current Loaders do not perform update checks or automatic installation, so upgrades remain manual. If the extension does not start, first check the Loader version, Firefox version, and profile, then check the extension status in `about:addons`.
 
 ## Configuration
 

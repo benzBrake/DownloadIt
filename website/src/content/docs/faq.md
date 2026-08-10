@@ -12,7 +12,7 @@ DownloadIt uses Firefox internal APIs and the legacy bootstrapped-XPI lifecycle 
 
 ## Can I install it from Mozilla Add-ons?
 
-No. DownloadIt is not an AMO WebExtension. Install the customized `userChrome.js-Loader`, then install the XPI from a file in `about:addons`.
+No. DownloadIt is not an AMO WebExtension. Install a compatible Loader, then install the XPI from a file in `about:addons`. Firefox Developer Edition and Nightly can use [`Bootstrap Loader`](https://github.com/benzBrake/BootstrapLoader/) instead of the customized `userChrome.js-Loader`.
 
 ## Is there a stable release?
 
