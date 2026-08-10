@@ -1,0 +1,311 @@
+---
+import { Picture } from "astro:assets";
+import { ArrowRight, Download, ExternalLink, ShieldCheck } from "lucide-astro";
+import settingsScreenshot from "../assets/screenshots/downloadit-settings-release.png";
+import { product } from "../data/product";
+import { currentLocale, pagePath } from "../data/site";
+
+const locale = currentLocale(Astro.locals.starlightRoute.lang);
+const copy =
+  locale === "zh-CN"
+    ? {
+        eyebrow: "Firefox 原生下载转接",
+        title: "DownloadIt",
+        tagline: "把 Firefox 的下载任务交给你已经在使用的下载工具。",
+        install: "查看安装指南",
+        nightly: `下载 Nightly v${product.version}`,
+        prerelease: "预发布",
+        loader: "需要定制的 userChrome.js Loader",
+        loaderAction: "查看 Loader",
+        screenshotAlt: "Firefox 中的 DownloadIt 下载管理器设置页面",
+      }
+    : {
+        eyebrow: "Firefox-native download routing",
+        title: "DownloadIt",
+        tagline: "Send Firefox downloads to the manager you already use.",
+        install: "Read the installation guide",
+        nightly: `Download Nightly v${product.version}`,
+        prerelease: "Pre-release",
+        loader: "Requires the customized userChrome.js Loader",
+        loaderAction: "View the Loader",
+        screenshotAlt: "DownloadIt download manager settings inside Firefox",
+      };
+---
+
+<section class="downloadit-hero" aria-labelledby="downloadit-hero-title">
+  <Picture
+    src={settingsScreenshot}
+    widths={[640, 960, 1440, 1920]}
+    sizes="100vw"
+    formats={["avif", "webp"]}
+    fallbackFormat="png"
+    alt={copy.screenshotAlt}
+    loading="eager"
+    decoding="async"
+    class="hero-media"
+    pictureAttributes={{ "aria-hidden": "true" }}
+  />
+  <div class="hero-wash" aria-hidden="true"></div>
+  <div class="hero-content">
+    <div class="hero-kicker"><span class="hero-pulse" aria-hidden="true"></span>{copy.eyebrow}</div>
+    <h1 id="downloadit-hero-title">{copy.title}</h1>
+    <p class="hero-tagline">{copy.tagline}</p>
+    <div class="hero-actions">
+      <a class="hero-button hero-button-primary" href={pagePath("install", locale)}>
+        <ArrowRight size={18} strokeWidth={2.2} aria-hidden="true" />
+        <span>{copy.install}</span>
+      </a>
+      <a class="hero-button hero-button-nightly" href={product.downloadUrl}>
+        <Download size={18} strokeWidth={2.2} aria-hidden="true" />
+        <span>{copy.nightly}</span>
+        <small>{copy.prerelease}</small>
+      </a>
+    </div>
+    <div class="hero-requirement">
+      <ShieldCheck size={17} strokeWidth={2} aria-hidden="true" />
+      <span>{copy.loader}</span>
+      <a href={product.loaderUrl} rel="noreferrer">
+        {copy.loaderAction}
+        <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
+      </a>
+    </div>
+  </div>
+  <div class="hero-edge" aria-hidden="true"><span></span><span></span><span></span></div>
+</section>
+
+<style>
+  .downloadit-hero {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    min-height: 39rem;
+    align-items: center;
+    overflow: hidden;
+    margin: calc(var(--sl-main-pad) * -1);
+    margin-bottom: 0;
+    background: #1c1b22;
+  }
+
+  .hero-media,
+  .hero-media :global(img) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .hero-media {
+    z-index: -2;
+  }
+
+  .hero-media :global(img) {
+    object-fit: cover;
+    object-position: center center;
+  }
+
+  .hero-wash {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: rgba(18, 22, 24, 0.68);
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 1;
+    width: min(100% - 3rem, 76rem);
+    margin-inline: auto;
+    padding-block: 5rem;
+    color: #fbfbfe;
+  }
+
+  .hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: #ffd43b;
+    font-family: var(--__sl-font-mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .hero-pulse {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: #ffd43b;
+    box-shadow: 0 0 0 0.25rem rgba(255, 212, 59, 0.16);
+  }
+
+  h1 {
+    max-width: none;
+    margin: 1.25rem 0 0;
+    color: #fbfbfe;
+    font-size: 7.5rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 0.92;
+    white-space: nowrap;
+  }
+
+  .hero-tagline {
+    max-width: 30rem;
+    margin: 1.6rem 0 0;
+    color: #f0f0f4;
+    font-size: 1.5rem;
+    line-height: 1.45;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 2.25rem;
+  }
+
+  .hero-button {
+    display: inline-flex;
+    min-height: 3rem;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.15;
+    text-decoration: none;
+    transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+  }
+
+  .hero-button:hover {
+    transform: translateY(-2px);
+  }
+
+  .hero-button-primary {
+    background: #168ac5;
+    color: #fff;
+  }
+
+  .hero-button-primary:hover {
+    background: #087eb6;
+  }
+
+  .hero-button-nightly {
+    border-color: rgba(255, 212, 59, 0.7);
+    background: rgba(28, 27, 34, 0.78);
+    color: #fff;
+  }
+
+  .hero-button-nightly:hover {
+    border-color: #ffd43b;
+    background: rgba(28, 27, 34, 0.92);
+  }
+
+  .hero-button-nightly small {
+    padding-inline-start: 0.55rem;
+    border-inline-start: 1px solid rgba(255, 255, 255, 0.32);
+    color: #ffd43b;
+    font-family: var(--__sl-font-mono);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .hero-requirement {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.7rem;
+    max-width: 42rem;
+    margin-top: 1.5rem;
+    color: #d8d8df;
+    font-size: 0.86rem;
+  }
+
+  .hero-requirement :global(svg) {
+    color: #ffd43b;
+  }
+
+  .hero-requirement a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #8bdcff;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  .hero-edge {
+    position: absolute;
+    right: clamp(1rem, 4vw, 4rem);
+    bottom: 1.5rem;
+    z-index: 1;
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .hero-edge span {
+    display: block;
+    width: 1.7rem;
+    height: 0.2rem;
+    background: #ffd43b;
+  }
+
+  .hero-edge span:nth-child(2) {
+    width: 0.8rem;
+    background: #168ac5;
+  }
+
+  .hero-edge span:nth-child(3) {
+    width: 0.35rem;
+    background: #df642e;
+  }
+
+  @media (max-width: 50rem) {
+    .downloadit-hero {
+      min-height: 38rem;
+      margin-inline: calc(var(--sl-main-pad) * -1);
+    }
+
+    .hero-media :global(img) {
+      object-position: 60% center;
+    }
+
+    .hero-wash {
+      background: rgba(18, 22, 24, 0.76);
+    }
+
+    .hero-content {
+      width: min(100% - 2rem, 34rem);
+      padding-block: 5rem 6rem;
+    }
+
+    h1 {
+      font-size: 3.5rem;
+    }
+
+    .hero-tagline {
+      font-size: 1.25rem;
+    }
+
+    .hero-button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-button {
+      transition: none;
+    }
+
+    .hero-button:hover {
+      transform: none;
+    }
+  }
+</style>

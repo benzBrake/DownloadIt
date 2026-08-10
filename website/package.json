@@ -1,0 +1,26 @@
+{
+  "name": "downloadit-website",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "check": "astro check && node scripts/check-locales.mjs",
+    "build": "astro build && node scripts/ensure-404.mjs",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.3",
+    "@astrojs/starlight": "0.41.7",
+    "@fontsource/fira-mono": "5.3.0",
+    "@fontsource/fira-sans": "5.3.0",
+    "@fontsource/noto-sans-sc": "5.3.0",
+    "astro": "7.2.0",
+    "fast-xml-parser": "5.10.1",
+    "lucide-astro": "0.556.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,56 @@
+---
+title: 安装与升级
+description: 安装所需的 userChrome.js Loader，将 DownloadIt Nightly XPI 加入 Firefox，重启浏览器并升级现有安装。
+sidebar:
+  order: 1
+  label: 安装与升级
+---
+
+import NightlyLink from "../../../../components/NightlyLink.astro";
+import ProductValue from "../../../../components/ProductValue.astro";
+
+DownloadIt 是使用 Firefox 内部 API 的 bootstrapped 扩展。它不是 AMO WebExtension，Firefox 必须先安装定制的 `userChrome.js-Loader` 才能加载。
+
+## 开始前确认
+
+- Firefox <ProductValue field="firefoxMinVersion" /> 或更高版本。
+- Windows，或使用发行版原生包/Mozilla tarball 的 Linux。
+- 可以安装定制 Loader 的 Firefox profile。
+- 当前不支持 Snap Firefox、Flatpak Firefox 和 macOS。
+
+## 1. 安装 Loader
+
+从 [`userChrome.js-Loader` 项目](https://github.com/benzBrake/userChrome.js-Loader/releases)下载兼容版本。Firefox 135 及以上建议使用 `20250219` 之后发布的版本。
+
+将 Loader 的 `program` 文件解压到 `firefox.exe` 所在目录，将 `profile` 文件解压到准备使用的 Firefox profile。重启 Firefox，并确认 Loader 已生效。
+
+:::caution
+Loader 会修改 Firefox 的程序和 profile 文件。安装前请使用专用 profile，或备份受影响的文件。
+:::
+
+## 2. 下载 DownloadIt
+
+<NightlyLink />
+
+当前安装包是 Nightly 预发布版本，由 `master` 分支持续构建，变化频率会高于稳定扩展。
+
+## 3. 安装 XPI
+
+1. 在 Firefox 打开 `about:addons`。
+2. 打开齿轮菜单，选择**从文件安装附加组件…**。
+3. 选择下载得到的 `addon.xpi`。
+4. DownloadIt 询问是否重启时，选择**确定**立即应用安装。
+
+重启后，DownloadIt 按钮会加入导航工具栏。可以通过 Firefox 的**定制工具栏**界面移动或移除它。
+
+## 升级
+
+下载最新 Nightly XPI，并使用同一个 `about:addons` 命令覆盖安装。升级后 DownloadIt 会提示重启 Firefox。
+
+扩展虽然发布了 legacy 更新清单，但当前 Loader 不会检查或自动安装更新，因此仍需手动升级。
+
+## Linux 注意事项
+
+请使用发行版原生包或 Mozilla tarball。为自定义命令、aria2、uGet 或 JDownloader 配置的本地启动器必须具有可执行权限。包内 Aria2Next 支持 Linux x86_64；其他 Linux 架构仍可连接外部管理的 aria2 服务。
+
+安装后继续阅读[快速开始](../quick-start/)。

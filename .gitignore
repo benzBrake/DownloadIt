@@ -18,3 +18,8 @@ addon/ariang/css/
 addon/ariang/fonts/
 addon/ariang/js/
 addon/ariang/langs/
+node_modules/
+website/dist/
+website/.astro/
+output/
+.playwright-cli/

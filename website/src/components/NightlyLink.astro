@@ -1,0 +1,71 @@
+---
+import { Download } from "lucide-astro";
+import { product } from "../data/product";
+import { currentLocale } from "../data/site";
+
+interface Props {
+  compact?: boolean;
+}
+
+const { compact = false } = Astro.props;
+const locale = currentLocale(Astro.locals.starlightRoute.lang);
+const label =
+  locale === "zh-CN"
+    ? `下载 Nightly v${product.version}`
+    : `Download Nightly v${product.version}`;
+---
+
+<a
+  class:list={["nightly-link", { compact }]}
+  href={product.downloadUrl}
+  aria-label={label}
+>
+  <Download size={compact ? 16 : 18} strokeWidth={2} aria-hidden="true" />
+  <span>{label}</span>
+  <small>Pre-release</small>
+</a>
+
+<style>
+  .nightly-link {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--downloadit-orange) 42%, var(--sl-color-hairline));
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--downloadit-orange) 10%, var(--sl-color-bg));
+    color: var(--sl-color-white);
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+  }
+
+  .nightly-link:hover {
+    border-color: var(--downloadit-orange);
+    background: color-mix(in srgb, var(--downloadit-orange) 16%, var(--sl-color-bg));
+  }
+
+  small {
+    padding-inline-start: 0.55rem;
+    border-inline-start: 1px solid var(--sl-color-hairline);
+    color: var(--sl-color-gray-3);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.68rem;
+    font-weight: 400;
+    text-transform: uppercase;
+  }
+
+  .compact {
+    min-height: 2.25rem;
+    padding: 0.45rem 0.7rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  @media (max-width: 30rem) {
+    .nightly-link:not(.compact) {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>

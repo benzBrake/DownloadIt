@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://benzbrake.github.io/DownloadIt/sitemap-index.xml

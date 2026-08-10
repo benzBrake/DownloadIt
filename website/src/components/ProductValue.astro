@@ -1,0 +1,18 @@
+---
+import { product, type ProductMetadata } from "../data/product";
+
+interface Props {
+  field: keyof Pick<ProductMetadata, "version" | "firefoxMinVersion">;
+}
+
+const { field } = Astro.props;
+---
+
+<span class="product-value">{product[field]}</span>
+
+<style>
+  .product-value {
+    font-family: var(--__sl-font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+</style>

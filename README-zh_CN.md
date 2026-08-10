@@ -4,6 +4,8 @@
 
 [![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi)
 
+**官网与用户文档：** [benzbrake.github.io/DownloadIt/zh-CN](https://benzbrake.github.io/DownloadIt/zh-CN/)
+
 DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。它通过定制的 [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) 加载 bootstrapped XPI，并把网页链接交给外部下载管理器处理。
 
 当前版本处于迁移阶段，支持 Windows 和 Linux，Firefox 最低版本为 136.0。

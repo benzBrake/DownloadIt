@@ -48,3 +48,31 @@ jobs:
         run: .\scripts\pack.ps1
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  website:
+    name: Website
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install website dependencies
+        run: npm ci
+
+      - name: Check website types and translations
+        run: npm run check
+
+      - name: Build website
+        run: npm run build

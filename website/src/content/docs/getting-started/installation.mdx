@@ -1,0 +1,56 @@
+---
+title: Installation and upgrade
+description: Install the required userChrome.js Loader, add the DownloadIt nightly XPI to Firefox, restart the browser, and upgrade an existing installation.
+sidebar:
+  order: 1
+  label: Installation and upgrade
+---
+
+import NightlyLink from "../../../components/NightlyLink.astro";
+import ProductValue from "../../../components/ProductValue.astro";
+
+DownloadIt is a bootstrapped Firefox extension that uses internal browser APIs. It is not an AMO WebExtension and requires the customized `userChrome.js-Loader` before Firefox can load it.
+
+## Before you start
+
+- Firefox <ProductValue field="firefoxMinVersion" /> or later.
+- Windows, or Linux with a distribution-native Firefox package or Mozilla tarball.
+- A Firefox profile where you can install the customized Loader.
+- Snap Firefox, Flatpak Firefox, and macOS are not currently supported.
+
+## 1. Install the Loader
+
+Download a compatible build from the [`userChrome.js-Loader` project](https://github.com/benzBrake/userChrome.js-Loader/releases). Versions released after `20250219` are recommended for Firefox 135 and later.
+
+Extract the Loader's `program` files beside `firefox.exe` and its `profile` files into the Firefox profile you intend to use. Restart Firefox and confirm the Loader is active before continuing.
+
+:::caution
+The Loader changes Firefox's application and profile files. Use a dedicated profile or back up the affected files before installing it.
+:::
+
+## 2. Download DownloadIt
+
+<NightlyLink />
+
+The current package is a Nightly pre-release. It is rebuilt from the `master` branch and may change more frequently than a stable extension.
+
+## 3. Install the XPI
+
+1. Open `about:addons` in Firefox.
+2. Open the gear menu and choose **Install Add-on From File…**.
+3. Select the downloaded `addon.xpi`.
+4. When DownloadIt asks to restart Firefox, choose **OK** to apply the installation immediately.
+
+After restart, the DownloadIt button is added to the navigation toolbar. Firefox's **Customize Toolbar** screen can move or remove it.
+
+## Upgrade
+
+Download the latest Nightly XPI and install it over the existing copy using the same `about:addons` command. DownloadIt prompts for a restart after an upgrade.
+
+The extension publishes a legacy update manifest, but the current Loader does not check or install updates automatically. Upgrades are manual.
+
+## Linux notes
+
+Use a distribution-native package or Mozilla tarball. Local launchers configured for custom commands, aria2, uGet, or JDownloader must be executable. The bundled Aria2Next provider is available on Linux x86_64; other Linux architectures can still connect to an externally managed aria2 service.
+
+Continue with [Quick start](../quick-start/).

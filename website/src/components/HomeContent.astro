@@ -1,0 +1,676 @@
+---
+import {
+  ArrowUpRight,
+  Boxes,
+  Check,
+  CircleAlert,
+  FolderSync,
+  Gauge,
+  Globe2,
+  Link2,
+  ListChecks,
+  Monitor,
+  Network,
+  Shield,
+  Terminal,
+  Zap,
+} from "lucide-astro";
+import NightlyLink from "./NightlyLink.astro";
+import ProductValue from "./ProductValue.astro";
+import { product } from "../data/product";
+import { currentLocale, pagePath } from "../data/site";
+
+const locale = currentLocale(Astro.locals.starlightRoute.lang);
+const isZh = locale === "zh-CN";
+
+const copy = isZh
+  ? {
+      flowLabel: "真实使用流程",
+      flowTitle: "从网页链接到下载任务，只经过你选择的那一步",
+      flowLead: "DownloadIt 保留 Firefox 的浏览上下文，再把任务交给合适的下载器。",
+      flow: [
+        ["01", "发现链接", "右键单个链接，或打开批量选择器收集当前页面与 frame 中的显式链接。", Link2],
+        ["02", "确认任务", "筛选 URL、文件名和协议，决定哪些链接进入本次任务。", ListChecks],
+        ["03", "转交下载器", "将 URL、Referer、Cookie 和 User-Agent 按下载器能力发送。", FolderSync],
+      ],
+      featureLabel: "核心能力",
+      featureTitle: "把复杂度放在 Firefox 内部",
+      featureLead: "没有运行时第三方脚本，没有账号，也不要求把下载历史上传到服务端。",
+      features: [
+        ["批量链接选择", "收集、过滤、复制和提交当前文档及 frame 中的显式链接。", Link2],
+        ["自动接管", "通过白名单与黑名单控制文件类型，黑名单优先。", Gauge],
+        ["原生上下文", "保留 Cookie、Referer 与 User-Agent，避免重复登录。", Shield],
+        ["镜像加速", "为支持的 GitHub 下载配置可控的镜像端点。", Globe2],
+        ["自定义命令", "接入命令行下载器或 aria2 JSON-RPC 服务。", Terminal],
+        ["Firefox 内建下载", "没有外部管理器时，仍可使用浏览器原生处理。", Zap],
+      ],
+      integrationLabel: "下载器集成",
+      integrationTitle: "用你现有的工具",
+      integrationLead: "名称只是入口，连接协议和能力状态会在设置页中明确显示。",
+      integrations: [
+        ["Firefox 原生处理", "浏览器内建", "始终可用", Monitor],
+        ["JDownloader", "本地 FlashGot 端点", "Windows / Linux", Network],
+        ["aria2 / Aria2Next", "JSON-RPC", "Windows / Linux x86_64", Boxes],
+        ["uGet / 自定义命令", "静默命令行", "按本机配置", Terminal],
+      ],
+      platformLabel: "平台兼容性",
+      platformTitle: "先确认环境，再安装",
+      platforms: [
+        ["Firefox Release / Beta / ESR", "支持", "必须先装载定制 userChrome.js Loader", true],
+        ["Windows", "支持", "可使用 FlashGot.exe 检测外部下载器", true],
+        ["Linux 原生包 / Mozilla tarball", "支持", "命令行下载器需具备可执行权限", true],
+        ["macOS / Snap / Flatpak", "暂不支持", "等待后续适配", false],
+      ],
+      installLabel: "安装摘要",
+      installTitle: "四步进入可用状态",
+      installSteps: [
+        ["01", "装载 Loader", "按 Loader 项目说明安装 program 与 profile 文件。"],
+        ["02", "下载 Nightly", "Nightly 是当前唯一发布通道，并明确标记为预发布。"],
+        ["03", "从文件安装 XPI", "在 about:addons 的齿轮菜单中选择 addon.xpi。"],
+        ["04", "重启并选择下载器", "打开设置页，确认服务状态和默认下载管理器。"],
+      ],
+      statusLabel: "发布状态",
+      statusTitle: "当前版本只有 Nightly",
+      statusCopy: "官网只维护当前版本。版本与 Firefox 最低版本从扩展的 install.rdf 读取，升级仍需手动完成。",
+      version: "DownloadIt 版本",
+      firefox: "Firefox 最低版本",
+      installAction: "打开安装指南",
+      sourceAction: "在 GitHub 查看源代码",
+    }
+  : {
+      flowLabel: "The real workflow",
+      flowTitle: "From a page link to a download task, with one deliberate handoff",
+      flowLead: "DownloadIt keeps Firefox's browsing context, then hands the task to the manager you choose.",
+      flow: [
+        ["01", "Find links", "Open the context menu for one link, or collect explicit links from the page and its frames.", Link2],
+        ["02", "Review tasks", "Filter URLs, filenames, and protocols before selecting what belongs in this batch.", ListChecks],
+        ["03", "Hand off", "Send URL, referrer, cookies, and User-Agent according to each manager's capabilities.", FolderSync],
+      ],
+      featureLabel: "Core capabilities",
+      featureTitle: "The complexity stays inside Firefox",
+      featureLead: "No runtime analytics, no account, and no server that needs your download history.",
+      features: [
+        ["Batch link selection", "Collect, filter, copy, and submit explicit links from documents and frames.", Link2],
+        ["Automatic capture", "Use allow and deny lists to control file types, with deny rules taking priority.", Gauge],
+        ["Native context", "Keep cookies, referrer, and User-Agent available without repeating a login.", Shield],
+        ["Mirror acceleration", "Configure a controlled mirror endpoint for supported GitHub downloads.", Globe2],
+        ["Custom commands", "Connect a command-line downloader or an aria2 JSON-RPC service.", Terminal],
+        ["Firefox downloader", "Keep a native browser route available when no external manager is running.", Zap],
+      ],
+      integrationLabel: "Downloader integrations",
+      integrationTitle: "Bring the tools you already use",
+      integrationLead: "Names are only the entry point. Protocol and capability status remain visible in settings.",
+      integrations: [
+        ["Firefox native", "Built into the browser", "Always available", Monitor],
+        ["JDownloader", "Local FlashGot endpoint", "Windows / Linux", Network],
+        ["aria2 / Aria2Next", "JSON-RPC", "Windows / Linux x86_64", Boxes],
+        ["uGet / custom command", "Quiet command line", "Your local setup", Terminal],
+      ],
+      platformLabel: "Platform compatibility",
+      platformTitle: "Confirm the environment before installing",
+      platforms: [
+        ["Firefox Release / Beta / ESR", "Supported", "Load the customized userChrome.js Loader first", true],
+        ["Windows", "Supported", "FlashGot.exe can detect supported external managers", true],
+        ["Native Linux package / Mozilla tarball", "Supported", "Command-line managers must be executable", true],
+        ["macOS / Snap / Flatpak", "Not yet", "Awaiting a future compatibility pass", false],
+      ],
+      installLabel: "Installation summary",
+      installTitle: "Four steps to a working setup",
+      installSteps: [
+        ["01", "Load the Loader", "Install the program and profile files from the Loader project."],
+        ["02", "Download Nightly", "Nightly is the only current release channel and is marked pre-release."],
+        ["03", "Install the XPI", "Choose addon.xpi from the gear menu in about:addons."],
+        ["04", "Restart and choose", "Open settings and confirm service status and the default manager."],
+      ],
+      statusLabel: "Release status",
+      statusTitle: "The current channel is Nightly",
+      statusCopy: "The website documents the current version only. Version and Firefox minimums come from install.rdf; upgrades remain manual.",
+      version: "DownloadIt version",
+      firefox: "Minimum Firefox",
+      installAction: "Open the installation guide",
+      sourceAction: "View the source on GitHub",
+    };
+---
+
+<div class="home-content">
+  <section class="home-section flow-section" aria-labelledby="flow-title">
+    <div class="section-heading">
+      <p class="section-label">{copy.flowLabel}</p>
+      <h2 id="flow-title">{copy.flowTitle}</h2>
+      <p>{copy.flowLead}</p>
+    </div>
+    <div class="flow-grid">
+      {copy.flow.map(([number, title, description, Icon]) => (
+        <article class="flow-step">
+          <div class="step-mark"><span>{number}</span><Icon size={20} strokeWidth={2} aria-hidden="true" /></div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="home-section feature-section" aria-labelledby="features-title">
+    <div class="section-heading split-heading">
+      <div>
+        <p class="section-label">{copy.featureLabel}</p>
+        <h2 id="features-title">{copy.featureTitle}</h2>
+      </div>
+      <p>{copy.featureLead}</p>
+    </div>
+    <div class="feature-grid">
+      {copy.features.map(([title, description, Icon]) => (
+        <article class="feature-row">
+          <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
+          <div><h3>{title}</h3><p>{description}</p></div>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="home-section integration-section" aria-labelledby="integrations-title">
+    <div class="section-heading">
+      <p class="section-label">{copy.integrationLabel}</p>
+      <h2 id="integrations-title">{copy.integrationTitle}</h2>
+      <p>{copy.integrationLead}</p>
+    </div>
+    <div class="integration-list">
+      {copy.integrations.map(([name, protocol, support, Icon]) => (
+        <div class="integration-row">
+          <Icon size={21} strokeWidth={1.8} aria-hidden="true" />
+          <strong>{name}</strong>
+          <span>{protocol}</span>
+          <small>{support}</small>
+        </div>
+      ))}
+    </div>
+    <a class="text-link" href={pagePath("integrations", locale)}>{isZh ? "查看集成参考" : "Read the integration reference"}<ArrowUpRight size={16} aria-hidden="true" /></a>
+  </section>
+
+  <section class="home-section platform-section" aria-labelledby="platform-title">
+    <div class="section-heading">
+      <p class="section-label">{copy.platformLabel}</p>
+      <h2 id="platform-title">{copy.platformTitle}</h2>
+    </div>
+    <div class="platform-table" role="table">
+      {copy.platforms.map(([name, status, note, supported]) => (
+        <div class="platform-row" role="row">
+          <strong role="cell">{name}</strong>
+          <span class:list={["platform-status", { supported }]} role="cell">
+            {supported ? <Check size={15} strokeWidth={2.4} aria-hidden="true" /> : <CircleAlert size={15} strokeWidth={2.2} aria-hidden="true" />}
+            {status}
+          </span>
+          <small role="cell">{note}</small>
+        </div>
+      ))}
+    </div>
+    <a class="text-link" href={pagePath("compatibility", locale)}>{isZh ? "查看完整兼容性说明" : "Read full compatibility notes"}<ArrowUpRight size={16} aria-hidden="true" /></a>
+  </section>
+
+  <section class="home-section install-section" aria-labelledby="install-summary-title">
+    <div class="section-heading split-heading">
+      <div>
+        <p class="section-label">{copy.installLabel}</p>
+        <h2 id="install-summary-title">{copy.installTitle}</h2>
+      </div>
+      <a class="text-link" href={pagePath("install", locale)}>{copy.installAction}<ArrowUpRight size={16} aria-hidden="true" /></a>
+    </div>
+    <ol class="install-list">
+      {copy.installSteps.map(([number, title, description]) => (
+        <li><span class="install-number">{number}</span><div><h3>{title}</h3><p>{description}</p></div></li>
+      ))}
+    </ol>
+  </section>
+
+  <section class="home-section status-section" aria-labelledby="status-title">
+    <div class="status-copy">
+      <p class="section-label">{copy.statusLabel}</p>
+      <h2 id="status-title">{copy.statusTitle}</h2>
+      <p>{copy.statusCopy}</p>
+      <NightlyLink />
+    </div>
+    <dl class="status-data">
+      <div><dt>{copy.version}</dt><dd><ProductValue field="version" /></dd></div>
+      <div><dt>{copy.firefox}</dt><dd><ProductValue field="firefoxMinVersion" />+</dd></div>
+      <div><dt>{isZh ? "渠道" : "Channel"}</dt><dd class="status-badge"><span></span>Nightly</dd></div>
+    </dl>
+  </section>
+
+  <footer class="home-footer">
+    <span>{isZh ? "需要完整技术细节？" : "Need the complete technical reference?"}</span>
+    <a href={product.repositoryUrl}>{copy.sourceAction}<ArrowUpRight size={16} aria-hidden="true" /></a>
+  </footer>
+</div>
+
+<style>
+  .home-content {
+    --home-rule: color-mix(in srgb, var(--sl-color-hairline) 88%, transparent);
+    margin-inline: auto;
+    max-width: 76rem;
+  }
+
+  .home-section {
+    padding-block: clamp(4.5rem, 10vw, 8rem);
+    border-bottom: 1px solid var(--home-rule);
+  }
+
+  .section-heading {
+    max-width: 48rem;
+  }
+
+  .section-heading h2 {
+    max-width: 22ch;
+    margin: 0.65rem 0 0;
+    color: var(--sl-color-white);
+    font-size: 3.25rem;
+    line-height: 1.04;
+  }
+
+  .section-heading > p,
+  .section-heading div + p {
+    margin-top: 1.1rem;
+    color: var(--sl-color-gray-3);
+    font-size: 1.05rem;
+  }
+
+  .section-label {
+    margin: 0;
+    color: var(--downloadit-cloud);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.75rem !important;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .split-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(14rem, 0.8fr);
+    align-items: end;
+    gap: 2rem;
+    max-width: none;
+  }
+
+  .split-heading > p {
+    margin: 0;
+  }
+
+  .flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin-top: 3.5rem;
+    border-top: 1px solid var(--home-rule);
+  }
+
+  .flow-step {
+    min-height: 15rem;
+    padding: 1.5rem 1.5rem 1rem 0;
+    border-right: 1px solid var(--home-rule);
+  }
+
+  .flow-step + .flow-step {
+    padding-inline: 1.5rem;
+  }
+
+  .flow-step:last-child {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .step-mark {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--downloadit-cloud);
+  }
+
+  .step-mark span,
+  .install-number {
+    color: var(--downloadit-orange);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+  }
+
+  .flow-step h3,
+  .feature-row h3,
+  .install-list h3 {
+    margin: 2.1rem 0 0.6rem;
+    color: var(--sl-color-white);
+    font-size: 1.2rem;
+  }
+
+  .flow-step p,
+  .feature-row p,
+  .install-list p {
+    margin: 0;
+    color: var(--sl-color-gray-3);
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 3.5rem;
+    border-top: 1px solid var(--home-rule);
+  }
+
+  .feature-row {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1.55rem 1.5rem 1.6rem 0;
+    border-bottom: 1px solid var(--home-rule);
+  }
+
+  .feature-row:nth-child(odd) {
+    border-right: 1px solid var(--home-rule);
+  }
+
+  .feature-row:nth-child(even) {
+    padding-left: 1.5rem;
+  }
+
+  .feature-row :global(svg) {
+    margin-top: 0.2rem;
+    color: var(--downloadit-cloud);
+  }
+
+  .feature-row h3 {
+    margin: 0 0 0.45rem;
+  }
+
+  .integration-list,
+  .platform-table {
+    margin-top: 3rem;
+    border-top: 1px solid var(--home-rule);
+  }
+
+  .integration-row,
+  .platform-row {
+    display: grid;
+    grid-template-columns: 2rem minmax(10rem, 1.2fr) minmax(10rem, 1fr) minmax(8rem, 0.8fr);
+    align-items: center;
+    gap: 1rem;
+    min-height: 4.35rem;
+    border-bottom: 1px solid var(--home-rule);
+  }
+
+  .integration-row :global(svg) {
+    color: var(--downloadit-cloud);
+  }
+
+  .integration-row strong,
+  .platform-row strong {
+    color: var(--sl-color-white);
+    font-size: 1rem;
+  }
+
+  .integration-row span,
+  .platform-row small {
+    color: var(--sl-color-gray-3);
+  }
+
+  .integration-row small {
+    color: var(--downloadit-orange);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .text-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 1.5rem;
+    color: var(--sl-color-text-accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .text-link:hover {
+    color: var(--downloadit-cloud);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  .platform-row {
+    grid-template-columns: minmax(12rem, 1.1fr) minmax(7rem, 0.55fr) minmax(14rem, 1.35fr);
+  }
+
+  .platform-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--downloadit-orange);
+    font-weight: 600;
+  }
+
+  .platform-status.supported {
+    color: var(--downloadit-green);
+  }
+
+  .install-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 3rem 0 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--home-rule);
+  }
+
+  .install-list li {
+    min-height: 13rem;
+    padding: 1.5rem 1.25rem 1rem 0;
+    border-right: 1px solid var(--home-rule);
+  }
+
+  .install-list li + li {
+    padding-left: 1.25rem;
+  }
+
+  .install-list li:last-child {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .install-list h3 {
+    margin-top: 2rem;
+  }
+
+  .status-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(16rem, 0.7fr);
+    gap: 3rem;
+    border-bottom: 0;
+  }
+
+  .status-copy {
+    max-width: 38rem;
+  }
+
+  .status-copy h2 {
+    max-width: 15ch;
+    margin: 0.65rem 0 1rem;
+    color: var(--sl-color-white);
+    font-size: 3.5rem;
+    line-height: 1;
+  }
+
+  .status-copy > p:not(.section-label) {
+    max-width: 38rem;
+    margin: 0 0 1.75rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .status-data {
+    margin: 0;
+    border-top: 1px solid var(--home-rule);
+  }
+
+  .status-data > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block: 1rem;
+    border-bottom: 1px solid var(--home-rule);
+  }
+
+  .status-data dt {
+    color: var(--sl-color-gray-3);
+    font-size: 0.85rem;
+  }
+
+  .status-data dd {
+    margin: 0;
+    color: var(--sl-color-white);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: end;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--downloadit-orange) !important;
+  }
+
+  .status-badge span {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--downloadit-orange);
+  }
+
+  .home-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+    padding-block: 2rem 1rem;
+    color: var(--sl-color-gray-3);
+    font-size: 0.9rem;
+  }
+
+  .home-footer a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--sl-color-text-accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  @media (max-width: 55rem) {
+    .section-heading h2 {
+      font-size: 2.5rem;
+    }
+
+    .status-copy h2 {
+      font-size: 2.75rem;
+    }
+
+    .flow-grid,
+    .install-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .flow-step:nth-child(2),
+    .install-list li:nth-child(2) {
+      border-right: 0;
+    }
+
+    .flow-step:nth-child(3),
+    .install-list li:nth-child(3) {
+      padding-left: 0;
+      border-top: 1px solid var(--home-rule);
+    }
+
+    .install-list li:nth-child(4) {
+      border-top: 1px solid var(--home-rule);
+    }
+
+    .status-section {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 42rem) {
+    .section-heading h2 {
+      font-size: 2.15rem;
+    }
+
+    .status-copy h2 {
+      font-size: 2.35rem;
+    }
+
+    .split-heading {
+      display: block;
+    }
+
+    .split-heading > p {
+      margin-top: 1.1rem;
+    }
+
+    .feature-grid,
+    .flow-grid,
+    .install-list {
+      grid-template-columns: 1fr;
+    }
+
+    .flow-step,
+    .flow-step + .flow-step,
+    .flow-step:last-child,
+    .install-list li,
+    .install-list li + li,
+    .install-list li:last-child {
+      min-height: auto;
+      padding: 1.5rem 0;
+      border-right: 0;
+      border-bottom: 1px solid var(--home-rule);
+      border-top: 0;
+    }
+
+    .flow-step:last-child,
+    .install-list li:last-child {
+      border-bottom: 0;
+    }
+
+    .feature-row,
+    .feature-row:nth-child(even) {
+      padding-inline: 0;
+      border-right: 0;
+    }
+
+    .integration-row,
+    .platform-row {
+      grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+      gap: 0.65rem;
+      padding-block: 0.95rem;
+    }
+
+    .integration-row span,
+    .platform-row small {
+      grid-column: 2 / -1;
+      font-size: 0.84rem;
+    }
+
+    .integration-row small {
+      grid-column: 3;
+      grid-row: 1;
+      text-align: end;
+    }
+
+    .platform-row small {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

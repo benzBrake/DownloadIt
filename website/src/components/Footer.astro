@@ -1,0 +1,47 @@
+---
+import DefaultFooter from "@astrojs/starlight/components/Footer.astro";
+import { currentLocale } from "../data/site";
+
+const locale = currentLocale(Astro.locals.starlightRoute.lang);
+const copy =
+  locale === "zh-CN"
+    ? {
+        project: "DownloadIt 当前版本文档",
+        source: "在 GitHub 查看源代码",
+      }
+    : {
+        project: "Documentation for the current DownloadIt release",
+        source: "View the source on GitHub",
+      };
+---
+
+<DefaultFooter />
+<div class="downloadit-footer">
+  <span>{copy.project}</span>
+  <a href="https://github.com/benzBrake/DownloadIt">{copy.source}</a>
+</div>
+
+<style>
+  .downloadit-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+    margin-top: 2.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--sl-color-hairline);
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+  }
+
+  a {
+    color: var(--sl-color-text-accent);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+</style>

@@ -4,6 +4,8 @@
 
 [![Nightly build](https://img.shields.io/badge/nightly-download-blue?logo=firefox)](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi)
 
+**Website and user documentation:** [benzbrake.github.io/DownloadIt](https://benzbrake.github.io/DownloadIt/)
+
 DownloadIt is a port of FlashGot's download-bridge extension for modern Firefox. It uses a customized [`userChrome.js-Loader`](https://github.com/benzBrake/userChrome.js-Loader) to load a bootstrapped XPI and forward web links to an external download manager.
 
 The project is currently being migrated. It supports Windows and Linux, and the minimum supported Firefox version is 136.0.
