@@ -33,7 +33,7 @@ DownloadIt 是面向现代 Firefox 的 FlashGot 下载桥接扩展移植版。�
 - 在 Firefox 设置对话框中管理默认下载工具、任务启动行为和 Cookie 转发策略。
 - 提供独立的“自动接管”设置标签页，用于编辑黑白名单并查看内置保护规则。
 - 提供可选的 GitHub 镜像适配器和可配置端点，并通过注册表结构支持以后增加 Hugging Face 等站点。
-- 界面和右键菜单支持简体中文与英文。
+- 界面和右键菜单支持英文、简体中文与繁体中文（zh-TW）。
 - 使用 Firefox 内置的 Fluent 资源存储界面消息。
 - 构建时校验随扩展发布的 `FlashGot.exe`，并在 Windows 运行时再次校验。
 
@@ -138,7 +138,7 @@ Nightly workflow 会替换 GitHub `nightly` 预发布中的资产。稳定下载
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.12.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.13.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本和生成的 `update.rdf` 的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -367,7 +367,8 @@ addon/
     ├── icons/downloadit.svg              # 工具栏按钮和扩展图标
     ├── locales/
     │   ├── en-US/downloadit.ftl          # 英文 Fluent 消息
-    │   └── zh-CN/downloadit.ftl          # 简体中文 Fluent 消息
+    │   ├── zh-CN/downloadit.ftl          # 简体中文 Fluent 消息
+    │   └── zh-TW/downloadit.ftl          # 繁体中文 Fluent 消息
     ├── panel.css                         # 原生工具栏面板样式
     ├── options.xhtml                     # 设置页面结构
     ├── options.js                        # 设置页面逻辑

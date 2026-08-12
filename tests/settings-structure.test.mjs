@@ -9,6 +9,7 @@ const read = relativePath => fs.readFileSync(
   path.join(projectRoot, relativePath),
   "utf8",
 );
+const supportedLocales = ["en-US", "zh-CN", "zh-TW"];
 
 test("manifest exposes the Firefox settings dialog", () => {
   const manifest = read("addon/install.rdf");
@@ -139,7 +140,7 @@ test("Windows and Linux share one runtime capability matrix and universal XPI", 
   assert.match(script, /"downloadit-component-not-used"/);
   assert.match(script, /application: false,\s*absolute: true,\s*includeAllFiles: linux/);
 
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const fluent = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     for (const id of [
       "downloadit-linux",
@@ -173,7 +174,7 @@ test("about callout exposes the localized easter egg toast trigger", () => {
     /<button\s+id="callout-mark"[\s\S]*data-l10n-id="downloadit-about-callout-mark"/,
   );
   assert.match(script, /showDownloadItToast\(window, message\)/);
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     for (let index = 1; index <= 10; index++) {
       assert.match(source, new RegExp(`^downloadit-easter-egg-log-${index} =`, "m"));
@@ -350,12 +351,14 @@ test("protocol manager selectors reuse the default manager XUL styling", () => {
   const styles = read("addon/chrome/content/options.css");
   const enUS = read("addon/chrome/content/locales/en-US/downloadit.ftl");
   const zhCN = read("addon/chrome/content/locales/zh-CN/downloadit.ftl");
+  const zhTW = read("addon/chrome/content/locales/zh-TW/downloadit.ftl");
 
   for (const id of ["magnet-manager", "ed2k-manager"]) {
     assert.match(styles, new RegExp(`#${id}[,\\s]`));
   }
   assert.match(enUS, /downloadit-protocol-default-none\s*=\s*\r?\n\s*\.label = Firefox native handling/);
   assert.match(zhCN, /downloadit-protocol-default-none\s*=\s*\r?\n\s*\.label = Firefox 原生处理/);
+  assert.match(zhTW, /downloadit-protocol-default-none\s*=\s*\r?\n\s*\.label = Firefox 原生處理/);
 });
 
 test("numeric settings inputs reuse the shared form styling without hiding spin controls", () => {

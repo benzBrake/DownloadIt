@@ -9,6 +9,7 @@ const read = relativePath => fs.readFileSync(
   path.join(projectRoot, relativePath),
   "utf8",
 );
+const supportedLocales = ["en-US", "zh-CN", "zh-TW"];
 
 function messageIds(source) {
   return new Set(
@@ -18,14 +19,38 @@ function messageIds(source) {
 
 test("supported Fluent resources contain the same message IDs", () => {
   const english = messageIds(read("addon/chrome/content/locales/en-US/downloadit.ftl"));
-  const chinese = messageIds(read("addon/chrome/content/locales/zh-CN/downloadit.ftl"));
 
-  assert.deepEqual([...chinese].sort(), [...english].sort());
+  for (const locale of supportedLocales.filter(locale => locale !== "en-US")) {
+    const localized = messageIds(
+      read(`addon/chrome/content/locales/${locale}/downloadit.ftl`),
+    );
+    assert.deepEqual([...localized].sort(), [...english].sort());
+  }
   assert.ok(english.size > 0);
 });
 
+test("supported locales are registered, packaged, and exposed in metadata", () => {
+  const localization = read("addon/chrome/content/DownloadItLocalization.sys.mjs");
+  const manifest = read("addon/install.rdf");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
+
+  for (const locale of supportedLocales) {
+    assert.match(localization, new RegExp(`"${locale}"`));
+    for (const packScript of [packPowerShell, packShell]) {
+      assert.match(
+        packScript,
+        new RegExp(`locales/${locale}/downloadit\\.ftl`),
+      );
+    }
+  }
+  for (const locale of supportedLocales.filter(locale => locale !== "en-US")) {
+    assert.match(manifest, new RegExp(`<em:locale>${locale}</em:locale>`));
+  }
+});
+
 test("automatic capture rule removal uses accessible Fluent labels", () => {
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     for (const id of [
       "downloadit-remove-auto-allow",
@@ -40,7 +65,7 @@ test("automatic capture rule removal uses accessible Fluent labels", () => {
 });
 
 test("custom XUL menu labels use the Fluent label attribute", () => {
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     assert.match(
       source,
@@ -50,7 +75,7 @@ test("custom XUL menu labels use the Fluent label attribute", () => {
 });
 
 test("PanelView static actions expose matching access keys", () => {
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     assert.match(
       source,
@@ -64,7 +89,7 @@ test("PanelView static actions expose matching access keys", () => {
 });
 
 test("context-menu download actions expose access keys", () => {
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     assert.match(
       source,
@@ -78,7 +103,7 @@ test("context-menu download actions expose access keys", () => {
 });
 
 test("downloader capability states have accessible Fluent labels", () => {
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     for (const capability of [
       "post",
@@ -99,7 +124,7 @@ test("downloader capability states have accessible Fluent labels", () => {
 });
 
 test("unified download-tool editor tabs and actions are accessible", () => {
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     const source = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
     assert.match(
       source,
@@ -127,7 +152,7 @@ test("IDM bridge help localizes the LinkSwift link through DOM Overlay", () => {
     /<p id="idm-bridge-help"[^>]+data-l10n-id="downloadit-idm-bridge-help">[\s\S]*?<a[\s\S]*?data-l10n-name="linkswift"[\s\S]*?href="https:\/\/github\.com\/hmjz100\/LinkSwift"/,
   );
   assert.match(markup, /id="idm-bridge"[^>]+aria-describedby="idm-bridge-help"/);
-  for (const locale of ["en-US", "zh-CN"]) {
+  for (const locale of supportedLocales) {
     assert.match(
       read(`addon/chrome/content/locales/${locale}/downloadit.ftl`),
       localizedLink,

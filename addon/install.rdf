@@ -4,7 +4,7 @@
   <Description about="urn:mozilla:install-manifest">
     <em:id>downloadit@downloadit.invalid</em:id>
     <em:name>DownloadIt</em:name>
-    <em:version>2.12.0</em:version>
+    <em:version>2.13.0</em:version>
     <em:updateURL>https://github.com/benzBrake/DownloadIt/releases/download/nightly/update.rdf</em:updateURL>
     <em:type>2</em:type>
     <em:bootstrap>true</em:bootstrap>
@@ -32,6 +32,13 @@
         <em:locale>zh-CN</em:locale>
         <em:name>DownloadIt</em:name>
         <em:description>通过 DownloadIt 将 Firefox 下载任务发送到外部下载工具。</em:description>
+      </Description>
+    </em:localized>
+    <em:localized>
+      <Description>
+        <em:locale>zh-TW</em:locale>
+        <em:name>DownloadIt</em:name>
+        <em:description>透過 DownloadIt 將 Firefox 下載任務傳送到外部下載工具。</em:description>
       </Description>
     </em:localized>
   </Description>

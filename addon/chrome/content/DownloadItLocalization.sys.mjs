@@ -1,6 +1,6 @@
 const SOURCE_NAME = "downloadit";
 const SOURCE_META_SOURCE = "app";
-const SUPPORTED_LOCALES = ["en-US", "zh-CN"];
+const SUPPORTED_LOCALES = ["en-US", "zh-CN", "zh-TW"];
 const SOURCE_PRE_PATH = "chrome://downloadit/content/locales/{locale}/";
 const RESOURCE = "downloadit.ftl";
 
