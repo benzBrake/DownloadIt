@@ -38,7 +38,7 @@ Store localization resources only in the dedicated directory below:
 addon/chrome/content/locales/<locale>/downloadit.ftl
 ```
 
-The supported locales are `en-US`, `zh-CN`, and `zh-TW`. Keep the same message IDs in all locale files, with `en-US` as the source locale. Use Firefox's native `L10nFileSource`, `L10nRegistry`, `document.l10n`, `Localization`, and `MozXULElement.insertFTLIfNeeded` APIs. Register the extension source at `chrome://downloadit/content/locales/{locale}/` and reference resources through Firefox's localization system.
+The supported locales are `en-US`, `ja`, `zh-CN`, and `zh-TW`. Keep the same message IDs in all locale files, with `en-US` as the source locale. Use Firefox's native `L10nFileSource`, `L10nRegistry`, `document.l10n`, `Localization`, and `MozXULElement.insertFTLIfNeeded` APIs. Register the extension source at `chrome://downloadit/content/locales/{locale}/` and reference resources through Firefox's localization system.
 
 Do not use the userChrome.js Loader's localization features, locale registration, locale helpers, or other localization utilities. Do not add `chrome.manifest locale` entries for this purpose.
 

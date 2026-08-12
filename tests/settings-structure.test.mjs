@@ -9,7 +9,7 @@ const read = relativePath => fs.readFileSync(
   path.join(projectRoot, relativePath),
   "utf8",
 );
-const supportedLocales = ["en-US", "zh-CN", "zh-TW"];
+const supportedLocales = ["en-US", "ja", "zh-CN", "zh-TW"];
 
 test("manifest exposes the Firefox settings dialog", () => {
   const manifest = read("addon/install.rdf");

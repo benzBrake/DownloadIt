@@ -33,7 +33,7 @@ The project is currently being migrated. It supports Windows and Linux, and the 
 - Provides Firefox settings for the default download manager, task-start behavior, and cookie-forwarding policy.
 - Provides a dedicated **Auto-capture** settings tab for editing allow and deny rules and reviewing built-in protections.
 - Provides an optional GitHub mirror adapter with a configurable endpoint and a registry designed for additional sites such as Hugging Face.
-- Supports English, Simplified Chinese, and Traditional Chinese (zh-TW) in the UI and context menu.
+- Supports English, Japanese, Simplified Chinese, and Traditional Chinese (zh-TW) in the UI and context menu.
 - Stores UI messages in Firefox's built-in Fluent resources.
 - Verifies the bundled `FlashGot.exe` during the build and at Windows runtime.
 
@@ -138,7 +138,7 @@ The nightly workflow replaces the assets of the `nightly` GitHub prerelease. Its
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.13.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.14.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page and the generated `update.rdf`. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -367,6 +367,7 @@ addon/
     ├── icons/downloadit.svg              # Toolbar and extension icon
     ├── locales/
     │   ├── en-US/downloadit.ftl          # English Fluent messages
+    │   ├── ja/downloadit.ftl             # Japanese Fluent messages
     │   ├── zh-CN/downloadit.ftl          # Simplified Chinese Fluent messages
     │   └── zh-TW/downloadit.ftl          # Traditional Chinese Fluent messages
     ├── panel.css                         # Native toolbar panel styles

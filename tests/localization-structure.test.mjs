@@ -9,7 +9,7 @@ const read = relativePath => fs.readFileSync(
   path.join(projectRoot, relativePath),
   "utf8",
 );
-const supportedLocales = ["en-US", "zh-CN", "zh-TW"];
+const supportedLocales = ["en-US", "ja", "zh-CN", "zh-TW"];
 
 function messageIds(source) {
   return new Set(

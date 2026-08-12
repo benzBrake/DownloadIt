@@ -115,6 +115,7 @@ $requiredEntries = @(
     "chrome/content/links.js"
     "chrome/content/links.css"
     "chrome/content/locales/en-US/downloadit.ftl"
+    "chrome/content/locales/ja/downloadit.ftl"
     "chrome/content/locales/zh-CN/downloadit.ftl"
     "chrome/content/locales/zh-TW/downloadit.ftl"
 )
