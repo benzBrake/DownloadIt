@@ -221,6 +221,7 @@ const PREF_DEVELOPER_MODE = "downloadit.developerMode";
 const PREF_KEEP_PROFILE_DATA_ON_UNINSTALL =
   "downloadit.keepProfileDataOnUninstall";
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
+const PREF_VIDEO_DOWNLOAD_BUTTON = "downloadit.videoDownloadButton";
 const PREF_ABDM_ENABLED = "downloadit.abdm.enabled";
 const PREF_ABDM_ENDPOINT = "downloadit.abdm.endpoint";
 const PREF_ABDM_API_KEY = "downloadit.abdm.apiKey";
@@ -278,6 +279,7 @@ const APP_LOCALES_CHANGED_TOPIC = "intl:app-locales-changed";
 const LINK_COLLECTOR_ACTOR_NAME = "DownloadItLinkCollector";
 const LINK_COLLECTOR_ACTOR_URI =
   "chrome://downloadit/content/DownloadItLinkCollectorActor.sys.mjs";
+const VIDEO_BUTTON_SETTING_MESSAGE = "DownloadIt:SetVideoButtonEnabled";
 const TOOLBAR_ICON = "chrome://downloadit/content/icons/downloadit.svg";
 
 let activeService = null;
@@ -311,6 +313,28 @@ function unregisterLinkCollectorActor() {
     console.error("DownloadIt: link collector Actor unregister failed", error);
   }
   linkCollectorActorRegistered = false;
+}
+
+function notifyVideoDownloadButtonSetting(enabled) {
+  const windows = Services.wm.getEnumerator("navigator:browser");
+  while (windows.hasMoreElements()) {
+    const window = windows.getNext();
+    for (const browser of window.gBrowser?.browsers || []) {
+      const visit = context => {
+        if (!context) {
+          return;
+        }
+        try {
+          context.currentWindowGlobal?.getActor?.(LINK_COLLECTOR_ACTOR_NAME)
+            ?.sendAsyncMessage(VIDEO_BUTTON_SETTING_MESSAGE, { enabled });
+        } catch {}
+        for (const child of context.children || []) {
+          visit(child);
+        }
+      };
+      visit(browser.browsingContext);
+    }
+  }
 }
 
 export class DownloadItError extends Error {
@@ -417,6 +441,10 @@ export class DownloadItService {
 
   get defaultManager() {
     return this.defaultDownloader?.key || "";
+  }
+
+  get videoDownloadButtonEnabled() {
+    return Services.prefs.getBoolPref(PREF_VIDEO_DOWNLOAD_BUTTON, true);
   }
 
   set defaultManager(value) {
@@ -2924,6 +2952,7 @@ export class DownloadItService {
         : null,
       omitCookies: Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false),
       autoStartTasks: Services.prefs.getBoolPref(PREF_AUTO_START_TASKS, true),
+      videoDownloadButton: Services.prefs.getBoolPref(PREF_VIDEO_DOWNLOAD_BUTTON, true),
       keepProfileDataOnUninstall: Services.prefs.getBoolPref(
         PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
         true,
@@ -2970,6 +2999,7 @@ export class DownloadItService {
       defaultManagerLocked: Services.prefs.prefIsLocked(PREF_DEFAULT_MANAGER),
       omitCookiesLocked: Services.prefs.prefIsLocked(PREF_OMIT_COOKIES),
       autoStartTasksLocked: Services.prefs.prefIsLocked(PREF_AUTO_START_TASKS),
+      videoDownloadButtonLocked: Services.prefs.prefIsLocked(PREF_VIDEO_DOWNLOAD_BUTTON),
       keepProfileDataOnUninstallLocked: Services.prefs.prefIsLocked(
         PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
       ),
@@ -2993,6 +3023,7 @@ export class DownloadItService {
     ed2kManager = null,
     omitCookies = false,
     autoStartTasks = null,
+    videoDownloadButton = null,
     keepProfileDataOnUninstall = null,
     builtInProtocols = null,
     abdm = null,
@@ -3040,6 +3071,13 @@ export class DownloadItService {
     const requestedAutoStartTasks = autoStartTasks == null
       ? currentAutoStartTasks
       : Boolean(autoStartTasks);
+    const currentVideoDownloadButton = Services.prefs.getBoolPref(
+      PREF_VIDEO_DOWNLOAD_BUTTON,
+      true,
+    );
+    const requestedVideoDownloadButton = videoDownloadButton == null
+      ? currentVideoDownloadButton
+      : Boolean(videoDownloadButton);
     const currentKeepProfileDataOnUninstall = Services.prefs.getBoolPref(
       PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
       true,
@@ -3290,6 +3328,12 @@ export class DownloadItService {
       throw new Error("The task start preference is locked");
     }
     if (
+      Services.prefs.prefIsLocked(PREF_VIDEO_DOWNLOAD_BUTTON) &&
+      requestedVideoDownloadButton !== currentVideoDownloadButton
+    ) {
+      throw new Error("The video download button preference is locked");
+    }
+    if (
       Services.prefs.prefIsLocked(PREF_KEEP_PROFILE_DATA_ON_UNINSTALL) &&
       requestedKeepProfileDataOnUninstall !== currentKeepProfileDataOnUninstall
     ) {
@@ -3461,6 +3505,13 @@ export class DownloadItService {
     }
     if (requestedAutoStartTasks !== currentAutoStartTasks) {
       Services.prefs.setBoolPref(PREF_AUTO_START_TASKS, requestedAutoStartTasks);
+    }
+    if (requestedVideoDownloadButton !== currentVideoDownloadButton) {
+      Services.prefs.setBoolPref(
+        PREF_VIDEO_DOWNLOAD_BUTTON,
+        requestedVideoDownloadButton,
+      );
+      notifyVideoDownloadButtonSetting(requestedVideoDownloadButton);
     }
     if (requestedKeepProfileDataOnUninstall !== currentKeepProfileDataOnUninstall) {
       Services.prefs.setBoolPref(

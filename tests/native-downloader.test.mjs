@@ -1627,6 +1627,7 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
 
   const snapshot = await service.applySettings({
     autoStartTasks: false,
+    videoDownloadButton: false,
     keepProfileDataOnUninstall: false,
     jdownloader: {
       endpoint: "http://localhost:9777/",
@@ -1636,6 +1637,7 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
   });
 
   assert.equal(preferenceValues.get("downloadit.autoStartTasks"), false);
+  assert.equal(preferenceValues.get("downloadit.videoDownloadButton"), false);
   assert.equal(
     preferenceValues.get("downloadit.keepProfileDataOnUninstall"),
     false,
@@ -1655,6 +1657,7 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
     false,
   );
   assert.equal(snapshot.autoStartTasks, false);
+  assert.equal(snapshot.videoDownloadButton, false);
   assert.equal(snapshot.keepProfileDataOnUninstall, false);
   assert.equal(snapshot.jdownloader.endpoint, "http://localhost:9777/flashgot");
   assert.equal(snapshot.jdownloader.launchPath, "C:\\JD\\JDownloader.exe");
@@ -1666,6 +1669,14 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
     /task start preference is locked/i,
   );
   assert.equal(service.readSettings().autoStartTasksLocked, true);
+  preferenceLocks.clear();
+
+  preferenceLocks.add("downloadit.videoDownloadButton");
+  await assert.rejects(
+    service.applySettings({ videoDownloadButton: true }),
+    /video download button preference is locked/i,
+  );
+  assert.equal(service.readSettings().videoDownloadButtonLocked, true);
   preferenceLocks.clear();
 
   preferenceLocks.add("downloadit.keepProfileDataOnUninstall");

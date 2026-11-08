@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   collectPageLinks,
   collectSelectionLinks,
+  getPlayableVideoURL,
 } from "../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs";
 
 function link({
@@ -142,4 +143,33 @@ test("link collector Actor returns no links for a collapsed selection", () => {
   };
 
   assert.deepEqual(collectSelectionLinks(document), []);
+});
+
+test("video URL selection prefers the active media URL and excludes browser-local streams", () => {
+  const document = { baseURI: "https://example.com/watch/" };
+  assert.equal(getPlayableVideoURL({ ownerDocument: document }), "");
+  assert.equal(getPlayableVideoURL({
+    currentSrc: "https://cdn.example.com/active.mp4?token=1",
+    src: "https://cdn.example.com/fallback.mp4",
+    ownerDocument: document,
+  }), "https://cdn.example.com/active.mp4?token=1");
+  assert.equal(getPlayableVideoURL({
+    currentSrc: "",
+    src: "../video.mp4",
+    ownerDocument: document,
+  }), "https://example.com/video.mp4");
+  assert.equal(getPlayableVideoURL({
+    currentSrc: "blob:https://example.com/1234",
+    src: "https://cdn.example.com/fallback.mp4",
+    ownerDocument: document,
+  }), "");
+});
+
+test("video download overlay is attached and removed with its frame actor", async () => {
+  const actor = await import("../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs");
+  assert.match(actor.DownloadItLinkCollectorChild.prototype.actorCreated.toString(), /setVideoButtonEnabled/);
+  assert.match(actor.DownloadItLinkCollectorChild.prototype.setVideoButtonEnabled.toString(), /installVideoButton/);
+  assert.match(actor.DownloadItLinkCollectorChild.prototype.didDestroy.toString(), /cleanupVideoButton/);
+  assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /service\.downloadLinks/);
+  assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /classifyDownloadTarget/);
 });

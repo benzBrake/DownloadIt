@@ -204,6 +204,8 @@ test("settings dialog contains the current capability controls", () => {
     "default-manager",
     "auto-start-tasks",
     "auto-start-tasks-lock",
+    "video-download-button",
+    "video-download-button-lock",
     "add-download-tool",
     "download-tool-editor",
     "tool-kind-builtin",
@@ -304,6 +306,7 @@ test("automatic capture controls live in a dedicated settings tab", () => {
 
 test("settings refresh keeps default-manager persistence staged", () => {
   const script = read("addon/chrome/content/options.js");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   assert.match(script, /DownloadItXUL\.sys\.mjs/);
   assert.doesNotMatch(script, /XUL_NS|createElementNS/);
   assert.match(script, /createXULElement\(document, "menuitem"\)/);
@@ -338,6 +341,8 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /testAria2Configuration/);
   assert.match(script, /testJDownloaderConfiguration/);
   assert.match(script, /autoStartTasks/);
+  assert.match(script, /videoDownloadButton/);
+  assert.match(service, /downloadit\.videoDownloadButton/);
   assert.match(script, /jdownloader/);
   assert.match(
     script,
@@ -385,6 +390,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
 
   for (const preference of [
     "downloadit.autoStartTasks",
+    "downloadit.videoDownloadButton",
     "downloadit.abdm.enabled",
     "downloadit.abdm.endpoint",
     "downloadit.abdm.apiKey",

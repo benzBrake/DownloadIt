@@ -255,6 +255,7 @@ function createSettingsState(snapshot) {
     ed2kManager: snapshot.ed2kManager || "",
     omitCookies: snapshot.omitCookies,
     autoStartTasks: snapshot.autoStartTasks,
+    videoDownloadButton: snapshot.videoDownloadButton,
     keepProfileDataOnUninstall: snapshot.keepProfileDataOnUninstall,
     builtInProtocols: Object.fromEntries(
       snapshot.builtInProtocols.map(protocol => [
@@ -330,6 +331,11 @@ function bindEvents() {
   });
   document.getElementById("auto-start-tasks").addEventListener("change", event => {
     state.draft.autoStartTasks = event.target.checked;
+    clearFeedback();
+    render();
+  });
+  document.getElementById("video-download-button").addEventListener("change", event => {
+    state.draft.videoDownloadButton = event.target.checked;
     clearFeedback();
     render();
   });
@@ -800,6 +806,7 @@ function render() {
   renderServiceState();
   renderManagers();
   renderTaskStartSettings();
+  renderVideoDownloadSettings();
   renderAutoCaptureRules();
   renderLinkGroups();
   renderMirrors();
@@ -964,6 +971,15 @@ function renderTaskStartSettings() {
   autoStartTasks.disabled = state.busy || !snapshot ||
     Boolean(snapshot?.autoStartTasksLocked);
   autoStartTasksLock.hidden = !snapshot?.autoStartTasksLocked;
+}
+
+function renderVideoDownloadSettings() {
+  const toggle = document.getElementById("video-download-button");
+  const lock = document.getElementById("video-download-button-lock");
+  toggle.checked = Boolean(state.draft?.videoDownloadButton);
+  toggle.disabled = state.busy || !state.snapshot ||
+    Boolean(state.snapshot?.videoDownloadButtonLocked);
+  lock.hidden = !state.snapshot?.videoDownloadButtonLocked;
 }
 
 function isBuiltInDownloader(downloader) {
