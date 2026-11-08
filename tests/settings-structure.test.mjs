@@ -57,17 +57,19 @@ test("DownloadIt icon is packaged and used by branded Firefox UI", () => {
   }
 });
 
-test("packaging scripts select the authenticated API or nightly.link", () => {
+test("packaging scripts download the latest FlashGot release with optional API authentication", () => {
   const packPowerShell = read("scripts/pack.ps1");
   const packShell = read("scripts/pack.sh");
-  const nightlyLink = "https://nightly.link/benzBrake/Grabby-FlashGot/workflows/nightly.yml/master/FlashGot-nightly.zip";
 
   for (const source of [packPowerShell, packShell]) {
-    assert.match(source, new RegExp(nightlyLink.replaceAll(".", "\\.")));
+    assert.match(source, /benzBrake\/Grabby-FlashGot/);
     assert.match(source, /GITHUB_TOKEN/);
     assert.match(source, /GH_TOKEN/);
     assert.match(source, /api\.github\.com\/repos/);
-    assert.match(source, /branch=.*master|nightlyBranch = "master"/);
+    assert.match(source, /\/releases\/latest/);
+    assert.match(source, /tag_name/);
+    assert.match(source, /browser_download_url/);
+    assert.doesNotMatch(source, /nightly\.link|\/actions\/|FlashGot-nightly/);
   }
   assert.match(packPowerShell, /if \(\$hasGitHubToken\)/);
   assert.match(packShell, /if \[\[ -n "\$\{github_token\}" \]\]/);

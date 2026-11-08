@@ -97,12 +97,12 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 - Linux executables selected for custom commands, aria2 startup, or JDownloader startup must have Unix execute permission, for example `chmod +x /path/to/launcher`;
 - Snap and Flatpak Firefox packages are not supported in the first Linux release because their Loader installation, host-file access, and process sandbox boundaries differ from non-sandboxed Firefox;
 - External download managers are optional because the Firefox downloader is always available;
-- If `addon/FlashGot.exe` is missing during the build, both packaging scripts download the latest successful [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly artifact. They use the GitHub Actions API when `GITHUB_TOKEN` or `GH_TOKEN` is available and otherwise download through nightly.link. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
+- If `addon/FlashGot.exe` is missing during the build, both packaging scripts query the GitHub Releases API for the latest stable [Grabby-FlashGot release](https://github.com/benzBrake/Grabby-FlashGot/releases/latest), download its `FlashGot-<tag>.zip` asset, and extract `FlashGot.exe`. `GITHUB_TOKEN` or `GH_TOKEN` is optional and used to authenticate the API request when available. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
 - Missing Aria2Next assets are downloaded from the pinned [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` release. Existing or downloaded Windows x86_64 and Linux x86_64 assets must match their fixed size and SHA-256 values before packaging;
 - Missing or stale AriaNg assets are downloaded from the pinned [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` standard release through GitHub CLI. The archive, extracted `index.html`, and required external CSS, JS, and Font Awesome WOFF2 asset are verified before packaging; the page contains no inline scripts and runs without `unsafe-eval`;
 - Node.js 18 or later for development and testing;
 - PowerShell 7 (`pwsh`) for building on Windows;
-- Bash, GitHub CLI, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. The authenticated GitHub API path additionally requires `jq`.
+- Bash, GitHub CLI, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. Downloading a missing FlashGot binary additionally requires `jq` to read release metadata.
 
 ## Build
 

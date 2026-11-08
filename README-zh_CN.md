@@ -97,12 +97,12 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 - Linux 上为自定义命令、aria2 自动启动或 JDownloader 自动启动选择的文件必须具有 Unix 可执行权限，例如 `chmod +x /path/to/launcher`；
 - Linux 首版不支持 Snap 和 Flatpak Firefox，因为其 Loader 安装、宿主文件访问和进程沙箱边界与非沙箱 Firefox 不同；
 - Firefox 内建下载器始终可用，因此外部下载管理器不是必需项；
-- 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会下载 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 最新成功构建的 nightly artifact。存在 `GITHUB_TOKEN` 或 `GH_TOKEN` 时通过 GitHub Actions API 下载，否则通过 nightly.link 下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
+- 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会通过 GitHub Releases API 查询 [Grabby-FlashGot 最新正式 Release](https://github.com/benzBrake/Grabby-FlashGot/releases/latest)，下载其中的 `FlashGot-<tag>.zip` 资产并提取 `FlashGot.exe`。`GITHUB_TOKEN` 或 `GH_TOKEN` 为可选项，存在时用于 API 请求认证。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
 - 缺少 Aria2Next 资产时会从固定的 [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` Release 下载；已有或下载得到的 Windows x86_64 与 Linux x86_64 资产必须通过固定大小和 SHA-256 校验后才能打包；
 - 缺少或过期的 AriaNg 资产时通过 GitHub CLI 从固定的 [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` 标准 Release 下载；打包前会校验压缩包、解出的 `index.html`、外置 CSS、JS 和 Font Awesome WOFF2 资源，页面不含内联脚本且不需要 `unsafe-eval`；
 - 开发和测试需要 Node.js 18 或更高版本；
 - 在 Windows 上构建需要 PowerShell 7（`pwsh`）；
-- 在 Linux 上构建需要 Bash、GitHub CLI、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；使用带认证的 GitHub API 路径时还需要 `jq`。
+- 在 Linux 上构建需要 Bash、GitHub CLI、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；下载缺失的 FlashGot 二进制时还需要 `jq` 来读取 Release 元数据。
 
 ## 构建
 
