@@ -103,21 +103,25 @@ export class DownloadItLinkCollectorParent extends ParentActor {
       }
     }
     if (name === VIDEO_BUTTON_LABEL_QUERY) {
-      const browserWindow = this.browsingContext?.top?.embedderElement?.ownerGlobal;
-      try {
-        return await browserWindow?.document?.l10n?.formatValue(
-          "downloadit-video-download",
-        ) || "Download";
-      } catch {
-        return "Download";
+      const browserWindow = this.browsingContext?.top?.embedderElement
+        ?.ownerDocument?.defaultView;
+      if (!browserWindow) {
+        return "";
       }
+      const { initializeDownloadItLocalization } = ChromeUtils.importESModule(
+        "chrome://downloadit/content/DownloadItLocalization.sys.mjs",
+      );
+      await initializeDownloadItLocalization(browserWindow);
+      return await browserWindow?.document?.l10n?.formatValue(
+        "downloadit-video-download",
+      ) || "";
     }
     if (name !== VIDEO_DOWNLOAD_MESSAGE) {
       return null;
     }
 
     const browser = this.browsingContext?.top?.embedderElement;
-    const browserWindow = browser?.ownerGlobal;
+    const browserWindow = browser?.ownerDocument?.defaultView;
     if (!browser || !browserWindow) {
       return null;
     }
@@ -163,12 +167,15 @@ export class DownloadItLinkCollectorParent extends ParentActor {
       }], service.defaultManager);
     } catch (error) {
       console.error("DownloadIt: video download failed", error);
-      let label = "Could not send the video to the download manager";
+      let label = "";
       try {
         label = await browserWindow.document.l10n.formatValue(
           "downloadit-video-download-failed",
         );
       } catch {}
+      if (!label) {
+        return null;
+      }
       const { showDownloadItToast } = ChromeUtils.importESModule(
         "chrome://downloadit/content/DownloadItChrome.sys.mjs",
       );
@@ -197,7 +204,7 @@ export class DownloadItLinkCollectorChild extends ChildActor {
   button = null;
   hideTimer = null;
   observer = null;
-  label = "Download";
+  label = "";
   videoButtonEnabled = false;
   destroyed = false;
 
@@ -252,12 +259,16 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     const document = this.document;
     const view = document.defaultView;
     this.ensureVideoButton();
-    this.sendQuery(VIDEO_BUTTON_LABEL_QUERY).catch(() => "Download").then(label => {
-      this.label = label || "Download";
+    this.sendQuery(VIDEO_BUTTON_LABEL_QUERY).catch(() => "").then(label => {
+      if (!label || this.destroyed) {
+        return;
+      }
+      this.label = label;
       if (this.button?.querySelector("span")) {
         this.button.querySelector("span").textContent = this.label;
         this.button.setAttribute("aria-label", this.label);
         this.button.title = this.label;
+        this.button.hidden = false;
       }
     });
     document.addEventListener("pointerover", this, true);
@@ -268,7 +279,7 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     document.addEventListener("visibilitychange", this, true);
     view?.addEventListener("scroll", this, true);
     view?.addEventListener("resize", this, true);
-    this.observer = new MutationObserver(() => this.refreshVideo());
+    this.observer = new view.MutationObserver(() => this.refreshVideo());
     this.observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -284,6 +295,7 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     style.textContent = `button{align-items:center;background:rgba(24,32,48,.94);border:0;border-radius:6px;color:#fff;cursor:pointer;display:flex;font:13px/1.2 system-ui,sans-serif;gap:6px;padding:8px 11px;box-shadow:0 2px 8px #0006}button:hover{background:#25385f}button:focus-visible{outline:2px solid #7ab7ff;outline-offset:2px}svg{fill:none;height:16px;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;width:16px}`;
     this.button = document.createElement("button");
     this.button.type = "button";
+    this.button.hidden = true;
     this.button.setAttribute("aria-label", this.label);
     const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     icon.setAttribute("viewBox", "0 0 24 24");
@@ -337,6 +349,9 @@ export class DownloadItLinkCollectorChild extends ChildActor {
   }
 
   showVideoButton(video) {
+    if (!this.label) {
+      return;
+    }
     this.cancelHide();
     this.video = video;
     this.host.style.display = "block";

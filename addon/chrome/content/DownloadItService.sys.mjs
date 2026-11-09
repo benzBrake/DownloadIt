@@ -295,12 +295,21 @@ function registerLinkCollectorActor() {
     },
     child: {
       esModuleURI: LINK_COLLECTOR_ACTOR_URI,
+      events: {
+        DOMContentLoaded: { capture: true },
+      },
     },
     allFrames: true,
     matches: ["<all_urls>"],
     safeForUntrustedWebProcess: true,
   });
   linkCollectorActorRegistered = true;
+}
+
+function initializeLinkCollectorActors() {
+  notifyVideoDownloadButtonSetting(
+    Services.prefs.getBoolPref(PREF_VIDEO_DOWNLOAD_BUTTON, true),
+  );
 }
 
 function unregisterLinkCollectorActor() {
@@ -3725,6 +3734,7 @@ export class DownloadItService {
     this.clearInvalidProtocolDefaults();
     await this.reloadAutoCaptureRules();
     registerLinkCollectorActor();
+    initializeLinkCollectorActors();
     Services.obs.addObserver(this, "browser-delayed-startup-finished");
     Services.obs.addObserver(this, APP_LOCALES_CHANGED_TOPIC);
     Services.obs.addObserver(this, DOWNLOAD_DIALOG_TOPIC);

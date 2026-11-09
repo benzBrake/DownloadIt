@@ -433,6 +433,19 @@ test("non-app shutdown unloads both DownloadIt modules", async () => {
   assert.ok(fixture.unloadedModules.some(spec => spec.includes("DownloadItAriaNg")));
 });
 
+test("shutdown completes when Firefox has no module-unload API", async () => {
+  const fixture = createBootstrapContext();
+  delete fixture.context.ChromeUtils.unloadESModule;
+
+  await fixture.context.startup({ version: "test" });
+  await fixture.context.shutdown({}, fixture.context.ADDON_DISABLE);
+
+  assert.equal(fixture.unregisteredService, fixture.serviceInstance);
+  assert.ok(fixture.events.includes("ariang-shutdown:ADDON_DISABLE"));
+  assert.deepEqual(fixture.reportedErrors, []);
+  assert.deepEqual(fixture.unloadedModules, []);
+});
+
 test("service shutdown errors do not skip unregistering or module cleanup", async () => {
   const shutdownError = new Error("service cleanup failed");
   const fixture = createBootstrapContext({

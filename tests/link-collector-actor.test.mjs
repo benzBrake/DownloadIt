@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
 
 import {
   collectPageLinks,
@@ -172,4 +174,130 @@ test("video download overlay is attached and removed with its frame actor", asyn
   assert.match(actor.DownloadItLinkCollectorChild.prototype.didDestroy.toString(), /cleanupVideoButton/);
   assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /service\.downloadLinks/);
   assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /classifyDownloadTarget/);
+});
+
+test("video overlay actor starts for already-open pages and future documents", () => {
+  const service = readFileSync(
+    new URL("../addon/chrome/content/DownloadItService.sys.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(service, /DOMContentLoaded:\s*\{\s*capture:\s*true\s*\}/);
+  assert.match(service, /registerLinkCollectorActor\(\);\s*initializeLinkCollectorActors\(\);/);
+  const messages = [];
+  const context = id => ({
+    currentWindowGlobal: {
+      getActor(name) {
+        assert.equal(name, "DownloadItLinkCollector");
+        return {
+          sendAsyncMessage(name, data) {
+            messages.push({ id, name, enabled: data.enabled });
+          },
+        };
+      },
+    },
+    children: [],
+  });
+  const top = context("top");
+  top.children.push(context("frame"));
+  const window = { gBrowser: { browsers: [{ browsingContext: top }] } };
+  const sandbox = vm.createContext({
+    Services: {
+      prefs: { getBoolPref: () => false },
+      wm: {
+        getEnumerator() {
+          let pending = true;
+          return {
+            hasMoreElements: () => pending,
+            getNext() { pending = false; return window; },
+          };
+        },
+      },
+    },
+    LINK_COLLECTOR_ACTOR_NAME: "DownloadItLinkCollector",
+    VIDEO_BUTTON_SETTING_MESSAGE: "DownloadIt:SetVideoButtonEnabled",
+    PREF_VIDEO_DOWNLOAD_BUTTON: "downloadit.videoDownloadButton",
+  });
+  vm.runInContext(service.slice(
+    service.indexOf("function initializeLinkCollectorActors()"),
+    service.indexOf("export class DownloadItError"),
+  ), sandbox);
+  sandbox.initializeLinkCollectorActors();
+  assert.deepEqual(messages, ["top", "frame"].map(id => ({
+    id, name: "DownloadIt:SetVideoButtonEnabled", enabled: false,
+  })));
+});
+
+test("video overlay localizes and submits through the native ownerDocument window", async () => {
+  const { DownloadItLinkCollectorParent } = await import(
+    "../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs"
+  );
+  const submissions = [];
+  const window = { document: { l10n: { async formatValue(id) {
+    assert.equal(id, "downloadit-video-download");
+    return "下载";
+  } } } };
+  const browser = { ownerDocument: { defaultView: window }, currentURI: { spec: "file:///video-test.html" } };
+  const actor = new DownloadItLinkCollectorParent();
+  actor.browsingContext = {
+    id: 42,
+    top: { embedderElement: browser },
+    currentWindowGlobal: { documentURI: { spec: "file:///video-test.html" } },
+  };
+  const originalChromeUtils = globalThis.ChromeUtils;
+  globalThis.ChromeUtils = { importESModule(spec) {
+    if (spec.endsWith("DownloadItLocalization.sys.mjs")) {
+      return { async initializeDownloadItLocalization(target) {
+        assert.equal(target, window);
+      } };
+    }
+    if (spec.endsWith("DownloadItService.sys.mjs")) {
+      return { getActiveService: () => ({
+        defaultManager: "test-manager",
+        async downloadLinks(contexts, manager) { submissions.push({ contexts, manager }); },
+      }) };
+    }
+    if (spec.endsWith("DownloadItProtocol.sys.mjs")) {
+      return { classifyDownloadTarget: () => "supported", DOWNLOAD_TARGET_CLASSIFICATION: { SUPPORTED: "supported" } };
+    }
+    throw new Error(`Unexpected import: ${spec}`);
+  } };
+  try {
+    assert.equal(await actor.receiveMessage({ name: "DownloadIt:GetVideoButtonLabel" }), "下载");
+    await actor.receiveMessage({ name: "DownloadIt:DownloadVideo", data: { url: "https://example.com/flower.mp4" } });
+  } finally {
+    if (originalChromeUtils === undefined) delete globalThis.ChromeUtils;
+    else globalThis.ChromeUtils = originalChromeUtils;
+  }
+  assert.equal(submissions.length, 1);
+  assert.equal(submissions[0].manager, "test-manager");
+  assert.equal(submissions[0].contexts[0].browser, browser);
+  assert.equal(submissions[0].contexts[0].url, "https://example.com/flower.mp4");
+  assert.equal(submissions[0].contexts[0].browsingContextId, 42);
+});
+
+test("deferred video overlay initialization uses its document's observer constructor", async () => {
+  const { DownloadItLinkCollectorChild } = await import(
+    "../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs"
+  );
+  const observed = [];
+  const root = {};
+  const actor = new DownloadItLinkCollectorChild();
+  actor.document = {
+    documentElement: root,
+    addEventListener() {},
+    defaultView: {
+      addEventListener() {},
+      MutationObserver: class {
+        constructor(callback) { this.callback = callback; }
+        observe(target, options) { observed.push({ target, options }); }
+      },
+    },
+  };
+  actor.ensureVideoButton = () => {};
+  actor.sendQuery = async () => "下载";
+  actor.setVideoButtonEnabled(true);
+  assert.equal(observed.length, 1);
+  assert.equal(observed[0].target, root);
+  assert.deepEqual(observed[0].options, { childList: true, subtree: true });
+  assert.ok(actor.observer);
 });
