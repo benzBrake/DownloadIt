@@ -731,11 +731,34 @@ test("custom executable paths are portable within the Firefox configuration dire
   assert.match(service, /configurationDirectory\.contains\(file\)/);
   assert.match(service, /file\.getRelativePath\(configurationDirectory\)/);
   assert.match(service, /this\.resolveExecutablePath\(executablePath\)/);
-  assert.match(script, /state\.service\.resolveCustomFilePath\(currentPath\)/);
+  assert.match(script, /currentPathResolver = value => state\.service\.resolveCustomFilePath\(value\)/);
   assert.match(script, /state\.service\.normalizeCustomFilePathForStorage\(picker\.file\)/);
   assert.equal((markup.match(/downloadit-executable-path-help/g) || []).length, 2);
   assert.match(englishReadme, /`UChrm`/);
   assert.match(chineseReadme, /`UChrm`/);
+});
+
+test("yt-dlp relative paths use an nsIFile Firefox profile base", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const method = service.slice(
+    service.indexOf("  resolveYtDlpPath(value) {"),
+    service.indexOf("  normalizeYtDlpPathForStorage(value) {"),
+  );
+  assert.match(method, /const profile = this\.getProfileDirectoryFile\(\)/);
+  assert.match(method, /file\.setRelativePath\(profile,/);
+  assert.doesNotMatch(method, /setRelativePath\(PathUtils\.profileDir,/);
+});
+
+test("yt-dlp page probing explicitly skips media downloads", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const probe = service.slice(
+    service.indexOf("  async probeYtDlpPage(pageURL) {"),
+    service.indexOf("  async downloadViaYtDlp(pageURL) {"),
+  );
+  assert.match(probe, /"--simulate"[\s\S]*?"--skip-download"/);
+  assert.match(probe, /"--print-to-file"/);
+  assert.match(probe, /process\.startHidden = true/);
+  assert.doesNotMatch(probe, /this\.startDetachedProcess/);
 });
 
 test("automatic capture rules are versioned, profile-scoped, and atomic", () => {

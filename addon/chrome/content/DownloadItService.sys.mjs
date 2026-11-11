@@ -222,6 +222,7 @@ const PREF_KEEP_PROFILE_DATA_ON_UNINSTALL =
   "downloadit.keepProfileDataOnUninstall";
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
 const PREF_VIDEO_DOWNLOAD_BUTTON = "downloadit.videoDownloadButton";
+const PREF_YTDLP_PATH = "downloadit.ytDlp.path";
 const PREF_ABDM_ENABLED = "downloadit.abdm.enabled";
 const PREF_ABDM_ENDPOINT = "downloadit.abdm.endpoint";
 const PREF_ABDM_API_KEY = "downloadit.abdm.apiKey";
@@ -310,6 +311,26 @@ function initializeLinkCollectorActors() {
   notifyVideoDownloadButtonSetting(
     Services.prefs.getBoolPref(PREF_VIDEO_DOWNLOAD_BUTTON, true),
   );
+}
+
+function notifyYtDlpSetting() {
+  const windows = Services.wm.getEnumerator("navigator:browser");
+  while (windows.hasMoreElements()) {
+    const window = windows.getNext();
+    for (const browser of window.gBrowser?.browsers || []) {
+      const visit = context => {
+        if (!context) return;
+        try {
+          context.currentWindowGlobal?.getActor?.(LINK_COLLECTOR_ACTOR_NAME)
+            ?.sendAsyncMessage("DownloadIt:SetYtDlpEnabled", {
+              enabled: getActiveService()?.ytDlpEnabled === true,
+            });
+        } catch {}
+        for (const child of context.children || []) visit(child);
+      };
+      visit(browser.browsingContext);
+    }
+  }
 }
 
 function unregisterLinkCollectorActor() {
@@ -454,6 +475,113 @@ export class DownloadItService {
 
   get videoDownloadButtonEnabled() {
     return Services.prefs.getBoolPref(PREF_VIDEO_DOWNLOAD_BUTTON, true);
+  }
+
+  get ytDlpPath() {
+    return Services.prefs.getStringPref(PREF_YTDLP_PATH, "");
+  }
+
+  get ytDlpEnabled() {
+    const path = this.ytDlpPath;
+    if (!path) {
+      return false;
+    }
+    try {
+      const file = this.getLocalFile(this.resolveYtDlpPath(path));
+      return this.platformDefinition?.id === "linux"
+        ? isExecutableLocalFile(file, "linux")
+        : isRegularLocalFile(file);
+    } catch {
+      return false;
+    }
+  }
+
+  resolveYtDlpPath(value) {
+    const path = String(value || "").trim();
+    if (!path || getAbsolutePathPlatform(path)) {
+      return path;
+    }
+    const profile = this.getProfileDirectoryFile();
+    const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+    file.setRelativePath(profile, path.replace(/\\/g, "/"));
+    if (!profile.contains(file)) {
+      throw new DownloadItError("executable-relative-path-invalid");
+    }
+    return file.path;
+  }
+
+  normalizeYtDlpPathForStorage(value) {
+    if (!value || (typeof value === "string" && !value.trim())) {
+      return "";
+    }
+    const file = typeof value === "string"
+      ? this.getLocalFile(this.resolveYtDlpPath(value))
+      : value.QueryInterface(Ci.nsIFile);
+    const profile = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+    profile.initWithPath(PathUtils.profileDir);
+    return profile.contains(file)
+      ? file.getRelativePath(profile).replace(/\\/g, "/")
+      : file.path;
+  }
+
+  async probeYtDlpPage(pageURL) {
+    if (!this.ytDlpEnabled || !/^https?:/i.test(String(pageURL))) {
+      return false;
+    }
+    const outputPath = this.createTemporaryPath("ytdlp-probe", ".txt");
+    try {
+      const executablePath = this.resolveYtDlpPath(this.ytDlpPath);
+      const process = Cc["@mozilla.org/process/util;1"].createInstance(Ci.nsIProcess);
+      process.init(this.getLocalFile(executablePath));
+      if (this.platformDefinition?.processWindowHidingSupported) {
+        process.startHidden = true;
+      }
+      const argumentsList = [
+        "--ignore-config", "--no-warnings", "--no-playlist", "--simulate",
+        "--skip-download",
+        "--print-to-file", `before_dl:${outputPath}`, "%(formats)j", String(pageURL),
+      ];
+      const completed = new Promise(resolve => {
+        process.runwAsync(argumentsList, argumentsList.length, {
+          observe(subject, topic) {
+            resolve(topic === "process-finished" && process.exitValue === 0);
+          },
+        });
+      });
+      let timeoutId;
+      const timeout = new Promise(resolve => {
+        timeoutId = setTimeoutPromise(() => {
+          try { process.kill(); } catch {}
+          resolve(false);
+        }, 15000);
+      });
+      const succeeded = await Promise.race([completed, timeout]);
+      clearTimeoutPromise(timeoutId);
+      if (!succeeded || !(await IOUtils.exists(outputPath))) {
+        return false;
+      }
+      const formats = JSON.parse(await IOUtils.readUTF8(outputPath));
+      return Array.isArray(formats) && formats.some(format =>
+        format && typeof format === "object" && format.has_drm !== true
+      );
+    } catch (error) {
+      console.error("DownloadIt: yt-dlp page probe failed", error);
+      return false;
+    } finally {
+      await this.removeTemporaryFile(outputPath);
+    }
+  }
+
+  async downloadViaYtDlp(pageURL) {
+    if (!this.ytDlpEnabled) {
+      throw new DownloadItError("ytdlp-unavailable");
+    }
+    const directory = await Downloads.getPreferredDownloadsDirectory();
+    const args = [
+      "--ignore-config", "--no-playlist", "--paths", directory,
+      String(pageURL),
+    ];
+    this.startDetachedProcess(this.resolveYtDlpPath(this.ytDlpPath), args, null, false);
   }
 
   set defaultManager(value) {
@@ -1091,6 +1219,12 @@ export class DownloadItService {
 
   getConfigurationDirectoryFile() {
     return Services.dirsvc.get("UChrm", Ci.nsIFile);
+  }
+
+  getProfileDirectoryFile() {
+    const profile = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+    profile.initWithPath(PathUtils.profileDir);
+    return profile;
   }
 
   resolveExecutablePath(value) {
@@ -2962,6 +3096,8 @@ export class DownloadItService {
       omitCookies: Services.prefs.getBoolPref(PREF_OMIT_COOKIES, false),
       autoStartTasks: Services.prefs.getBoolPref(PREF_AUTO_START_TASKS, true),
       videoDownloadButton: Services.prefs.getBoolPref(PREF_VIDEO_DOWNLOAD_BUTTON, true),
+      ytDlpPath: this.ytDlpPath,
+      ytDlpEnabled: this.ytDlpEnabled,
       keepProfileDataOnUninstall: Services.prefs.getBoolPref(
         PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
         true,
@@ -3033,6 +3169,7 @@ export class DownloadItService {
     omitCookies = false,
     autoStartTasks = null,
     videoDownloadButton = null,
+    ytDlpPath = null,
     keepProfileDataOnUninstall = null,
     builtInProtocols = null,
     abdm = null,
@@ -3087,6 +3224,10 @@ export class DownloadItService {
     const requestedVideoDownloadButton = videoDownloadButton == null
       ? currentVideoDownloadButton
       : Boolean(videoDownloadButton);
+    const currentYtDlpPath = this.ytDlpPath;
+    const requestedYtDlpPath = ytDlpPath == null
+      ? currentYtDlpPath
+      : this.normalizeYtDlpPathForStorage(String(ytDlpPath).trim());
     const currentKeepProfileDataOnUninstall = Services.prefs.getBoolPref(
       PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
       true,
@@ -3521,6 +3662,10 @@ export class DownloadItService {
         requestedVideoDownloadButton,
       );
       notifyVideoDownloadButtonSetting(requestedVideoDownloadButton);
+    }
+    if (requestedYtDlpPath !== currentYtDlpPath) {
+      Services.prefs.setStringPref(PREF_YTDLP_PATH, requestedYtDlpPath);
+      notifyYtDlpSetting();
     }
     if (requestedKeepProfileDataOnUninstall !== currentKeepProfileDataOnUninstall) {
       Services.prefs.setBoolPref(

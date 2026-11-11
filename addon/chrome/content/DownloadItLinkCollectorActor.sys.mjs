@@ -3,6 +3,24 @@ const PAGE_LINKS_QUERY = "DownloadIt:GetPageLinks";
 const VIDEO_BUTTON_LABEL_QUERY = "DownloadIt:GetVideoButtonLabel";
 const VIDEO_BUTTON_SETTING_MESSAGE = "DownloadIt:SetVideoButtonEnabled";
 const VIDEO_DOWNLOAD_MESSAGE = "DownloadIt:DownloadVideo";
+const YTDLP_PROBE_MESSAGE = "DownloadIt:ProbeYtDlpPage";
+const YTDLP_SETTING_MESSAGE = "DownloadIt:SetYtDlpEnabled";
+const KNOWN_YTDLP_HOSTS = Object.freeze([
+  "youtube.com",
+  "youtu.be",
+  "youtube-nocookie.com",
+]);
+
+export function isKnownYtDlpPage(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return KNOWN_YTDLP_HOSTS.some(host =>
+      hostname === host || hostname.endsWith(`.${host}`)
+    );
+  } catch {
+    return false;
+  }
+}
 
 const ParentActor = typeof JSWindowActorParent === "function"
   ? JSWindowActorParent
@@ -113,8 +131,25 @@ export class DownloadItLinkCollectorParent extends ParentActor {
       );
       await initializeDownloadItLocalization(browserWindow);
       return await browserWindow?.document?.l10n?.formatValue(
-        "downloadit-video-download",
+        "downloadit-ytdlp-download",
       ) || "";
+    }
+    if (name === "DownloadIt:GetYtDlpEnabled") {
+      try {
+        const { getActiveService } = ChromeUtils.importESModule(
+          "chrome://downloadit/content/DownloadItService.sys.mjs",
+        );
+        return getActiveService()?.ytDlpEnabled === true;
+      } catch {
+        return false;
+      }
+    }
+    if (name === YTDLP_PROBE_MESSAGE) {
+      const { getActiveService } = ChromeUtils.importESModule(
+        "chrome://downloadit/content/DownloadItService.sys.mjs",
+      );
+      const pageURL = this.browsingContext?.currentWindowGlobal?.documentURI?.spec || "";
+      return getActiveService()?.probeYtDlpPage(pageURL) || false;
     }
     if (name !== VIDEO_DOWNLOAD_MESSAGE) {
       return null;
@@ -131,40 +166,11 @@ export class DownloadItLinkCollectorParent extends ParentActor {
         "chrome://downloadit/content/DownloadItService.sys.mjs",
       );
       const service = getActiveService();
-      if (!service?.defaultManager) {
-        throw new Error("No default download manager is available");
-      }
       const pageURL = this.browsingContext?.currentWindowGlobal?.documentURI?.spec || "";
-      const principal = this.browsingContext?.currentWindowGlobal?.documentPrincipal || null;
-      const { classifyDownloadTarget, DOWNLOAD_TARGET_CLASSIFICATION } =
-        ChromeUtils.importESModule(
-          "chrome://downloadit/content/DownloadItProtocol.sys.mjs",
-        );
-      const url = String(data?.url || "");
-      if (classifyDownloadTarget({ url }) !== DOWNLOAD_TARGET_CLASSIFICATION.SUPPORTED) {
-        throw new Error("The video URL is not supported by the selected download manager");
+      if (!service?.ytDlpEnabled || !/^https?:/i.test(pageURL)) {
+        throw new Error("yt-dlp is unavailable or the page URL is invalid");
       }
-      let filename = "";
-      try {
-        const path = new URL(url).pathname;
-        filename = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
-      } catch {}
-      await service.downloadLinks([{
-        url,
-        filename,
-        description: filename || url,
-        browser,
-        referer: pageURL,
-        downloadPageReferer: browser.currentURI?.spec || pageURL,
-        browsingContextId: this.browsingContext?.id || 0,
-        loadingPrincipal: principal,
-        cookieJarSettings: this.browsingContext?.currentWindowGlobal?.cookieJarSettings || null,
-        userContextId: this.browsingContext?.originAttributes?.userContextId ?? 0,
-        isPrivate: Boolean(
-          this.browsingContext?.usePrivateBrowsing ||
-          principal?.originAttributes?.privateBrowsingId,
-        ),
-      }], service.defaultManager);
+      await service.downloadViaYtDlp(pageURL);
     } catch (error) {
       console.error("DownloadIt: video download failed", error);
       let label = "";
@@ -206,6 +212,9 @@ export class DownloadItLinkCollectorChild extends ChildActor {
   observer = null;
   label = "";
   videoButtonEnabled = false;
+  ytDlpEnabled = false;
+  supportProbeURL = "";
+  supportProbeResult = false;
   destroyed = false;
 
   receiveMessage({ name, data }) {
@@ -217,6 +226,10 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     }
     if (name === VIDEO_BUTTON_SETTING_MESSAGE) {
       this.setVideoButtonEnabled(data?.enabled === true);
+      return null;
+    }
+    if (name === YTDLP_SETTING_MESSAGE) {
+      this.setYtDlpEnabled(data?.enabled === true);
       return null;
     }
     return null;
@@ -236,6 +249,11 @@ export class DownloadItLinkCollectorChild extends ChildActor {
         this.setVideoButtonEnabled(true);
       }
     });
+    this.sendQuery("DownloadIt:GetYtDlpEnabled").then(enabled => {
+      if (!this.destroyed) {
+        this.setYtDlpEnabled(enabled === true);
+      }
+    }).catch(() => this.setYtDlpEnabled(false));
   }
 
   didDestroy() {
@@ -279,11 +297,25 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     document.addEventListener("visibilitychange", this, true);
     view?.addEventListener("scroll", this, true);
     view?.addEventListener("resize", this, true);
-    this.observer = new view.MutationObserver(() => this.refreshVideo());
+    this.observer = new view.MutationObserver(() => {
+      this.refreshVideo();
+      this.probeCurrentPage();
+    });
     this.observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
     });
+  }
+
+  setYtDlpEnabled(enabled) {
+    this.ytDlpEnabled = enabled;
+    this.supportProbeURL = "";
+    this.supportProbeResult = false;
+    if (!enabled) {
+      this.hideVideoButton();
+    } else {
+      this.probeCurrentPage();
+    }
   }
 
   ensureVideoButton() {
@@ -312,9 +344,9 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     this.button.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      const url = getPlayableVideoURL(this.video);
-      if (url) {
-        this.sendAsyncMessage(VIDEO_DOWNLOAD_MESSAGE, { url });
+      const pageURL = this.document?.location?.href || "";
+      if (this.ytDlpEnabled && this.supportProbeResult && pageURL) {
+        this.sendAsyncMessage(VIDEO_DOWNLOAD_MESSAGE, { pageURL });
       }
       this.hideVideoButton();
     });
@@ -324,8 +356,8 @@ export class DownloadItLinkCollectorChild extends ChildActor {
   handleEvent(event) {
     if (event.type === "pointerover") {
       const video = event.composedPath?.().find(node => node?.localName === "video");
-      if (video && getPlayableVideoURL(video)) {
-        this.showVideoButton(video);
+      if (video && this.ytDlpEnabled) {
+        this.checkPageSupport(video);
       }
       return;
     }
@@ -348,6 +380,47 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     }
   }
 
+  checkPageSupport(video) {
+    const pageURL = this.document?.location?.href || "";
+    if (!/^https?:/i.test(pageURL)) {
+      return;
+    }
+    this.video = video;
+    this.probeCurrentPage();
+    if (this.supportProbeURL === pageURL && this.supportProbeResult) {
+      this.showVideoButton(video);
+    }
+  }
+
+  probeCurrentPage() {
+    if (!this.ytDlpEnabled) {
+      return;
+    }
+    const pageURL = this.document?.location?.href || "";
+    if (!/^https?:/i.test(pageURL) || this.supportProbeURL === pageURL) {
+      return;
+    }
+    this.supportProbeURL = pageURL;
+    this.supportProbeResult = isKnownYtDlpPage(pageURL);
+    if (this.supportProbeResult) {
+      if (this.video?.isConnected) {
+        this.showVideoButton(this.video);
+      }
+      return;
+    }
+    this.sendQuery(YTDLP_PROBE_MESSAGE, { pageURL }).then(supported => {
+      if (this.destroyed || this.supportProbeURL !== pageURL) {
+        return;
+      }
+      this.supportProbeResult = supported === true;
+      if (this.supportProbeResult && this.video?.isConnected) {
+        this.showVideoButton(this.video);
+      } else {
+        this.hideVideoButton();
+      }
+    }).catch(() => this.hideVideoButton());
+  }
+
   showVideoButton(video) {
     if (!this.label) {
       return;
@@ -360,7 +433,7 @@ export class DownloadItLinkCollectorChild extends ChildActor {
 
   positionVideoButton() {
     const video = this.video;
-    if (!video?.isConnected || !getPlayableVideoURL(video)) {
+    if (!video?.isConnected) {
       this.hideVideoButton();
       return;
     }
@@ -375,10 +448,6 @@ export class DownloadItLinkCollectorChild extends ChildActor {
   }
 
   refreshVideo(video = this.video) {
-    if (video && video === this.video && !getPlayableVideoURL(video)) {
-      this.hideVideoButton();
-      return;
-    }
     if (this.video && !this.video.isConnected) {
       this.hideVideoButton();
     }

@@ -7,6 +7,7 @@ import {
   collectPageLinks,
   collectSelectionLinks,
   getPlayableVideoURL,
+  isKnownYtDlpPage,
 } from "../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs";
 
 function link({
@@ -167,13 +168,40 @@ test("video URL selection prefers the active media URL and excludes browser-loca
   }), "");
 });
 
+test("known YouTube pages skip the yt-dlp support process", () => {
+  assert.equal(isKnownYtDlpPage("https://www.youtube.com/watch?v=abc"), true);
+  assert.equal(isKnownYtDlpPage("https://youtu.be/abc"), true);
+  assert.equal(isKnownYtDlpPage("https://music.youtube.com/watch?v=abc"), true);
+  assert.equal(isKnownYtDlpPage("https://youtube.com.attacker.invalid/watch"), false);
+});
+
+test("yt-dlp support probing starts when the page actor initializes", async () => {
+  const { DownloadItLinkCollectorChild } = await import(
+    "../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs"
+  );
+  const queries = [];
+  const actor = new DownloadItLinkCollectorChild();
+  actor.document = {
+    documentElement: {},
+    location: { href: "https://unsupported.invalid/watch/1" },
+  };
+  actor.sendQuery = async name => {
+    queries.push(name);
+    return name === "DownloadIt:GetYtDlpEnabled";
+  };
+  actor.probeCurrentPage = () => queries.push("probe-page");
+  actor.actorCreated();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.ok(queries.includes("probe-page"));
+});
+
 test("video download overlay is attached and removed with its frame actor", async () => {
   const actor = await import("../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs");
   assert.match(actor.DownloadItLinkCollectorChild.prototype.actorCreated.toString(), /setVideoButtonEnabled/);
   assert.match(actor.DownloadItLinkCollectorChild.prototype.setVideoButtonEnabled.toString(), /installVideoButton/);
   assert.match(actor.DownloadItLinkCollectorChild.prototype.didDestroy.toString(), /cleanupVideoButton/);
-  assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /service\.downloadLinks/);
-  assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /classifyDownloadTarget/);
+  assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /service\.downloadViaYtDlp/);
+  assert.match(actor.DownloadItLinkCollectorParent.prototype.receiveMessage.toString(), /probeYtDlpPage/);
 });
 
 test("video overlay actor starts for already-open pages and future documents", () => {
@@ -227,13 +255,13 @@ test("video overlay actor starts for already-open pages and future documents", (
   })));
 });
 
-test("video overlay localizes and submits through the native ownerDocument window", async () => {
+test("video overlay submits the page URL to yt-dlp", async () => {
   const { DownloadItLinkCollectorParent } = await import(
     "../addon/chrome/content/DownloadItLinkCollectorActor.sys.mjs"
   );
   const submissions = [];
   const window = { document: { l10n: { async formatValue(id) {
-    assert.equal(id, "downloadit-video-download");
+    assert.equal(id, "downloadit-ytdlp-download");
     return "下载";
   } } } };
   const browser = { ownerDocument: { defaultView: window }, currentURI: { spec: "file:///video-test.html" } };
@@ -241,7 +269,7 @@ test("video overlay localizes and submits through the native ownerDocument windo
   actor.browsingContext = {
     id: 42,
     top: { embedderElement: browser },
-    currentWindowGlobal: { documentURI: { spec: "file:///video-test.html" } },
+    currentWindowGlobal: { documentURI: { spec: "https://example.com/watch/123" } },
   };
   const originalChromeUtils = globalThis.ChromeUtils;
   globalThis.ChromeUtils = { importESModule(spec) {
@@ -252,27 +280,20 @@ test("video overlay localizes and submits through the native ownerDocument windo
     }
     if (spec.endsWith("DownloadItService.sys.mjs")) {
       return { getActiveService: () => ({
-        defaultManager: "test-manager",
-        async downloadLinks(contexts, manager) { submissions.push({ contexts, manager }); },
+        ytDlpEnabled: true,
+        async downloadViaYtDlp(pageURL) { submissions.push(pageURL); },
       }) };
-    }
-    if (spec.endsWith("DownloadItProtocol.sys.mjs")) {
-      return { classifyDownloadTarget: () => "supported", DOWNLOAD_TARGET_CLASSIFICATION: { SUPPORTED: "supported" } };
     }
     throw new Error(`Unexpected import: ${spec}`);
   } };
   try {
     assert.equal(await actor.receiveMessage({ name: "DownloadIt:GetVideoButtonLabel" }), "下载");
-    await actor.receiveMessage({ name: "DownloadIt:DownloadVideo", data: { url: "https://example.com/flower.mp4" } });
+    await actor.receiveMessage({ name: "DownloadIt:DownloadVideo", data: { pageURL: "https://example.com/watch/123" } });
   } finally {
     if (originalChromeUtils === undefined) delete globalThis.ChromeUtils;
     else globalThis.ChromeUtils = originalChromeUtils;
   }
-  assert.equal(submissions.length, 1);
-  assert.equal(submissions[0].manager, "test-manager");
-  assert.equal(submissions[0].contexts[0].browser, browser);
-  assert.equal(submissions[0].contexts[0].url, "https://example.com/flower.mp4");
-  assert.equal(submissions[0].contexts[0].browsingContextId, 42);
+  assert.deepEqual(submissions, ["https://example.com/watch/123"]);
 });
 
 test("deferred video overlay initialization uses its document's observer constructor", async () => {
