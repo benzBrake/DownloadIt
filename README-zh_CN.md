@@ -179,6 +179,8 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager、Xtreme Download Manager、uGet 和 Aria2Next 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径；uGet 只有在明确启用并为当前系统配置绝对启动器路径后才可选择；Aria2Next 只有在受支持的平台和 ABI 上启用且 `aria2.getVersion` 探测成功后才可选择。回环 provider 只会在明确测试或提交时启动配置的程序；uGet 会为每个任务直接调用静默命令行，不会探测后台 API。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
+**专用下载器**标签页用于配置 yt-dlp 和后续加入的专用下载工具。yt-dlp 设置可指定可执行文件路径，以及下载时是否显示其进程窗口。默认显示窗口；隐藏行为取决于 Firefox 所在平台是否支持。
+
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
 | `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"jdownloader","id":"jdownloader"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
@@ -186,6 +188,8 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.ed2kDM` | 字符串 | `ed2k:` 链接的可选默认外部下载器 JSON 引用。值为空或引用无效时，链接保留在 Firefox 原生外部协议流程中处理。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
 | `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前由 JDownloader 和 AB Download Manager 使用。 |
+| `downloadit.ytDlp.path` | 字符串 | yt-dlp 可执行文件路径，在 **专用下载器**标签页中配置。 |
+| `downloadit.ytDlp.showWindow` | 布尔值 | 在平台支持时显示 yt-dlp 下载进程窗口；默认值为 `true`。 |
 | `downloadit.keepProfileDataOnUninstall` | 布尔值 | 卸载扩展时保留 profile 下 `DownloadIt` 目录中的 JSON 配置和规则文件。无论此开关如何，随包提供的辅助二进制都会删除；默认值为 `true`。 |
 | `downloadit.abdm.enabled` | 布尔值 | 启用 AB Download Manager 回环 provider。 |
 | `downloadit.abdm.endpoint` | 字符串 | AB Download Manager API 端点。只接受 HTTP 回环 URL；默认值为 `http://127.0.0.1:15151/`。 |

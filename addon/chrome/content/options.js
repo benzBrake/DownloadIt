@@ -72,6 +72,11 @@ const SECTION_META = {
     "downloadit-privacy-title",
     "downloadit-privacy-description",
   ],
+  ytdlp: [
+    "downloadit-ytdlp-kicker",
+    "downloadit-ytdlp-title",
+    "downloadit-ytdlp-description",
+  ],
   "link-groups": [
     "downloadit-link-groups-kicker",
     "downloadit-link-groups-title",
@@ -257,6 +262,7 @@ function createSettingsState(snapshot) {
     autoStartTasks: snapshot.autoStartTasks,
     videoDownloadButton: snapshot.videoDownloadButton,
     ytDlpPath: snapshot.ytDlpPath || "",
+    ytDlpShowWindow: snapshot.ytDlpShowWindow !== false,
     keepProfileDataOnUninstall: snapshot.keepProfileDataOnUninstall,
     builtInProtocols: Object.fromEntries(
       snapshot.builtInProtocols.map(protocol => [
@@ -342,6 +348,11 @@ function bindEvents() {
   });
   document.getElementById("ytdlp-path").addEventListener("input", event => {
     state.draft.ytDlpPath = event.target.value;
+    clearFeedback();
+    render();
+  });
+  document.getElementById("ytdlp-show-window").addEventListener("change", event => {
+    state.draft.ytDlpShowWindow = event.target.checked;
     clearFeedback();
     render();
   });
@@ -799,8 +810,8 @@ function renderNavigation() {
   const navigation = document.querySelector(".section-nav");
   const mirrorButton = navigation.querySelector('[data-section="mirrors"]');
   const visibleSections = developerMode
-    ? ["managers", "auto-capture", "link-groups", "mirrors", "privacy", "about"]
-    : ["managers", "auto-capture", "link-groups", "privacy", "about"];
+    ? ["managers", "auto-capture", "link-groups", "mirrors", "privacy", "ytdlp", "about"]
+    : ["managers", "auto-capture", "link-groups", "privacy", "ytdlp", "about"];
 
   mirrorButton.hidden = !developerMode;
   navigation.classList.toggle("has-developer-mode", developerMode);
@@ -1012,6 +1023,9 @@ function renderVideoDownloadSettings() {
 }
 
 function renderYtDlpSettings() {
+  const showWindow = document.getElementById("ytdlp-show-window");
+  showWindow.checked = state.draft?.ytDlpShowWindow !== false;
+  showWindow.disabled = state.busy;
   const input = document.getElementById("ytdlp-path");
   input.value = state.draft?.ytDlpPath || "";
   input.disabled = state.busy;

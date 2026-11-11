@@ -179,6 +179,8 @@ Open the settings page from the toolbar panel, from “DownloadIt Settings” in
 
 The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader, AB Download Manager, Xtreme Download Manager, uGet, and Aria2Next are singletons: configuring one reopens its entry. Removing a built-in protocol disables it and clears its namespaced settings. AB Download Manager and XDM become selectable when their local service responds or an absolute launcher path is configured; XDM also accepts a JAR path. uGet becomes selectable only after it is enabled and an absolute launcher path is configured for the current system. Aria2Next becomes selectable only after it is enabled on a supported platform and ABI and its `aria2.getVersion` probe succeeds. Loopback providers start configured launchers only for explicit tests or submissions; uGet directly invokes its quiet CLI for each task and does not probe a background API. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
 
+The **Specialized downloaders** tab configures yt-dlp and future dedicated download tools. Its yt-dlp section lets users choose the executable and whether its process window is shown during a download. The window is shown by default; hiding it depends on Firefox's platform support.
+
 | Preference | Type | Description |
 | --- | --- | --- |
 | `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"native","id":"firefox"}`, `{"provider":"jdownloader","id":"jdownloader"}`, `{"provider":"flashgot","id":"Internet Download Manager"}`, or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
@@ -186,6 +188,8 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.ed2kDM` | String | Optional JSON reference for the default external downloader for `ed2k:` links. Empty or invalid references leave the link in Firefox's native external-protocol flow. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
 | `downloadit.autoStartTasks` | Boolean | Requests automatic start for providers with the task-start capability. The default is `true`; JDownloader and AB Download Manager consume it. |
+| `downloadit.ytDlp.path` | String | Path to the yt-dlp executable, configured in the **Specialized downloaders** tab. |
+| `downloadit.ytDlp.showWindow` | Boolean | Shows the yt-dlp process window during downloads when supported. The default is `true`. |
 | `downloadit.keepProfileDataOnUninstall` | Boolean | Keeps JSON configuration and rule files under the profile's `DownloadIt` directory when the extension is uninstalled. Bundled helper binaries are removed regardless. The default is `true`. |
 | `downloadit.abdm.enabled` | Boolean | Enables the AB Download Manager loopback provider. |
 | `downloadit.abdm.endpoint` | String | AB Download Manager API endpoint. Only HTTP loopback URLs are accepted; the default is `http://127.0.0.1:15151/`. |

@@ -286,7 +286,7 @@ test("automatic capture controls live in a dedicated settings tab", () => {
     markup,
     /aria-controls="section-auto-capture" data-section="auto-capture"/,
   );
-  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 6);
+  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 7);
   assert.ok(managerPanel);
   assert.ok(autoCapturePanel);
   assert.doesNotMatch(managerPanel, /id="auto-allow-list"/);
@@ -299,11 +299,30 @@ test("automatic capture controls live in a dedicated settings tab", () => {
   assert.match(autoCapturePanel, /id="retry-auto-capture-rules"/);
   assert.match(autoCapturePanel, /id="reset-auto-capture-rules"/);
   assert.match(script, /"auto-capture": \[/);
-  assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
   assert.match(
     styles,
-    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(6, minmax\(0, 1fr\)\)/,
+    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(7, minmax\(0, 1fr\)\)/,
   );
+});
+
+test("yt-dlp settings have a dedicated page and control process window visibility", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const script = read("addon/chrome/content/options.js");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const panel = markup.match(
+    /<section id="section-ytdlp"[\s\S]*?<\/section>/,
+  )?.[0];
+
+  assert.match(markup, /data-section="ytdlp"/);
+  assert.match(panel, /id="ytdlp-path"/);
+  assert.match(panel, /id="ytdlp-show-window"/);
+  assert.match(script, /ytDlpShowWindow: snapshot\.ytDlpShowWindow !== false/);
+  assert.match(script, /state\.draft\.ytDlpShowWindow = event\.target\.checked/);
+  assert.match(service, /PREF_YTDLP_SHOW_WINDOW = "downloadit\.ytDlp\.showWindow"/);
+  assert.match(service, /PREF_YTDLP_SHOW_WINDOW,\s*true/);
+  assert.match(service, /ytDlpShowWindow: Services\.prefs\.getBoolPref\(/);
+  assert.match(service, /Services\.prefs\.getBoolPref\(PREF_YTDLP_SHOW_WINDOW, true\) === false/);
 });
 
 test("settings refresh keeps default-manager persistence staged", () => {

@@ -223,6 +223,7 @@ const PREF_KEEP_PROFILE_DATA_ON_UNINSTALL =
 const PREF_AUTO_START_TASKS = "downloadit.autoStartTasks";
 const PREF_VIDEO_DOWNLOAD_BUTTON = "downloadit.videoDownloadButton";
 const PREF_YTDLP_PATH = "downloadit.ytDlp.path";
+const PREF_YTDLP_SHOW_WINDOW = "downloadit.ytDlp.showWindow";
 const PREF_ABDM_ENABLED = "downloadit.abdm.enabled";
 const PREF_ABDM_ENDPOINT = "downloadit.abdm.endpoint";
 const PREF_ABDM_API_KEY = "downloadit.abdm.apiKey";
@@ -581,7 +582,12 @@ export class DownloadItService {
       "--ignore-config", "--no-playlist", "--paths", directory,
       String(pageURL),
     ];
-    this.startDetachedProcess(this.resolveYtDlpPath(this.ytDlpPath), args, null, false);
+    this.startDetachedProcess(
+      this.resolveYtDlpPath(this.ytDlpPath),
+      args,
+      null,
+      Services.prefs.getBoolPref(PREF_YTDLP_SHOW_WINDOW, true) === false,
+    );
   }
 
   set defaultManager(value) {
@@ -3098,6 +3104,7 @@ export class DownloadItService {
       videoDownloadButton: Services.prefs.getBoolPref(PREF_VIDEO_DOWNLOAD_BUTTON, true),
       ytDlpPath: this.ytDlpPath,
       ytDlpEnabled: this.ytDlpEnabled,
+      ytDlpShowWindow: Services.prefs.getBoolPref(PREF_YTDLP_SHOW_WINDOW, true),
       keepProfileDataOnUninstall: Services.prefs.getBoolPref(
         PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
         true,
@@ -3170,6 +3177,7 @@ export class DownloadItService {
     autoStartTasks = null,
     videoDownloadButton = null,
     ytDlpPath = null,
+    ytDlpShowWindow = null,
     keepProfileDataOnUninstall = null,
     builtInProtocols = null,
     abdm = null,
@@ -3228,6 +3236,13 @@ export class DownloadItService {
     const requestedYtDlpPath = ytDlpPath == null
       ? currentYtDlpPath
       : this.normalizeYtDlpPathForStorage(String(ytDlpPath).trim());
+    const currentYtDlpShowWindow = Services.prefs.getBoolPref(
+      PREF_YTDLP_SHOW_WINDOW,
+      true,
+    );
+    const requestedYtDlpShowWindow = ytDlpShowWindow == null
+      ? currentYtDlpShowWindow
+      : Boolean(ytDlpShowWindow);
     const currentKeepProfileDataOnUninstall = Services.prefs.getBoolPref(
       PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
       true,
@@ -3666,6 +3681,12 @@ export class DownloadItService {
     if (requestedYtDlpPath !== currentYtDlpPath) {
       Services.prefs.setStringPref(PREF_YTDLP_PATH, requestedYtDlpPath);
       notifyYtDlpSetting();
+    }
+    if (requestedYtDlpShowWindow !== currentYtDlpShowWindow) {
+      Services.prefs.setBoolPref(
+        PREF_YTDLP_SHOW_WINDOW,
+        requestedYtDlpShowWindow,
+      );
     }
     if (requestedKeepProfileDataOnUninstall !== currentKeepProfileDataOnUninstall) {
       Services.prefs.setBoolPref(
