@@ -540,7 +540,7 @@ export class DownloadItService {
       const argumentsList = [
         "--ignore-config", "--no-warnings", "--no-playlist", "--simulate",
         "--skip-download",
-        "--print-to-file", `before_dl:${outputPath}`, "%(formats)j", String(pageURL),
+        "--print-to-file", "%(formats)j", outputPath, String(pageURL),
       ];
       const completed = new Promise(resolve => {
         process.runwAsync(argumentsList, argumentsList.length, {

@@ -266,6 +266,47 @@ function prepareStartupService(service) {
   service.listCustomDownloaders = () => [];
 }
 
+test("yt-dlp support probes write formats during simulation and remove the result file", async () => {
+  const service = createService();
+  Object.defineProperty(service, "ytDlpEnabled", { value: true });
+  Object.defineProperty(service, "ytDlpPath", { value: "yt-dlp.exe" });
+  service.resolveYtDlpPath = value => value;
+  service.getLocalFile = value => ({ path: value });
+  const outputPath = "C:\\Temp\\probe formats.json";
+  service.createTemporaryPath = () => outputPath;
+  const removed = [];
+  service.removeTemporaryFile = async value => removed.push(value);
+  const originalProcessFactory = processFactory;
+  const originalIOUtils = { ...ioUtilsMock };
+  let wroteFormats = false;
+  processFactory = () => ({
+    exitValue: 0,
+    init() {},
+    runwAsync(args, count, observer) {
+      assert.equal(count, args.length);
+      assert.ok(args.includes("--simulate"));
+      assert.ok(args.includes("--skip-download"));
+      const printIndex = args.indexOf("--print-to-file");
+      // The default video stage runs during simulation; before_dl does not.
+      wroteFormats = args[printIndex + 1] === "%(formats)j" &&
+        args[printIndex + 2] === outputPath;
+      observer.observe(null, "process-finished");
+    },
+  });
+  ioUtilsMock.exists = async value => value === outputPath && wroteFormats;
+  ioUtilsMock.readUTF8 = async () => JSON.stringify([{ format_id: "test" }]);
+  try {
+    assert.equal(await service.probeYtDlpPage("https://www.bilibili.com/video/BVtest/"), true);
+    ioUtilsMock.readUTF8 = async () => JSON.stringify([{ has_drm: true }]);
+    assert.equal(await service.probeYtDlpPage("https://www.bilibili.com/video/BVtest/"), false);
+    assert.deepEqual(removed, [outputPath, outputPath]);
+  } finally {
+    processFactory = originalProcessFactory;
+    for (const key of Object.keys(ioUtilsMock)) delete ioUtilsMock[key];
+    Object.assign(ioUtilsMock, originalIOUtils);
+  }
+});
+
 test("platform capabilities initialize Windows and Linux services independently", async () => {
   preferenceValues.clear();
   for (const [os, expected] of [
