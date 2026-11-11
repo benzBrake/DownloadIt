@@ -97,12 +97,12 @@ macOS、Snap Firefox 和 Flatpak Firefox 暂不在支持范围内。
 - Linux 上为自定义命令、aria2 自动启动或 JDownloader 自动启动选择的文件必须具有 Unix 可执行权限，例如 `chmod +x /path/to/launcher`；
 - Linux 首版不支持 Snap 和 Flatpak Firefox，因为其 Loader 安装、宿主文件访问和进程沙箱边界与非沙箱 Firefox 不同；
 - Firefox 内建下载器始终可用，因此外部下载管理器不是必需项；
-- 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会下载 [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) 最新成功构建的 nightly artifact。存在 `GITHUB_TOKEN` 或 `GH_TOKEN` 时通过 GitHub Actions API 下载，否则通过 nightly.link 下载。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
+- 构建时如果缺少 `addon/FlashGot.exe`，两套打包脚本都会通过 GitHub Releases API 查询 [Grabby-FlashGot 最新正式 Release](https://github.com/benzBrake/Grabby-FlashGot/releases/latest)，下载其中的 `FlashGot-<tag>.zip` 资产并提取 `FlashGot.exe`。`GITHUB_TOKEN` 或 `GH_TOKEN` 为可选项，存在时用于 API 请求认证。该二进制组件默认被 `.gitignore` 排除，不随 Git 仓库提交；打包时会将实际文件的大小和 SHA-256 写入 XPI 内的生成元数据，并用于运行时校验；
 - 缺少 Aria2Next 资产时会从固定的 [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` Release 下载；已有或下载得到的 Windows x86_64 与 Linux x86_64 资产必须通过固定大小和 SHA-256 校验后才能打包；
 - 缺少或过期的 AriaNg 资产时通过 GitHub CLI 从固定的 [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` 标准 Release 下载；打包前会校验压缩包、解出的 `index.html`、外置 CSS、JS 和 Font Awesome WOFF2 资源，页面不含内联脚本且不需要 `unsafe-eval`；
 - 开发和测试需要 Node.js 18 或更高版本；
 - 在 Windows 上构建需要 PowerShell 7（`pwsh`）；
-- 在 Linux 上构建需要 Bash、GitHub CLI、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；使用带认证的 GitHub API 路径时还需要 `jq`。
+- 在 Linux 上构建需要 Bash、GitHub CLI、`curl`、`zip`、`unzip`、`sha256sum` 和 GNU coreutils；下载缺失的 FlashGot 二进制时还需要 `jq` 来读取 Release 元数据。
 
 ## 构建
 
@@ -138,7 +138,7 @@ Nightly workflow 会替换 GitHub `nightly` 预发布中的资产。稳定下载
 
 ## 版本规则
 
-DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.14.0`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
+DownloadIt 从 `2.0.0` 开始使用自己的版本线；当前版本为 `2.14.4`；继承自 FlashGot 的版本线终止于 `1.5.6.14.2`。发布版本采用 `MAJOR.MINOR.PATCH`：不兼容的配置、数据格式或行为变更递增 `MAJOR`；向后兼容的新功能递增 `MINOR`；向后兼容的修复、安全更新和 Firefox 兼容性调整递增 `PATCH`。
 
 `addon/install.rdf` 中的版本只标识 DownloadIt XPI，也是设置页显示版本和生成的 `update.rdf` 的唯一来源。随包提供的 `FlashGot.exe` 是独立构建的辅助组件，其完整性通过构建时生成的文件大小和 SHA-256 元数据跟踪；该组件的版本不再拼接到 DownloadIt 版本中。
 
@@ -179,6 +179,8 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 
 下载工具列表对可配置的集成提供统一入口。“添加下载工具”弹窗默认选中“内建协议”标签和 JDownloader；“自定义”标签用于创建可重复添加的命令行或 aria2 定义。JDownloader、AB Download Manager、Xtreme Download Manager、uGet 和 Aria2Next 都是单例：配置操作会重新打开对应条目。移除内建协议会禁用并清理其独立偏好。AB Download Manager 和 XDM 在本地服务响应或配置绝对启动器路径后即可选择；XDM 还接受 JAR 路径；uGet 只有在明确启用并为当前系统配置绝对启动器路径后才可选择；Aria2Next 只有在受支持的平台和 ABI 上启用且 `aria2.getVersion` 探测成功后才可选择。回环 provider 只会在明确测试或提交时启动配置的程序；uGet 会为每个任务直接调用静默命令行，不会探测后台 API。经 FlashGot 提供的下载器仍然来自自动检测；由于 DownloadIt 侧没有需要编辑的配置，它们不会出现在添加工具目录中。
 
+**专用下载器**标签页用于配置 yt-dlp 和后续加入的专用下载工具。yt-dlp 设置可指定可执行文件路径，以及下载时是否显示其进程窗口。默认显示窗口；隐藏行为取决于 Firefox 所在平台是否支持。
+
 | 偏好 | 类型 | 说明 |
 | --- | --- | --- |
 | `downloadit.defaultDM` | 字符串 | JSON 下载器引用，例如 `{"provider":"native","id":"firefox"}`、`{"provider":"jdownloader","id":"jdownloader"}`、`{"provider":"flashgot","id":"Internet Download Manager"}` 或 `{"provider":"custom","id":"<uuid>"}`。旧版 FlashGot 名称会自动迁移。 |
@@ -186,6 +188,8 @@ DownloadIt 工具栏按钮会打开 Firefox 原生面板。使用“使用 Downl
 | `downloadit.ed2kDM` | 字符串 | `ed2k:` 链接的可选默认外部下载器 JSON 引用。值为空或引用无效时，链接保留在 Firefox 原生外部协议流程中处理。 |
 | `downloadit.omitCookies` | 布尔值 | 为 `true` 时不向外部下载工具发送 Cookie；默认值为 `false`。 |
 | `downloadit.autoStartTasks` | 布尔值 | 请求具有任务启动能力的 provider 自动开始任务；默认值为 `true`，当前由 JDownloader 和 AB Download Manager 使用。 |
+| `downloadit.ytDlp.path` | 字符串 | yt-dlp 可执行文件路径，在 **专用下载器**标签页中配置。 |
+| `downloadit.ytDlp.showWindow` | 布尔值 | 在平台支持时显示 yt-dlp 下载进程窗口；默认值为 `true`。 |
 | `downloadit.keepProfileDataOnUninstall` | 布尔值 | 卸载扩展时保留 profile 下 `DownloadIt` 目录中的 JSON 配置和规则文件。无论此开关如何，随包提供的辅助二进制都会删除；默认值为 `true`。 |
 | `downloadit.abdm.enabled` | 布尔值 | 启用 AB Download Manager 回环 provider。 |
 | `downloadit.abdm.endpoint` | 字符串 | AB Download Manager API 端点。只接受 HTTP 回环 URL；默认值为 `http://127.0.0.1:15151/`。 |

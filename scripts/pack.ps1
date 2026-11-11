@@ -8,7 +8,6 @@ $flashGotPath = Join-Path $addonDirectory "FlashGot.exe"
 $xpiPath = Join-Path $projectDirectory "addon.xpi"
 $temporaryRoot = Join-Path $projectDirectory ".tmp"
 $temporaryDirectory = Join-Path $temporaryRoot ([IO.Path]::GetRandomFileName())
-$nightlyDirectory = Join-Path $temporaryDirectory "FlashGot-nightly"
 $temporaryArchivePath = Join-Path $temporaryDirectory "addon.xpi"
 $binaryMetadataPath = Join-Path $addonDirectory "chrome\content\DownloadItBinaryMetadata.sys.mjs"
 $generatedMetadataCreated = $false
@@ -57,11 +56,7 @@ $aria2NextAssets = @(
         Sha256 = "b6f2cdadcd34ba16dd7fcb29de4b84c36f893f9b223a9a05157d1892687a45a0"
     }
 )
-$nightlyRepository = "benzBrake/Grabby-FlashGot"
-$nightlyWorkflow = "nightly.yml"
-$nightlyBranch = "master"
-$nightlyArtifact = "FlashGot-nightly"
-$nightlyLinkUrl = "https://nightly.link/benzBrake/Grabby-FlashGot/workflows/nightly.yml/master/FlashGot-nightly.zip"
+$flashGotRepository = "benzBrake/Grabby-FlashGot"
 $githubApiHeaders = @{
     "Accept" = "application/vnd.github+json"
     "User-Agent" = "DownloadIt-pack"
@@ -281,44 +276,32 @@ try {
     Write-Output "[INFO] AriaNg index SHA-256: $ariaNgIndexActualHash"
 
     if (-not (Test-Path -LiteralPath $flashGotPath -PathType Leaf)) {
-        New-Item -ItemType Directory -Path $nightlyDirectory -Force | Out-Null
-        $nightlyArchivePath = Join-Path $temporaryDirectory "$nightlyArtifact.zip"
-
-        if ($hasGitHubToken) {
-            Write-Output "[INFO] FlashGot.exe not found locally; downloading the latest nightly build through the GitHub API"
-            $workflowRunsUri = "https://api.github.com/repos/$nightlyRepository/actions/workflows/$nightlyWorkflow/runs?branch=$nightlyBranch&status=success&per_page=1"
-            $workflowRuns = Invoke-RestMethod -Uri $workflowRunsUri -Headers $githubApiHeaders -Method Get
-            $latestRun = $workflowRuns.workflow_runs | Select-Object -First 1
-            if (-not $latestRun) {
-                throw "No successful nightly build was found in $nightlyRepository"
-            }
-
-            $latestRunId = $latestRun.id
-            $artifactsUri = "https://api.github.com/repos/$nightlyRepository/actions/runs/$latestRunId/artifacts?per_page=100"
-            $artifacts = Invoke-RestMethod -Uri $artifactsUri -Headers $githubApiHeaders -Method Get
-            $nightly = $artifacts.artifacts | Where-Object {
-                ($_.name -eq $nightlyArtifact) -and (-not $_.expired)
-            } | Select-Object -First 1
-            if (-not $nightly) {
-                throw "The latest successful nightly run has no available $nightlyArtifact artifact"
-            }
-
-            $artifactDownloadUrl = $nightly.archive_download_url
-            Invoke-WebRequest -Uri $artifactDownloadUrl -Headers $githubApiHeaders -OutFile $nightlyArchivePath
+        Write-Output "[INFO] FlashGot.exe not found locally; downloading the latest FlashGot release"
+        $releaseUri = "https://api.github.com/repos/$flashGotRepository/releases/latest"
+        $release = Invoke-RestMethod -Uri $releaseUri -Headers $githubApiHeaders -Method Get
+        $releaseAssetName = "FlashGot-$($release.tag_name).zip"
+        $releaseAsset = $release.assets | Where-Object {
+            $_.name -eq $releaseAssetName
+        } | Select-Object -First 1
+        if (-not $releaseAsset) {
+            throw "The latest FlashGot release has no $releaseAssetName asset"
         }
-        else {
-            Write-Output "[INFO] FlashGot.exe not found locally; downloading the latest nightly build from nightly.link"
-            $nightlyLinkHeaders = @{
-                "User-Agent" = "DownloadIt-pack"
+        $releaseArchivePath = Join-Path $temporaryDirectory "FlashGot-release.zip"
+        $downloadedFlashGotPath = Join-Path $temporaryDirectory "FlashGot.exe"
+        Invoke-WebRequest -Uri $releaseAsset.browser_download_url -Headers @{
+            "User-Agent" = "DownloadIt-pack"
+        } -OutFile $releaseArchivePath
+
+        $releaseArchive = [IO.Compression.ZipFile]::OpenRead($releaseArchivePath)
+        try {
+            $binaryEntry = $releaseArchive.GetEntry("FlashGot.exe")
+            if (-not $binaryEntry) {
+                throw "The FlashGot release archive does not contain FlashGot.exe at its root"
             }
-            Invoke-WebRequest -Uri $nightlyLinkUrl -Headers $nightlyLinkHeaders -OutFile $nightlyArchivePath
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($binaryEntry, $downloadedFlashGotPath)
         }
-
-        Expand-Archive -LiteralPath $nightlyArchivePath -DestinationPath $nightlyDirectory -Force
-
-        $downloadedFlashGotPath = Join-Path $nightlyDirectory "FlashGot.exe"
-        if (-not (Test-Path -LiteralPath $downloadedFlashGotPath -PathType Leaf)) {
-            throw "The nightly artifact does not contain FlashGot.exe"
+        finally {
+            $releaseArchive.Dispose()
         }
         $downloadedFlashGot = Get-Item -LiteralPath $downloadedFlashGotPath
         if ($downloadedFlashGot.Length -eq 0) {

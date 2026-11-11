@@ -166,7 +166,7 @@ function shutdown(data, reason) {
     } catch (error) {
       Cu.reportError(error);
     }
-    if (!appShutdown) {
+    if (!appShutdown && typeof ChromeUtils.unloadESModule === "function") {
       ChromeUtils.unloadESModule(MODULE_URI);
       ChromeUtils.unloadESModule(ARIANG_MODULE_URI);
     }

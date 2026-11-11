@@ -57,17 +57,19 @@ test("DownloadIt icon is packaged and used by branded Firefox UI", () => {
   }
 });
 
-test("packaging scripts select the authenticated API or nightly.link", () => {
+test("packaging scripts download the latest FlashGot release with optional API authentication", () => {
   const packPowerShell = read("scripts/pack.ps1");
   const packShell = read("scripts/pack.sh");
-  const nightlyLink = "https://nightly.link/benzBrake/Grabby-FlashGot/workflows/nightly.yml/master/FlashGot-nightly.zip";
 
   for (const source of [packPowerShell, packShell]) {
-    assert.match(source, new RegExp(nightlyLink.replaceAll(".", "\\.")));
+    assert.match(source, /benzBrake\/Grabby-FlashGot/);
     assert.match(source, /GITHUB_TOKEN/);
     assert.match(source, /GH_TOKEN/);
     assert.match(source, /api\.github\.com\/repos/);
-    assert.match(source, /branch=.*master|nightlyBranch = "master"/);
+    assert.match(source, /\/releases\/latest/);
+    assert.match(source, /tag_name/);
+    assert.match(source, /browser_download_url/);
+    assert.doesNotMatch(source, /nightly\.link|\/actions\/|FlashGot-nightly/);
   }
   assert.match(packPowerShell, /if \(\$hasGitHubToken\)/);
   assert.match(packShell, /if \[\[ -n "\$\{github_token\}" \]\]/);
@@ -204,6 +206,8 @@ test("settings dialog contains the current capability controls", () => {
     "default-manager",
     "auto-start-tasks",
     "auto-start-tasks-lock",
+    "video-download-button",
+    "video-download-button-lock",
     "add-download-tool",
     "download-tool-editor",
     "tool-kind-builtin",
@@ -282,7 +286,7 @@ test("automatic capture controls live in a dedicated settings tab", () => {
     markup,
     /aria-controls="section-auto-capture" data-section="auto-capture"/,
   );
-  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 6);
+  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 7);
   assert.ok(managerPanel);
   assert.ok(autoCapturePanel);
   assert.doesNotMatch(managerPanel, /id="auto-allow-list"/);
@@ -295,15 +299,35 @@ test("automatic capture controls live in a dedicated settings tab", () => {
   assert.match(autoCapturePanel, /id="retry-auto-capture-rules"/);
   assert.match(autoCapturePanel, /id="reset-auto-capture-rules"/);
   assert.match(script, /"auto-capture": \[/);
-  assert.match(styles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
   assert.match(
     styles,
-    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(6, minmax\(0, 1fr\)\)/,
+    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(7, minmax\(0, 1fr\)\)/,
   );
+});
+
+test("yt-dlp settings have a dedicated page and control process window visibility", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const script = read("addon/chrome/content/options.js");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const panel = markup.match(
+    /<section id="section-ytdlp"[\s\S]*?<\/section>/,
+  )?.[0];
+
+  assert.match(markup, /data-section="ytdlp"/);
+  assert.match(panel, /id="ytdlp-path"/);
+  assert.match(panel, /id="ytdlp-show-window"/);
+  assert.match(script, /ytDlpShowWindow: snapshot\.ytDlpShowWindow !== false/);
+  assert.match(script, /state\.draft\.ytDlpShowWindow = event\.target\.checked/);
+  assert.match(service, /PREF_YTDLP_SHOW_WINDOW = "downloadit\.ytDlp\.showWindow"/);
+  assert.match(service, /PREF_YTDLP_SHOW_WINDOW,\s*true/);
+  assert.match(service, /ytDlpShowWindow: Services\.prefs\.getBoolPref\(/);
+  assert.match(service, /Services\.prefs\.getBoolPref\(PREF_YTDLP_SHOW_WINDOW, true\) === false/);
 });
 
 test("settings refresh keeps default-manager persistence staged", () => {
   const script = read("addon/chrome/content/options.js");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   assert.match(script, /DownloadItXUL\.sys\.mjs/);
   assert.doesNotMatch(script, /XUL_NS|createElementNS/);
   assert.match(script, /createXULElement\(document, "menuitem"\)/);
@@ -338,6 +362,8 @@ test("settings refresh keeps default-manager persistence staged", () => {
   assert.match(script, /testAria2Configuration/);
   assert.match(script, /testJDownloaderConfiguration/);
   assert.match(script, /autoStartTasks/);
+  assert.match(script, /videoDownloadButton/);
+  assert.match(service, /downloadit\.videoDownloadButton/);
   assert.match(script, /jdownloader/);
   assert.match(
     script,
@@ -385,6 +411,7 @@ test("built-in provider settings and guarded local protocols are wired end to en
 
   for (const preference of [
     "downloadit.autoStartTasks",
+    "downloadit.videoDownloadButton",
     "downloadit.abdm.enabled",
     "downloadit.abdm.endpoint",
     "downloadit.abdm.apiKey",
@@ -723,11 +750,34 @@ test("custom executable paths are portable within the Firefox configuration dire
   assert.match(service, /configurationDirectory\.contains\(file\)/);
   assert.match(service, /file\.getRelativePath\(configurationDirectory\)/);
   assert.match(service, /this\.resolveExecutablePath\(executablePath\)/);
-  assert.match(script, /state\.service\.resolveCustomFilePath\(currentPath\)/);
+  assert.match(script, /currentPathResolver = value => state\.service\.resolveCustomFilePath\(value\)/);
   assert.match(script, /state\.service\.normalizeCustomFilePathForStorage\(picker\.file\)/);
   assert.equal((markup.match(/downloadit-executable-path-help/g) || []).length, 2);
   assert.match(englishReadme, /`UChrm`/);
   assert.match(chineseReadme, /`UChrm`/);
+});
+
+test("yt-dlp relative paths use an nsIFile Firefox profile base", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const method = service.slice(
+    service.indexOf("  resolveYtDlpPath(value) {"),
+    service.indexOf("  normalizeYtDlpPathForStorage(value) {"),
+  );
+  assert.match(method, /const profile = this\.getProfileDirectoryFile\(\)/);
+  assert.match(method, /file\.setRelativePath\(profile,/);
+  assert.doesNotMatch(method, /setRelativePath\(PathUtils\.profileDir,/);
+});
+
+test("yt-dlp page probing explicitly skips media downloads", () => {
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const probe = service.slice(
+    service.indexOf("  async probeYtDlpPage(pageURL) {"),
+    service.indexOf("  async downloadViaYtDlp(pageURL) {"),
+  );
+  assert.match(probe, /"--simulate"[\s\S]*?"--skip-download"/);
+  assert.match(probe, /"--print-to-file"/);
+  assert.match(probe, /process\.startHidden = true/);
+  assert.doesNotMatch(probe, /this\.startDetachedProcess/);
 });
 
 test("automatic capture rules are versioned, profile-scoped, and atomic", () => {

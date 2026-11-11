@@ -97,12 +97,12 @@ macOS, Snap Firefox, and Flatpak Firefox are outside the current support scope.
 - Linux executables selected for custom commands, aria2 startup, or JDownloader startup must have Unix execute permission, for example `chmod +x /path/to/launcher`;
 - Snap and Flatpak Firefox packages are not supported in the first Linux release because their Loader installation, host-file access, and process sandbox boundaries differ from non-sandboxed Firefox;
 - External download managers are optional because the Firefox downloader is always available;
-- If `addon/FlashGot.exe` is missing during the build, both packaging scripts download the latest successful [Grabby-FlashGot](https://github.com/benzBrake/Grabby-FlashGot) nightly artifact. They use the GitHub Actions API when `GITHUB_TOKEN` or `GH_TOKEN` is available and otherwise download through nightly.link. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
+- If `addon/FlashGot.exe` is missing during the build, both packaging scripts query the GitHub Releases API for the latest stable [Grabby-FlashGot release](https://github.com/benzBrake/Grabby-FlashGot/releases/latest), download its `FlashGot-<tag>.zip` asset, and extract `FlashGot.exe`. `GITHUB_TOKEN` or `GH_TOKEN` is optional and used to authenticate the API request when available. This binary is excluded by `.gitignore` and is not committed to the Git repository. During packaging, the actual file size and SHA-256 hash are written to generated metadata inside the XPI and used for runtime verification;
 - Missing Aria2Next assets are downloaded from the pinned [AnInsomniacy/aria2-next](https://github.com/AnInsomniacy/aria2-next) `v2.5.5` release. Existing or downloaded Windows x86_64 and Linux x86_64 assets must match their fixed size and SHA-256 values before packaging;
 - Missing or stale AriaNg assets are downloaded from the pinned [mayswind/AriaNg](https://github.com/mayswind/AriaNg) `1.3.14` standard release through GitHub CLI. The archive, extracted `index.html`, and required external CSS, JS, and Font Awesome WOFF2 asset are verified before packaging; the page contains no inline scripts and runs without `unsafe-eval`;
 - Node.js 18 or later for development and testing;
 - PowerShell 7 (`pwsh`) for building on Windows;
-- Bash, GitHub CLI, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. The authenticated GitHub API path additionally requires `jq`.
+- Bash, GitHub CLI, `curl`, `zip`, `unzip`, `sha256sum`, and GNU core utilities for building on Linux. Downloading a missing FlashGot binary additionally requires `jq` to read release metadata.
 
 ## Build
 
@@ -138,7 +138,7 @@ The nightly workflow replaces the assets of the `nightly` GitHub prerelease. Its
 
 ## Versioning
 
-DownloadIt has its own version line starting at `2.0.0`; the current version is `2.14.0`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
+DownloadIt has its own version line starting at `2.0.0`; the current version is `2.14.4`; the inherited FlashGot version line ends at `1.5.6.14.2`. Releases use `MAJOR.MINOR.PATCH`: increment `MAJOR` for incompatible configuration, data-format, or behavior changes; `MINOR` for backward-compatible features; and `PATCH` for backward-compatible fixes, security updates, and Firefox compatibility adjustments.
 
 The version in `addon/install.rdf` identifies the DownloadIt XPI only and is the source of truth shown by the settings page and the generated `update.rdf`. The bundled `FlashGot.exe` is an independently built helper whose integrity is tracked through generated size and SHA-256 metadata; its version is never appended to the DownloadIt version.
 
@@ -179,6 +179,8 @@ Open the settings page from the toolbar panel, from “DownloadIt Settings” in
 
 The manager list uses one editor entry point for configurable integrations. **Add download tool** opens with the **Built-in protocol** tab selected and JDownloader chosen; the **Custom** tab creates repeatable command-line or aria2 definitions. JDownloader, AB Download Manager, Xtreme Download Manager, uGet, and Aria2Next are singletons: configuring one reopens its entry. Removing a built-in protocol disables it and clears its namespaced settings. AB Download Manager and XDM become selectable when their local service responds or an absolute launcher path is configured; XDM also accepts a JAR path. uGet becomes selectable only after it is enabled and an absolute launcher path is configured for the current system. Aria2Next becomes selectable only after it is enabled on a supported platform and ABI and its `aria2.getVersion` probe succeeds. Loopback providers start configured launchers only for explicit tests or submissions; uGet directly invokes its quiet CLI for each task and does not probe a background API. FlashGot-backed managers remain automatic detection results and do not appear in the add-tool catalog because they have no DownloadIt-side configuration.
 
+The **Specialized downloaders** tab configures yt-dlp and future dedicated download tools. Its yt-dlp section lets users choose the executable and whether its process window is shown during a download. The window is shown by default; hiding it depends on Firefox's platform support.
+
 | Preference | Type | Description |
 | --- | --- | --- |
 | `downloadit.defaultDM` | String | JSON downloader reference such as `{"provider":"native","id":"firefox"}`, `{"provider":"jdownloader","id":"jdownloader"}`, `{"provider":"flashgot","id":"Internet Download Manager"}`, or `{"provider":"custom","id":"<uuid>"}`. Legacy FlashGot names are migrated automatically. |
@@ -186,6 +188,8 @@ The manager list uses one editor entry point for configurable integrations. **Ad
 | `downloadit.ed2kDM` | String | Optional JSON reference for the default external downloader for `ed2k:` links. Empty or invalid references leave the link in Firefox's native external-protocol flow. |
 | `downloadit.omitCookies` | Boolean | When `true`, cookies are not sent to the external download tool. The default is `false`. |
 | `downloadit.autoStartTasks` | Boolean | Requests automatic start for providers with the task-start capability. The default is `true`; JDownloader and AB Download Manager consume it. |
+| `downloadit.ytDlp.path` | String | Path to the yt-dlp executable, configured in the **Specialized downloaders** tab. |
+| `downloadit.ytDlp.showWindow` | Boolean | Shows the yt-dlp process window during downloads when supported. The default is `true`. |
 | `downloadit.keepProfileDataOnUninstall` | Boolean | Keeps JSON configuration and rule files under the profile's `DownloadIt` directory when the extension is uninstalled. Bundled helper binaries are removed regardless. The default is `true`. |
 | `downloadit.abdm.enabled` | Boolean | Enables the AB Download Manager loopback provider. |
 | `downloadit.abdm.endpoint` | String | AB Download Manager API endpoint. Only HTTP loopback URLs are accepted; the default is `http://127.0.0.1:15151/`. |

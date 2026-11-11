@@ -273,14 +273,15 @@ test("AriaNg documentation and DownloadIt version stay synchronized", () => {
     "utf8",
   );
 
-  assert.match(manifest, /<em:version>2\.14\.0<\/em:version>/);
+  const version = manifest.match(/<em:version>(\d+\.\d+\.\d+)<\/em:version>/)?.[1];
+  assert.ok(version, "install.rdf must declare a three-component version");
   for (const source of [readme, readmeChinese]) {
     assert.match(source, /AriaNg/);
     assert.match(source, /1\.3\.14/);
     assert.match(source, /moz-extension:\/\//);
     assert.match(source, /getAriaNgURL\(\)/);
     assert.match(source, /licenses\/ariang-LICENSE/);
-    assert.match(source, /2\.14\.0/);
+    assert.ok(source.includes(`\`${version}\``), "README must document the manifest version");
   }
 });
 

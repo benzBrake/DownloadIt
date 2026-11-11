@@ -266,6 +266,47 @@ function prepareStartupService(service) {
   service.listCustomDownloaders = () => [];
 }
 
+test("yt-dlp support probes write formats during simulation and remove the result file", async () => {
+  const service = createService();
+  Object.defineProperty(service, "ytDlpEnabled", { value: true });
+  Object.defineProperty(service, "ytDlpPath", { value: "yt-dlp.exe" });
+  service.resolveYtDlpPath = value => value;
+  service.getLocalFile = value => ({ path: value });
+  const outputPath = "C:\\Temp\\probe formats.json";
+  service.createTemporaryPath = () => outputPath;
+  const removed = [];
+  service.removeTemporaryFile = async value => removed.push(value);
+  const originalProcessFactory = processFactory;
+  const originalIOUtils = { ...ioUtilsMock };
+  let wroteFormats = false;
+  processFactory = () => ({
+    exitValue: 0,
+    init() {},
+    runwAsync(args, count, observer) {
+      assert.equal(count, args.length);
+      assert.ok(args.includes("--simulate"));
+      assert.ok(args.includes("--skip-download"));
+      const printIndex = args.indexOf("--print-to-file");
+      // The default video stage runs during simulation; before_dl does not.
+      wroteFormats = args[printIndex + 1] === "%(formats)j" &&
+        args[printIndex + 2] === outputPath;
+      observer.observe(null, "process-finished");
+    },
+  });
+  ioUtilsMock.exists = async value => value === outputPath && wroteFormats;
+  ioUtilsMock.readUTF8 = async () => JSON.stringify([{ format_id: "test" }]);
+  try {
+    assert.equal(await service.probeYtDlpPage("https://www.bilibili.com/video/BVtest/"), true);
+    ioUtilsMock.readUTF8 = async () => JSON.stringify([{ has_drm: true }]);
+    assert.equal(await service.probeYtDlpPage("https://www.bilibili.com/video/BVtest/"), false);
+    assert.deepEqual(removed, [outputPath, outputPath]);
+  } finally {
+    processFactory = originalProcessFactory;
+    for (const key of Object.keys(ioUtilsMock)) delete ioUtilsMock[key];
+    Object.assign(ioUtilsMock, originalIOUtils);
+  }
+});
+
 test("platform capabilities initialize Windows and Linux services independently", async () => {
   preferenceValues.clear();
   for (const [os, expected] of [
@@ -1627,6 +1668,7 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
 
   const snapshot = await service.applySettings({
     autoStartTasks: false,
+    videoDownloadButton: false,
     keepProfileDataOnUninstall: false,
     jdownloader: {
       endpoint: "http://localhost:9777/",
@@ -1636,6 +1678,7 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
   });
 
   assert.equal(preferenceValues.get("downloadit.autoStartTasks"), false);
+  assert.equal(preferenceValues.get("downloadit.videoDownloadButton"), false);
   assert.equal(
     preferenceValues.get("downloadit.keepProfileDataOnUninstall"),
     false,
@@ -1655,6 +1698,7 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
     false,
   );
   assert.equal(snapshot.autoStartTasks, false);
+  assert.equal(snapshot.videoDownloadButton, false);
   assert.equal(snapshot.keepProfileDataOnUninstall, false);
   assert.equal(snapshot.jdownloader.endpoint, "http://localhost:9777/flashgot");
   assert.equal(snapshot.jdownloader.launchPath, "C:\\JD\\JDownloader.exe");
@@ -1666,6 +1710,14 @@ test("JDownloader settings apply normalized values, clear stale discovery, and h
     /task start preference is locked/i,
   );
   assert.equal(service.readSettings().autoStartTasksLocked, true);
+  preferenceLocks.clear();
+
+  preferenceLocks.add("downloadit.videoDownloadButton");
+  await assert.rejects(
+    service.applySettings({ videoDownloadButton: true }),
+    /video download button preference is locked/i,
+  );
+  assert.equal(service.readSettings().videoDownloadButtonLocked, true);
   preferenceLocks.clear();
 
   preferenceLocks.add("downloadit.keepProfileDataOnUninstall");

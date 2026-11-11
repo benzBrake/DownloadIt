@@ -74,11 +74,7 @@ aria2next_linux_name="aria2-next-linux-x86_64"
 aria2next_linux_release_name="aria2-next-2.5.5-linux-x86_64"
 aria2next_linux_size=3852672
 aria2next_linux_hash="b6f2cdadcd34ba16dd7fcb29de4b84c36f893f9b223a9a05157d1892687a45a0"
-nightly_repository="benzBrake/Grabby-FlashGot"
-nightly_workflow="nightly.yml"
-nightly_branch="master"
-nightly_artifact="FlashGot-nightly"
-nightly_link_url="https://nightly.link/benzBrake/Grabby-FlashGot/workflows/nightly.yml/master/FlashGot-nightly.zip"
+flashgot_repository="benzBrake/Grabby-FlashGot"
 github_token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 
 required_entries=(
@@ -174,94 +170,59 @@ download_file() {
     fi
 }
 
-download_nightly_from_github_api() {
-    local archive_path="$1"
-    local workflow_runs_path="${temporary_directory}/workflow-runs.json"
-    local artifacts_path="${temporary_directory}/artifacts.json"
-    local workflow_runs_url
-    local artifacts_url
-    local latest_run_id
-    local artifact_download_url
+download_latest_flashgot() {
+    local release_path="${temporary_directory}/flashgot-release.json"
+    local release_archive_path="${temporary_directory}/FlashGot-release.zip"
+    local release_archive_entries_path="${temporary_directory}/release-archive-entries.txt"
+    local release_extract_directory="${temporary_directory}/FlashGot-release"
+    local release_url="https://api.github.com/repos/${flashgot_repository}/releases/latest"
+    local asset_download_url
+    local api_headers=(--header "Accept: application/vnd.github+json")
 
     require_command jq
-
-    workflow_runs_url="https://api.github.com/repos/${nightly_repository}/actions/workflows/${nightly_workflow}/runs?branch=${nightly_branch}&status=success&per_page=1"
-    download_file \
-        "${workflow_runs_url}" \
-        "${workflow_runs_path}" \
-        "the latest successful nightly workflow run" \
-        --header "Accept: application/vnd.github+json" \
-        --header "Authorization: Bearer ${github_token}" \
-        --header "X-GitHub-Api-Version: 2022-11-28"
-
-    if ! latest_run_id="$(jq -er '.workflow_runs[0].id // empty' "${workflow_runs_path}")"; then
-        die "No successful nightly build was found in ${nightly_repository}"
-    fi
-    if [[ ! "${latest_run_id}" =~ ^[0-9]+$ ]]; then
-        die "The latest nightly workflow run has an invalid ID"
-    fi
-
-    artifacts_url="https://api.github.com/repos/${nightly_repository}/actions/runs/${latest_run_id}/artifacts?per_page=100"
-    download_file \
-        "${artifacts_url}" \
-        "${artifacts_path}" \
-        "the latest nightly workflow artifacts" \
-        --header "Accept: application/vnd.github+json" \
-        --header "Authorization: Bearer ${github_token}" \
-        --header "X-GitHub-Api-Version: 2022-11-28"
-
-    if ! artifact_download_url="$(
-        jq -er \
-            --arg artifact "${nightly_artifact}" \
-            '[.artifacts[] | select(.name == $artifact and .expired == false)][0].archive_download_url // empty' \
-            "${artifacts_path}"
-    )"; then
-        die "The latest successful nightly run has no available ${nightly_artifact} artifact"
-    fi
-
-    download_file \
-        "${artifact_download_url}" \
-        "${archive_path}" \
-        "the latest nightly artifact" \
-        --header "Accept: application/vnd.github+json" \
-        --header "Authorization: Bearer ${github_token}" \
-        --header "X-GitHub-Api-Version: 2022-11-28"
-}
-
-download_latest_flashgot() {
-    local nightly_archive_path="${temporary_directory}/${nightly_artifact}.zip"
-    local nightly_archive_entries_path="${temporary_directory}/nightly-archive-entries.txt"
-    local nightly_extract_directory="${temporary_directory}/${nightly_artifact}"
-
     if [[ -n "${github_token}" ]]; then
-        printf '[INFO] FlashGot.exe not found locally; downloading the latest nightly build through the GitHub API\n'
-        download_nightly_from_github_api "${nightly_archive_path}"
-    else
-        printf '[INFO] FlashGot.exe not found locally; downloading the latest nightly build from nightly.link\n'
-        download_file \
-            "${nightly_link_url}" \
-            "${nightly_archive_path}" \
-            "the latest nightly artifact"
+        api_headers+=(--header "Authorization: Bearer ${github_token}")
     fi
 
-    if ! unzip -Z1 "${nightly_archive_path}" \
+    printf '[INFO] FlashGot.exe not found locally; downloading the latest FlashGot release\n'
+    download_file \
+        "${release_url}" \
+        "${release_path}" \
+        "the latest FlashGot release metadata" \
+        "${api_headers[@]}" \
+        --header "X-GitHub-Api-Version: 2022-11-28"
+
+    if ! asset_download_url="$(
+        jq -er \
+            '.tag_name as $tag | [.assets[] | select(.name == ("FlashGot-" + $tag + ".zip"))][0].browser_download_url // empty' \
+            "${release_path}"
+    )"; then
+        die "The latest FlashGot release has no matching FlashGot-<tag>.zip asset"
+    fi
+
+    download_file \
+        "${asset_download_url}" \
+        "${release_archive_path}" \
+        "the latest FlashGot release archive"
+
+    if ! unzip -Z1 "${release_archive_path}" \
         | sed -e 's/\r$//' -e 's#^\./##' \
-        > "${nightly_archive_entries_path}"; then
-        die "Unable to inspect the downloaded nightly archive"
+        > "${release_archive_entries_path}"; then
+        die "Unable to inspect the downloaded FlashGot release archive"
     fi
-    if ! grep -Fxq "FlashGot.exe" "${nightly_archive_entries_path}"; then
-        die "The nightly archive does not contain FlashGot.exe at its root"
+    if ! grep -Fxq "FlashGot.exe" "${release_archive_entries_path}"; then
+        die "The FlashGot release archive does not contain FlashGot.exe at its root"
     fi
 
-    mkdir -p -- "${nightly_extract_directory}"
-    if ! unzip -oq "${nightly_archive_path}" "FlashGot.exe" -d "${nightly_extract_directory}"; then
-        die "Unable to extract FlashGot.exe from the nightly archive"
+    mkdir -p -- "${release_extract_directory}"
+    if ! unzip -oq "${release_archive_path}" "FlashGot.exe" -d "${release_extract_directory}"; then
+        die "Unable to extract FlashGot.exe from the release archive"
     fi
-    if [[ ! -s "${nightly_extract_directory}/FlashGot.exe" ]]; then
+    if [[ ! -s "${release_extract_directory}/FlashGot.exe" ]]; then
         die "The downloaded FlashGot.exe is missing or empty"
     fi
 
-    cp -- "${nightly_extract_directory}/FlashGot.exe" "${flashgot_path}"
+    cp -- "${release_extract_directory}/FlashGot.exe" "${flashgot_path}"
     printf '[OK] Downloaded %s\n' "${flashgot_path}"
 }
 
