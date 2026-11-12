@@ -8,20 +8,26 @@
 
 DownloadIt enhances downloads in modern Firefox, bringing download-manager integration, batch link tools, and flexible download handling into the browser.
 
-The project builds on selected FlashGot integrations and is expanding toward download-dialog, save-action, and download-history enhancements from DownloadPlus (`downloadPlus_Fx136.uc.js`).
+The project builds on selected FlashGot integrations and is progressively incorporating download-dialog and save-action enhancements from DownloadPlus (`downloadPlus_Fx136.uc.js`).
 
 ## Available today
 
 - Send links to external download managers from the context menu or Firefox's native download prompt, or use Firefox's own downloader.
+- Edit suggested filenames (including for Firefox's native Save action), detect legacy encodings for URL-derived names, copy the complete source URL, and use Save As, editable Save To locations (including removable built-in Desktop, Documents, Pictures, and Downloads folders), or Save and Open in Firefox's download prompt.
+- Save and Open is also available for executable downloads and uses Firefox's native download-and-launch handling.
 - Collect, filter, copy, and batch-download links from a page or selection, including magnet and ed2k links when supported by the selected downloader.
 - Choose from built-in downloader integrations, bundled Aria2Next with AriaNg, custom commands, or aria2 JSON-RPC.
 - Control automatic file-type capture and cookie forwarding, with optional GitHub mirror and IDM local-protocol compatibility.
 
 The interface is available in English, Japanese, Simplified Chinese, and Traditional Chinese.
 
+Save To locations are managed together in settings. The arrow beside **Add folder** quickly adds built-in folders; their paths use system-resolved placeholders, while ordinary folders store absolute paths. Built-in names can be customized or left empty for localized defaults. Existing location settings migrate on Apply, preserving custom folders. Removing all locations keeps the list empty.
+
+Pictures uses the Windows user shell-folder configuration or Linux XDG `user-dirs.dirs`, including redirected locations. If no valid existing pictures directory is configured, the built-in entry remains in settings but is omitted from the download menu.
+
 ## Where it is heading
 
-DownloadPlus-inspired download-dialog, save-action, and download-history enhancements will be incorporated progressively. These are planned ports, not a claim of full DownloadPlus support. DownloadIt also implements only part of FlashGot's original feature set; media sniffing is not currently supported.
+DownloadPlus-inspired download-history enhancements remain planned. DownloadIt implements selected download-dialog and save actions, not the full DownloadPlus feature set. It also implements only part of FlashGot's original feature set; media sniffing is not currently supported.
 
 ## Requirements and download
 

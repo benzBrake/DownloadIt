@@ -1,4 +1,5 @@
 import test from "node:test";
+import { defaultDownloadDirectories } from "../addon/chrome/content/DownloadItDirectories.sys.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -55,6 +56,10 @@ class MockElement {
     return this.attributes.get(name) || null;
   }
 
+  getRootNode() {
+    return this.parentNode?.getRootNode() || this.ownerDocument;
+  }
+
   removeAttribute(name) {
     this.attributes.delete(name);
     if (name === "selected") {
@@ -93,6 +98,22 @@ class MockElement {
   appendChild(child) {
     this.append(child);
     return child;
+  }
+
+  after(sibling) {
+    if (!this.parentNode) return;
+    const index = this.parentNode.children.indexOf(this);
+    sibling.parentNode = this.parentNode;
+    this.parentNode.children.splice(index + 1, 0, sibling);
+  }
+
+  insertBefore(child, reference) {
+    child.parentNode = this;
+    const index = this.children.indexOf(reference);
+    this.children.splice(index < 0 ? this.children.length : index, 0, child);
+    if (child.getAttribute("id")) {
+      this.ownerDocument.elements.set(child.getAttribute("id"), child);
+    }
   }
 
   replaceChildren(...children) {
@@ -196,6 +217,10 @@ class MockDocument {
     return new MockElement(this, tagName);
   }
 
+  createElementNS(_namespace, tagName) {
+    return new MockElement(this, tagName);
+  }
+
   getElementById(id) {
     return this.elements.get(id) || null;
   }
@@ -217,6 +242,17 @@ function createWindow({
   const normalBox = document.addElement("vbox", "normalBox");
   const basicBox = document.addElement("hbox", "basicBox");
   const mode = document.addElement("radiogroup", "mode");
+  const frame = document.addElement("dialog", "unknownContentType");
+  const dialogButtons = document.createXULElement("hbox");
+  const extra2 = document.addElement("button", "extra2");
+  const accept = document.addElement("button", "accept");
+  dialogButtons.append(extra2, accept);
+  frame.append(dialogButtons);
+  frame.getButton = name => document.getElementById(name);
+  const sourceRow = document.createXULElement("hbox");
+  const sourceElement = document.addElement("label", "source");
+  sourceRow.append(sourceElement);
+  basicBox.append(sourceRow);
   const internalHandler = document.addElement("radio", "handleInternally");
   internalHandler.setAttribute("hidden", "true");
   const openRow = document.createXULElement("hbox");
@@ -233,6 +269,9 @@ function createWindow({
   settingsChange.setAttribute("hidden", "true");
   const location = document.addElement("textbox", "location");
   location.value = "file.zip";
+  const locationRow = document.createXULElement("hbox");
+  locationRow.append(location);
+  normalBox.append(locationRow);
   mode.append(internalHandler, openRow, save);
   normalBox.append(mode, openHandler, chooseButton, rememberRow, settingsChange);
   if (simplified) {
@@ -282,6 +321,7 @@ function createService({
   autoExtensions = [],
   autoDenyExtensions = [],
   autoCaptureRulesError = false,
+  downloadDialogSettings = {},
 } = {}) {
   const calls = [];
   const alerts = [];
@@ -295,6 +335,10 @@ function createService({
       : null,
     calls,
     alerts,
+    downloadDialogSettings,
+    getDownloadDialogSettings() {
+      return this.downloadDialogSettings;
+    },
     remembered,
     denied,
     getAutoCaptureDisposition(extension) {
@@ -623,19 +667,358 @@ test("failed external submission does not change remembered extension state", as
   assert.equal(window.closed, false);
 });
 
-test("unsupported URLs, empty manager lists, and missing localization leave native UI intact", async () => {
+test("unsupported URLs and missing localization leave native UI intact", async () => {
   for (const [window, service] of [
     [createWindow({ source: "about:config" }), createService()],
     [createWindow({ source: "blob:https://example.com/id" }), createService()],
     [createWindow({ source: "data:application/zip;base64,AA==" }), createService()],
     [createWindow({ source: "https://example.com/addon%2Expi" }), createService()],
-    [createWindow(), createService({ managers: [] })],
     [createWindow({ withLocalization: false }), createService()],
   ]) {
     const controller = new DownloadItDownloadDialogController(service, window, async () => {});
     assert.equal(await controller.init(), false);
     assert.equal(window.document.getElementById("downloadit-download-option"), null);
   }
+});
+
+test("download dialog filename detection is independent from filename editing", async () => {
+  const window = createWindow({ source: "https://example.com/%D6%D0%CE%C4.zip" });
+  const service = createService({
+    managers: [],
+    downloadDialogSettings: {
+      detectFilenameEncoding: true,
+      editFilename: false,
+      showFullURL: false,
+      saveAs: false,
+      saveTo: false,
+      saveAndOpen: false,
+    },
+  });
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+
+  assert.equal(await controller.init(), true);
+  assert.equal(window.document.getElementById("downloadit-download-option"), null);
+  assert.equal(window.document.getElementById("location").value, "中文.zip");
+  assert.equal(window.document.getElementById("location").disabled, true);
+  const encodingMenu = window.document.getElementById("di-filename-encoding");
+  assert.ok(encodingMenu);
+  assert.ok(encodingMenu.selectedIndex > 0);
+});
+
+test("quick save actions delegate to native dialog handling", async () => {
+  const window = createWindow({ source: "https://example.com/%D6%D0.zip" });
+  window.Components = { interfaces: {}, classes: {
+    "@mozilla.org/file/local;1": { createInstance: () => ({
+      initWithPath(path) { this.path = path; }, isAbsolute: () => true,
+      exists: () => true, isDirectory: () => true,
+    }) },
+  } };
+  const service = createService({
+    downloadDialogSettings: {
+      detectFilenameEncoding: true,
+      editFilename: true,
+      showFullURL: true,
+      saveAs: true,
+      saveTo: true,
+      saveAndOpen: true,
+      directories: [{ path: "C:\\Downloads", label: "Downloads" }],
+    },
+  });
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+  await controller.init();
+
+  let saveAsCalls = 0;
+  let saveToPath = "";
+  let nativeSaveCalls = 0;
+  controller.saveAs = () => { saveAsCalls += 1; };
+  controller.saveTo = path => { saveToPath = path; };
+  controller.saveNative = () => { nativeSaveCalls += 1; };
+
+  window.document.getElementById("di-save-as").dispatch("command");
+  window.document.getElementById("di-save-to-popup").children
+    .find(child => child.localName === "menuitem").dispatch("command");
+  window.document.getElementById("locationText").dispatch("dblclick", {
+    preventDefault() {},
+  });
+  window.document.getElementById("di-save-and-open").dispatch("command");
+
+  assert.equal(saveAsCalls, 1);
+  assert.equal(saveToPath, "C:\\Downloads");
+  assert.equal(nativeSaveCalls, 0);
+  assert.equal(window.document.getElementById("open").selected, true);
+  assert.equal(window.nativeCalls, 1);
+  assert.ok(window.document.getElementById("di-complete-link"));
+  const saveToPopup = window.document.getElementById("di-save-to-popup");
+  assert.deepEqual(
+    saveToPopup.children.filter(child => child.localName === "link")
+      .map(link => link.getAttribute("href")),
+    [
+      "chrome://global/skin/global.css",
+      "chrome://global/content/elements/menupopup.css",
+    ],
+  );
+  assert.equal(window.document.getElementById("di-save-to").localName, "button");
+  assert.equal(window.document.getElementById("di-save-to").getAttribute("type"), "menu");
+  const dialogStyles = [];
+  const dialogShadowRoot = {
+    host: {},
+    querySelector: () => dialogStyles[0] || null,
+    appendChild: link => dialogStyles.push(link),
+  };
+  window.document.getElementById("di-save-to").getRootNode = () => dialogShadowRoot;
+  controller.addQuickActionStyles(window.document.getElementById("di-save-to"));
+  controller.addQuickActionStyles(window.document.getElementById("di-save-to"));
+  assert.equal(dialogStyles.length, 1);
+  assert.equal(
+    dialogStyles[0].getAttribute("href"),
+    "chrome://downloadit/content/download-dialog.css",
+  );
+  assert.equal(window.document.getElementById("locationText").localName, "input");
+  assert.equal(window.document.getElementById("di-filename-row").getAttribute("flex"), "1");
+  assert.equal(window.document.getElementById("di-filename-input"), null);
+  assert.equal(
+    saveToPopup.children.find(child => child.localName === "menuitem")
+      .getAttribute("label"),
+    "Downloads",
+  );
+});
+
+test("dialog sizing waits for quick action translations and styles", async () => {
+  const window = createWindow();
+  const controller = new DownloadItDownloadDialogController(createService(), window, async () => {});
+  let releaseStyles;
+  const styled = new Promise(resolve => { releaseStyles = resolve; });
+  controller.addQuickActionStyles = () => styled;
+  const translated = [];
+  const translate = window.document.l10n.translateFragment;
+  window.document.l10n.translateFragment = async element => {
+    await translate(element);
+    if (element.localName === "button") translated.push(element.getAttribute("id"));
+  };
+  const initializing = controller.init();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(translated, ["di-save-as", "di-save-to", "di-save-and-open"]);
+  assert.equal(window.sizeToContentCalls, 0);
+  releaseStyles();
+  await initializing;
+  assert.equal(window.sizeToContentCalls, 1);
+});
+
+test("save and open is available for executables without enabling the native Open radio", async () => {
+  const window = createWindow({ simplified: true });
+  const launcher = window.dialog.mLauncher;
+  launcher.targetFileIsExecutable = true;
+  const calls = [];
+  launcher.setWebProgressListener = listener => calls.push(["listener", listener]);
+  launcher.setDownloadToLaunch = (...args) => calls.push(["launch", ...args]);
+  window.dialog.onUnload = () => calls.push(["unload"]);
+  const controller = new DownloadItDownloadDialogController(createService(), window, async () => {});
+  await controller.init();
+
+  const button = window.document.getElementById("di-save-and-open");
+  assert.ok(button);
+  assert.equal(window.document.getElementById("open").disabled, true);
+  button.dispatch("command");
+  assert.deepEqual(calls, [["listener", null], ["launch", false, null], ["unload"]]);
+  assert.equal(window.closed, true);
+  assert.equal(window.nativeCalls, 0);
+});
+
+test("disabling save and open hides the executable quick action", async () => {
+  const window = createWindow({ simplified: true });
+  window.dialog.mLauncher.targetFileIsExecutable = true;
+  const controller = new DownloadItDownloadDialogController(
+    createService({ downloadDialogSettings: { saveAndOpen: false } }), window, async () => {},
+  );
+  await controller.init();
+  assert.equal(window.document.getElementById("di-save-and-open"), null);
+});
+
+test("native Save retains the edited name after dialog teardown and avoids automatic recapture", async () => {
+  class MockHelperDialog {
+    show() {}
+    promptForSaveToFileAsync(...args) {
+      this.savedArgs = args;
+    }
+  }
+  const service = createService({ autoExtensions: ["zip"] });
+  registerDownloadItHelperAppHook(service, {
+    helperDialogConstructor: MockHelperDialog,
+  });
+  try {
+    for (const doubleClick of [false, true]) {
+      for (const forcePrompt of [false, true]) {
+        const window = createWindow();
+        const launcher = window.dialog.mLauncher;
+        Object.defineProperty(launcher, "suggestedFileName", {
+          value: "file.zip", writable: false,
+        });
+        const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+        await controller.init();
+        window.document.getElementById("locationText").value = "改名后的文件.zip";
+        // Firefox's onOK schedules a timer; the launcher requests the path only
+        // after the dialog and its controller have been torn down.
+        let pendingSave;
+        controller.originalOnOK = function () {
+          assert.equal(this, window.dialog);
+          pendingSave = () => {
+            const helper = new MockHelperDialog();
+            helper.promptForSaveToFileAsync(launcher, "context", launcher.suggestedFileName, ".zip", forcePrompt);
+            return helper.savedArgs;
+          };
+        };
+        if (doubleClick) {
+          controller.saveNative();
+        } else {
+          window.document.getElementById("save").click();
+          window.dialog.onOK();
+        }
+        controller.destroy();
+        const savedArgs = pendingSave();
+        assert.deepEqual(savedArgs, [launcher, "context", "改名后的文件.zip", ".zip", forcePrompt]);
+        assert.equal(launcher.suggestedFileName, "file.zip");
+        assert.equal(service.calls.length, 0);
+        // The override belongs to one launcher and is consumed by one request.
+        const next = new MockHelperDialog();
+        next.promptForSaveToFileAsync(launcher, "context", "next.zip", ".zip", true);
+        assert.equal(next.savedArgs[2], "next.zip");
+      }
+    }
+  } finally {
+    unregisterDownloadItHelperAppHook(service);
+  }
+});
+
+test("Save As and Save To pass the final edited filename to Firefox's launcher", async () => {
+  const window = createWindow();
+  const directoryFile = {
+    path: "C:\\Downloads",
+    leafName: "",
+    initWithPath(path) { this.path = path; },
+    exists: () => true,
+    isDirectory: () => true,
+    append(name) { this.leafName = name; this.path += `\\${name}`; },
+  };
+  window.Components = {
+    interfaces: { nsIMIMEInfo: { saveToDisk: "save-to-disk" } },
+    classes: {
+      "@mozilla.org/file/local;1": {
+        createInstance: () => ({ ...directoryFile }),
+      },
+    },
+  };
+  let promptArgs = null;
+  let destination = null;
+  window.dialog.mLauncher.setWebProgressListener = () => {};
+  window.dialog.promptForSaveToFileAsync = (...args) => { promptArgs = args; };
+  window.dialog.mLauncher.saveDestinationAvailable = file => { destination = file; };
+  const controller = new DownloadItDownloadDialogController(
+    createService({ managers: [] }),
+    window,
+    async () => {},
+  );
+  await controller.init();
+  window.document.getElementById("locationText").value = "edited-name.zip";
+
+  await controller.saveAs();
+  assert.equal(promptArgs[2], "edited-name.zip");
+  assert.equal(promptArgs[4], true);
+
+  window.closed = false;
+  await controller.saveTo("C:\\Downloads");
+  assert.equal(destination.leafName, "edited-name.zip");
+  assert.equal(destination.path, "C:\\Downloads\\edited-name.zip");
+  assert.equal(window.closed, true);
+});
+
+test("Save To includes configured directory-service folders", async () => {
+  const window = createWindow();
+  const folders = new Map([
+    ["Desk", "C:\\Users\\Test\\Desktop"],
+    ["Docs", "C:\\Users\\Test\\Documents"],
+        ["DfltDwnld", "C:\\Users\\Test\\Downloads"],
+  ]);
+  window.Components = {
+    interfaces: { nsIProperties: "properties", nsIFile: "file" },
+    classes: {
+      "@mozilla.org/file/directory_service;1": {
+        getService: () => ({
+          get(key) {
+            if (!folders.has(key)) throw new Error("unknown folder");
+            const path = folders.get(key);
+            return { path, exists: () => true, isDirectory: () => true };
+          },
+        }),
+      },
+    },
+  };
+  const controller = new DownloadItDownloadDialogController(
+    createService({ managers: [], downloadDialogSettings: { directories: defaultDownloadDirectories() } }),
+    window,
+    async () => {},
+  );
+  await controller.init();
+  assert.deepEqual(
+    window.document.getElementById("di-save-to-popup").children
+      .filter(item => item.localName === "menuitem").map(item => item.l10nId),
+    [
+      "downloadit-dialog-directory-desktop",
+      "downloadit-dialog-directory-documents",
+      "downloadit-dialog-directory-downloads",
+    ],
+  );
+});
+
+test("disabling filename encoding leaves Firefox's suggested name editable", async () => {
+  const window = createWindow({ source: "https://example.com/%D6%D0%CE%C4.zip" });
+  const service = createService({
+    managers: [],
+    downloadDialogSettings: {
+      detectFilenameEncoding: false,
+      editFilename: true,
+      showFullURL: false,
+      saveAs: false,
+      saveTo: false,
+      saveAndOpen: false,
+    },
+  });
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+
+  assert.equal(await controller.init(), true);
+  assert.equal(window.document.getElementById("location").value, "file.zip");
+  assert.equal(window.document.getElementById("location").disabled, false);
+  assert.equal(window.document.getElementById("di-filename-encoding"), null);
+});
+
+test("uncertain URL encoding keeps the raw URL candidate", async () => {
+  const window = createWindow({ source: "https://example.com/%FF%FE.zip" });
+  window.dialog.mLauncher.suggestedFileName = "replacement-decoding.zip";
+  const controller = new DownloadItDownloadDialogController(
+    createService({ managers: [], showFullURL: false }),
+    window,
+    async () => {},
+  );
+
+  assert.equal(await controller.init(), true);
+  assert.equal(window.document.getElementById("location").value, "%FF%FE.zip");
+});
+
+test("response-provided filenames are not re-decoded from the URL", async () => {
+  const window = createWindow({ source: "https://example.com/%D6%D0%CE%C4.zip" });
+  window.dialog.mLauncher.channel = {
+    contentDispositionFilename: "server-name.zip",
+  };
+  window.dialog.mLauncher.suggestedFileName = "server-name.zip";
+  window.document.getElementById("location").value = "server-name.zip";
+  const controller = new DownloadItDownloadDialogController(
+    createService({ managers: [], showFullURL: false }),
+    window,
+    async () => {},
+  );
+
+  assert.equal(await controller.init(), true);
+  assert.equal(window.document.getElementById("location").value, "server-name.zip");
+  assert.equal(window.document.getElementById("di-filename-encoding"), null);
 });
 
 test("destroy restores native OK handling and removes injected UI", async () => {
@@ -1062,4 +1445,15 @@ test("helper-app hooks fall back for unremembered, forced, and failed downloads"
     console.error = originalConsoleError;
     unregisterDownloadItHelperAppHook(service);
   }
+});
+
+test("an explicit empty directory list never inserts built-in menu items", async () => {
+  const window = createWindow();
+  const controller = new DownloadItDownloadDialogController(
+    createService({ managers: [], downloadDialogSettings: { directoryFormat: 1, directories: [] } }),
+    window, async () => {},
+  );
+  await controller.init();
+  assert.equal(window.document.getElementById("di-save-to-popup").children
+    .filter(item => item.localName === "menuitem").length, 0);
 });

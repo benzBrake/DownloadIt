@@ -1,0 +1,18 @@
+/* The native dialog renders quick actions inside its shadow root. */
+.dialog-button-box {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.dialog-button-box > button {
+  flex-shrink: 0;
+  min-width: max-content;
+}
+
+#di-save-to .button-menu-dropmarker {
+  appearance: none;
+  content: url("chrome://global/skin/icons/arrow-down-12.svg");
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+

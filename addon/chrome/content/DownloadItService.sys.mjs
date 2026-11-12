@@ -1,3 +1,4 @@
+import { DIRECTORY_FORMAT, defaultDownloadDirectories, readDownloadDirectories, validateDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
   buildDownloadBatchJob,
   classifyDownloadTarget,
@@ -217,6 +218,7 @@ const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 const PREF_LINK_GROUPS = "downloadit.linkGroups";
 const PREF_MIRRORS = "downloadit.mirrors";
+const PREF_DOWNLOAD_DIALOG = "downloadit.downloadDialog";
 const PREF_DEVELOPER_MODE = "downloadit.developerMode";
 const PREF_KEEP_PROFILE_DATA_ON_UNINSTALL =
   "downloadit.keepProfileDataOnUninstall";
@@ -3081,6 +3083,7 @@ export class DownloadItService {
         ? { ...this.defaultDownloader }
         : null,
       ...this.getProtocolDefaultSettings(),
+      downloadDialog: this.getDownloadDialogSettings(),
       protocolDefaultLocks: this.getProtocolDefaultLocks(),
       detectedManagerCount: this.downloaders.filter(downloader =>
         downloader.ref.provider === FLASHGOT_PROVIDER &&
@@ -3169,6 +3172,34 @@ export class DownloadItService {
     };
   }
 
+  getDownloadDialogSettings() {
+    const defaults = {
+      detectFilenameEncoding: true,
+      editFilename: true,
+      showFullURL: true,
+      saveAs: true,
+      saveTo: true,
+      saveAndOpen: true,
+      directoryFormat: DIRECTORY_FORMAT,
+      directories: defaultDownloadDirectories(),
+    };
+    try {
+      const raw = Services.prefs.getStringPref(PREF_DOWNLOAD_DIALOG, "");
+      const parsed = raw ? JSON.parse(raw) : {};
+      const value = parsed && typeof parsed === "object" ? parsed : {};
+      return {
+        ...defaults,
+        ...Object.fromEntries(Object.keys(defaults).filter(key => key !== "directories" && key !== "directoryFormat")
+          .map(key => [key, value[key] == null ? defaults[key] : Boolean(value[key])])),
+        directoryFormat: DIRECTORY_FORMAT,
+        directories: readDownloadDirectories(value),
+      };
+    } catch (error) {
+      console.error("DownloadIt: invalid download dialog preference", error);
+      return defaults;
+    }
+  }
+
   async applySettings({
     defaultManager = null,
     magnetManager = null,
@@ -3190,6 +3221,7 @@ export class DownloadItService {
     linkGroups = null,
     mirrorSettings = null,
     customDownloaders = null,
+    downloadDialog = null,
   } = {}) {
     const defaultManagerRequested = defaultManager !== null &&
       defaultManager !== undefined;
@@ -3202,6 +3234,10 @@ export class DownloadItService {
       ? currentProtocolDefaults.ed2kManager
       : String(ed2kManager || "");
     const currentAutoCaptureRules = this.autoCaptureRules;
+    const currentDownloadDialog = this.getDownloadDialogSettings();
+    const requestedDownloadDialog = downloadDialog == null
+      ? currentDownloadDialog
+      : this.validateDownloadDialogSettings(downloadDialog);
     const requestedAutoCaptureRules = autoCaptureRules == null
       ? currentAutoCaptureRules
       : normalizeAutoCaptureDocument(autoCaptureRules);
@@ -3870,6 +3906,12 @@ export class DownloadItService {
     if (JSON.stringify(requestedLinkGroups) !== JSON.stringify(currentLinkGroups)) {
       Services.prefs.setStringPref(PREF_LINK_GROUPS, JSON.stringify(requestedLinkGroups));
     }
+    if (JSON.stringify(requestedDownloadDialog) !== JSON.stringify(currentDownloadDialog)) {
+      Services.prefs.setStringPref(
+        PREF_DOWNLOAD_DIALOG,
+        JSON.stringify(requestedDownloadDialog),
+      );
+    }
     if (
       JSON.stringify(requestedMirrorSettings) !==
         JSON.stringify(currentMirrorSettings)
@@ -3885,6 +3927,30 @@ export class DownloadItService {
     this.builtInRefreshPromise = null;
     this.refreshConfiguredBuiltInProtocols();
     return this.readSettings();
+  }
+
+  validateDownloadDialogSettings(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new DownloadItError("download-dialog-settings-invalid");
+    }
+    const current = this.getDownloadDialogSettings();
+    let normalizedDirectories;
+    try {
+      normalizedDirectories = validateDownloadDirectories(value.directories, Components, Services.appinfo.OS);
+    } catch {
+      throw new DownloadItError("download-dialog-settings-invalid");
+    }
+    return {
+      detectFilenameEncoding: value.detectFilenameEncoding == null
+        ? current.detectFilenameEncoding : Boolean(value.detectFilenameEncoding),
+      editFilename: value.editFilename == null ? current.editFilename : Boolean(value.editFilename),
+      showFullURL: value.showFullURL == null ? current.showFullURL : Boolean(value.showFullURL),
+      saveAs: value.saveAs == null ? current.saveAs : Boolean(value.saveAs),
+      saveTo: value.saveTo == null ? current.saveTo : Boolean(value.saveTo),
+      saveAndOpen: value.saveAndOpen == null ? current.saveAndOpen : Boolean(value.saveAndOpen),
+      directoryFormat: DIRECTORY_FORMAT,
+      directories: normalizedDirectories,
+    };
   }
 
   async startup() {

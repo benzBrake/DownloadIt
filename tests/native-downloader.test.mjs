@@ -3655,3 +3655,32 @@ test("saving ABDM settings replaces a stale built-in refresh", async () => {
   await oldRefresh;
   assert.equal(service.createABDMDescriptor().available, true);
 });
+
+
+test("download-dialog service migrates legacy locations and persists explicit empty lists", () => {
+  const pref = "downloadit.downloadDialog";
+  const had = preferenceValues.has(pref);
+  const before = preferenceValues.get(pref);
+  try {
+    const service = Object.create(DownloadItService.prototype);
+    preferenceValues.delete(pref);
+    assert.equal(service.getDownloadDialogSettings().directories.length, 4);
+    preferenceValues.set(pref, JSON.stringify({ saveTo: false,
+      directories: [{ path: "C:\\Custom", label: "My folder" }] }));
+    const migrated = service.getDownloadDialogSettings();
+    assert.equal(migrated.directoryFormat, 1);
+    assert.equal(migrated.saveTo, false);
+    assert.deepEqual(migrated.directories.at(-1), { path: "C:\\Custom", label: "My folder" });
+    assert.equal(migrated.directories.length, 5);
+    assert.equal(JSON.parse(preferenceValues.get(pref)).directoryFormat, undefined);
+    const empty = service.validateDownloadDialogSettings({ ...migrated, directories: [] });
+    preferenceValues.set(pref, JSON.stringify(empty));
+    assert.equal(empty.directoryFormat, 1);
+    assert.deepEqual(service.getDownloadDialogSettings().directories, []);
+    assert.throws(() => service.validateDownloadDialogSettings({ ...empty, directories: [{ path: "{unknown}" }] }),
+      error => error.code === "download-dialog-settings-invalid");
+  } finally {
+    if (had) preferenceValues.set(pref, before);
+    else preferenceValues.delete(pref);
+  }
+});

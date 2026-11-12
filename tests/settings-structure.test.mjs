@@ -286,7 +286,7 @@ test("automatic capture controls live in a dedicated settings tab", () => {
     markup,
     /aria-controls="section-auto-capture" data-section="auto-capture"/,
   );
-  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 7);
+  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 8);
   assert.ok(managerPanel);
   assert.ok(autoCapturePanel);
   assert.doesNotMatch(managerPanel, /id="auto-allow-list"/);
@@ -299,11 +299,38 @@ test("automatic capture controls live in a dedicated settings tab", () => {
   assert.match(autoCapturePanel, /id="retry-auto-capture-rules"/);
   assert.match(autoCapturePanel, /id="reset-auto-capture-rules"/);
   assert.match(script, /"auto-capture": \[/);
-  assert.match(styles, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/);
   assert.match(
     styles,
-    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(7, minmax\(0, 1fr\)\)/,
+    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(8, minmax\(0, 1fr\)\)/,
   );
+});
+
+test("download dialog settings are independent and packaged in every locale", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const script = read("addon/chrome/content/options.js");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const dialog = read("addon/chrome/content/DownloadItDownloadDialog.sys.mjs");
+  const filename = read("addon/chrome/content/DownloadItFilename.sys.mjs");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
+
+  assert.match(markup, /data-section="download-dialog"/);
+  assert.match(markup, /id="section-download-dialog"/);
+  assert.match(markup, /data-download-dialog-pref="detectFilenameEncoding"/);
+  assert.match(markup, /data-download-dialog-pref="editFilename"/);
+  assert.match(script, /downloadDialog: clone\(snapshot\.downloadDialog\)/);
+  assert.match(script, /payload\.downloadDialog = clone\(state\.draft\.downloadDialog\)/);
+  assert.match(service, /PREF_DOWNLOAD_DIALOG = "downloadit\.downloadDialog"/);
+  assert.match(service, /validateDownloadDialogSettings\(value\)/);
+  assert.match(read("addon/chrome/content/DownloadItDirectories.sys.mjs"), /file\?\.exists\(\) && file\.isDirectory\(\)/);
+  assert.match(dialog, /settings\.detectFilenameEncoding !== false/);
+  assert.match(dialog, /settings\.editFilename !== false/);
+  assert.match(filename, /TextDecoder\(encoding, \{ fatal: true \}\)/);
+  for (const source of [packPowerShell, packShell]) {
+    assert.match(source, /DownloadItDownloadDialog\.sys\.mjs/);
+    assert.match(source, /DownloadItFilename\.sys\.mjs/);
+  }
 });
 
 test("yt-dlp settings have a dedicated page and control process window visibility", () => {
