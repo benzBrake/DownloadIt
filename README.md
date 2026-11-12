@@ -13,7 +13,7 @@ The project builds on selected FlashGot integrations and is progressively incorp
 ## Available today
 
 - Send links to external download managers from the context menu or Firefox's native download prompt, or use Firefox's own downloader.
-- Edit suggested filenames (including for Firefox's native Save action), detect legacy encodings for URL-derived names, copy the complete source URL, and use Save As, editable Save To locations (including removable built-in Desktop, Documents, Pictures, and Downloads folders), or Save and Open in Firefox's download prompt.
+- Edit suggested filenames (including for Firefox's native Save action), detect legacy encodings for URL-derived names, copy the complete source URL with a content-sized button and success/failure text and animation feedback, and use Save As, editable Save To locations (including removable built-in Desktop, Documents, Pictures, and Downloads folders), or Save and Open in Firefox's download prompt.
 - Save and Open is also available for executable downloads and uses Firefox's native download-and-launch handling.
 - Collect, filter, copy, and batch-download links from a page or selection, including magnet and ed2k links when supported by the selected downloader.
 - Choose from built-in downloader integrations, bundled Aria2Next with AriaNg, custom commands, or aria2 JSON-RPC.

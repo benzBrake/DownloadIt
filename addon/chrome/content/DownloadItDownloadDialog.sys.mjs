@@ -373,6 +373,8 @@ export class DownloadItDownloadDialogController {
     this.featureControls = null;
     this.encodingMenu = null;
     this.linkRow = null;
+    this.copyFeedbackTimer = null;
+    this.copyFeedbackAnimation = null;
     this.quickActions = null;
     this.locationElement = null;
     this.filenameInput = null;
@@ -442,6 +444,10 @@ export class DownloadItDownloadDialogController {
 
   destroy () {
     this.destroyed = true;
+    this.window.clearTimeout?.(this.copyFeedbackTimer);
+    this.copyFeedbackTimer = null;
+    this.copyFeedbackAnimation?.cancel();
+    this.copyFeedbackAnimation = null;
     if (this.dialog && this.dialog.onOK === this.onOK) {
       this.dialog.onOK = this.originalOnOK;
     }
@@ -620,6 +626,9 @@ export class DownloadItDownloadDialogController {
       const copy = createXULElement(this.document, "button", {
         id: "di-copy-link",
         class: "dialog-button",
+        style: "flex: 0 0 auto; min-width: 0 !important; width: fit-content;",
+        "aria-live": "polite",
+        "aria-atomic": "true",
       });
       this.setLocalized(copy, "downloadit-dialog-copy-link");
       copy.addEventListener("command", () => this.copyLink(source));
@@ -698,14 +707,42 @@ export class DownloadItDownloadDialogController {
     return /(?:^|;)\s*filename\*?\s*=/i.test(header);
   }
 
-  async copyLink(value) {
+  copyLink(value) {
+    if (this.destroyed) return;
+    let succeeded = false;
     try {
       const { classes: Cc, interfaces: Ci } = this.window.Components;
       Cc["@mozilla.org/widget/clipboardhelper;1"]
         .getService(Ci.nsIClipboardHelper).copyString(value);
+      succeeded = true;
     } catch (error) {
       console.error("DownloadIt: could not copy download URL", error);
     }
+    const button = this.document.getElementById("di-copy-link");
+    if (!button) return;
+    this.window.clearTimeout(this.copyFeedbackTimer);
+    this.copyFeedbackAnimation?.cancel();
+    this.copyFeedbackAnimation = null;
+    this.setLocalized(button, succeeded
+      ? "downloadit-dialog-copy-link-success"
+      : "downloadit-dialog-copy-link-failed");
+    if (!this.window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      this.copyFeedbackAnimation = button.animate?.(
+        succeeded
+          ? [{ opacity: 1 }, { opacity: 0.5 }, { opacity: 1 }]
+          : [
+              { transform: "translateX(0)" },
+              { transform: "translateX(-3px)" },
+              { transform: "translateX(3px)" },
+              { transform: "translateX(0)" },
+            ],
+        { duration: 240, easing: "ease-out" },
+      );
+    }
+    this.copyFeedbackTimer = this.window.setTimeout(() => {
+      this.copyFeedbackTimer = null;
+      if (!this.destroyed) this.setLocalized(button, "downloadit-dialog-copy-link");
+    }, 2500);
   }
 
   async buildQuickActions(settings) {

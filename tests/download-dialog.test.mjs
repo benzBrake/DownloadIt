@@ -705,6 +705,65 @@ test("download dialog filename detection is independent from filename editing", 
   assert.ok(encodingMenu.selectedIndex > 0);
 });
 
+test("copy URL reports both outcomes, restarts feedback, and cleans up on destroy", async () => {
+  const window = createWindow();
+  const timers = new Map();
+  let nextTimer = 0;
+  window.setTimeout = callback => {
+    timers.set(++nextTimer, callback);
+    return nextTimer;
+  };
+  window.clearTimeout = id => timers.delete(id);
+  let reducedMotion = false;
+  window.matchMedia = () => ({ matches: reducedMotion });
+  let fail = false;
+  let copied = null;
+  window.Components = { interfaces: {}, classes: {
+    "@mozilla.org/widget/clipboardhelper;1": { getService: () => ({
+      copyString(value) {
+        if (fail) throw new Error("Clipboard unavailable");
+        copied = value;
+      },
+    }) },
+  } };
+  const controller = new DownloadItDownloadDialogController(createService(), window, async () => {});
+  await controller.init();
+  const button = window.document.getElementById("di-copy-link");
+  let animations = 0;
+  let cancellations = 0;
+  button.animate = () => {
+    animations++;
+    return { cancel() { cancellations++; } };
+  };
+  button.dispatch("command");
+  assert.equal(copied, window.dialog.mLauncher.source.spec);
+  assert.equal(button.l10nId, "downloadit-dialog-copy-link-success");
+  assert.equal(animations, 1);
+  fail = true;
+  const originalError = console.error;
+  try {
+    console.error = () => {};
+    button.dispatch("command");
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(button.l10nId, "downloadit-dialog-copy-link-failed");
+  assert.equal(animations, 2);
+  assert.equal(cancellations, 1);
+  assert.equal(timers.size, 1);
+  const reset = timers.get(controller.copyFeedbackTimer);
+  timers.delete(controller.copyFeedbackTimer);
+  reset();
+  assert.equal(button.l10nId, "downloadit-dialog-copy-link");
+  fail = false;
+  reducedMotion = true;
+  button.dispatch("command");
+  assert.equal(button.l10nId, "downloadit-dialog-copy-link-success");
+  assert.equal(animations, 2);
+  controller.destroy();
+  assert.equal(timers.size, 0);
+});
+
 test("quick save actions delegate to native dialog handling", async () => {
   const window = createWindow({ source: "https://example.com/%D6%D0.zip" });
   window.Components = { interfaces: {}, classes: {
