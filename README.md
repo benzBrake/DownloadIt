@@ -37,6 +37,8 @@ The bundled Aria2Next supports Windows and Linux x86_64; FlashGot-based manager 
 
 [Download the nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) · [User documentation](https://benzbrake.github.io/DownloadIt/) · [Development](docs/development.md)
 
+For manual download and filename-encoding checks, use the [local WSLC download test server](docs/development.md#local-download-test-server).
+
 ## Credits and licenses
 
 The original FlashGot was created by Giorgio Maone and is licensed under GPL-2.0-or-later. DownloadPlus is a source for planned download-experience enhancements. Bundled components include Grabby-FlashGot (GPL-3.0), Aria2Next (GPL-2.0), and AriaNg (MIT). See [third-party notices](addon/THIRD_PARTY_NOTICES.txt) for details.

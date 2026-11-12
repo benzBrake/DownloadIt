@@ -37,6 +37,8 @@ DownloadPlus 风格的下载历史增强仍属后续计划。DownloadIt 只实�
 
 [下载 Nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) · [使用文档](https://benzbrake.github.io/DownloadIt/zh-CN/) · [开发说明](docs/development-zh_CN.md)
 
+手动验证下载和文件名编码可使用[本地 WSLC 下载测试服务器](docs/development-zh_CN.md#本地下载测试服务器)。
+
 ## 致谢与许可证
 
 原 FlashGot 由 Giorgio Maone 创作，采用 GPL-2.0-or-later。DownloadPlus 是后续下载体验增强的移植来源。随包组件包括 Grabby-FlashGot（GPL-3.0）、Aria2Next（GPL-2.0）和 AriaNg（MIT），详见[第三方声明](addon/THIRD_PARTY_NOTICES.txt)。

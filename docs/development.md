@@ -24,6 +24,32 @@ Tests use Node.js 18 or later and its built-in test runner:
 node --test tests/*.test.mjs
 ```
 
+## Local download test server
+
+With WSLC installed and configured, run from CMD or PowerShell:
+
+```powershell
+.\scripts\DownloadTestServer.cmd start
+# Optional port; leave the browser closed:
+.\scripts\DownloadTestServer.cmd start -Port 8766 -NoOpen
+# Stop the selected instance:
+.\scripts\DownloadTestServer.cmd stop -Port 8766
+```
+
+Double-click `scripts/DownloadTestServer.cmd` to start with defaults; omitting the action means `start`. The wrapper prefers PowerShell 7 and falls back to Windows PowerShell, bypassing execution policy only for its process. The `.ps1` entry also accepts `start`/`stop`, `-Port`, and `-NoOpen`. Stopping an absent instance succeeds without changing anything.
+
+The first run pulls `python:3.13-slim`. The script mounts only `scripts/download-test-server/` read-only, starts a background container, waits for readiness, then opens `http://localhost:8765/`. Only the Windows loopback address is published. A matching healthy container is reused; conflicting containers or occupied ports produce an error without replacing another service. Stop the default instance with `.\scripts\DownloadTestServer.cmd stop`; the container is removed automatically. Run again after editing the service code.
+
+The page provides text, valid ZIP, 302 redirect, and 32 MiB normal/slow downloads with HEAD and single-range resume support. The slow endpoint runs at approximately 256 KiB/s. Files are generated in memory, without large files on disk. Select multiple links to test batch collection.
+
+Filename cases include two samples each for simplified Chinese GB18030, traditional Chinese Big5, and Japanese Shift_JIS, plus ASCII and UTF-8 controls. The URL contains percent-escaped bytes in that encoding. Encoding downloads return `application/octet-stream` and `Content-Disposition: attachment`, without `charset`, `filename`, or `filename*`. Enable **Detect URL filename encoding** in DownloadIt, compare the dialog with the expected name on the page, and use the filename-encoding menu to select another candidate when needed. Legacy encodings can be ambiguous; an automatic guess is not guaranteed to be correct. Payload text does not determine filename encoding. The standalone test page uses Simplified Chinese and is separate from extension runtime localization.
+
+Run protocol tests using the same Python image (or use local Python 3.13 with the same unittest command):
+
+```powershell
+wslc run --rm --volume "${PWD}/scripts/download-test-server:/app:ro" --workdir /app python:3.13-slim python -B -m unittest -v test_server
+```
+
 ## Code layout
 
 `addon/bootstrap.js` handles the extension lifecycle. Modules in `addon/chrome/content/` implement downloader integrations, link collection, automatic capture, native Firefox UI integration, and settings. Runtime UI text uses Firefox's built-in Fluent system, with matching message IDs under `locales/{en-US,ja,zh-CN,zh-TW}/downloadit.ftl`.
