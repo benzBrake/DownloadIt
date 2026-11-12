@@ -513,6 +513,7 @@ export class DownloadItDownloadDialogController {
 
     this.radio = createXULElement(document, "radio", {
       id: "downloadit-download-radio",
+      style: "flex: 0 0 auto; white-space: nowrap;",
     });
     this.setLocalized(this.radio, "downloadit-download-dialog-option");
     this.radio.addEventListener("command", () => this.updateModeState());
@@ -526,13 +527,16 @@ export class DownloadItDownloadDialogController {
       "aria-label": managerAriaLabel,
       flex: "1",
       native: true,
-      style: "min-height: var(--button-min-height-small, 28px) !important; max-height: var(--button-min-height-small, 28px) !important;",
+      crop: "end",
+      // The selected label must not determine the row's minimum width.
+      style: "flex: 1 1 0%; min-width: 0 !important; width: 0; min-height: var(--button-min-height-small, 28px) !important; max-height: var(--button-min-height-small, 28px) !important;",
     }, [this.managerPopup]);
 
     this.action = createXULElement(document, "toolbarbutton", {
       id: DOWNLOADIT_ACTION_ID,
       class: "toolbarbutton-1",
       image: "chrome://downloadit/content/icons/downloadit.svg",
+      style: "flex: 0 0 auto;",
     });
     this.setLocalized(this.action, "downloadit-download-dialog-action");
     this.action.addEventListener("command", () => {
@@ -543,13 +547,17 @@ export class DownloadItDownloadDialogController {
     const controls = createXULElement(document, "hbox", {
       align: "center",
       flex: "1",
+      style: "flex: 1 1 0%; min-width: 0;",
     }, [this.manager, this.action]);
     const deck = createXULElement(document, "deck", {
       id: "downloadit-download-deck",
       flex: "1",
+      style: "flex: 1 1 0%; min-width: 0;",
     }, [controls]);
     this.option = createXULElement(document, "hbox", {
       id: DOWNLOADIT_OPTION_ID,
+      align: "center",
+      style: "min-width: 0;",
     }, [this.radio, deck]);
     mode.appendChild(this.option);
     await this.translateFragment(this.option);
