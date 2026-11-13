@@ -63,3 +63,7 @@ wslc run --rm --volume "${PWD}/scripts/download-test-server:/app:ro" --workdir /
 Nightly 工作流发布 `addon.xpi`，并从清单生成旧式更新清单 `update.rdf`。目前支持的 Loader 不执行自动更新，升级仍需手动安装。
 
 安装和配置请参阅[使用文档](https://benzbrake.github.io/DownloadIt/zh-CN/)。随包组件的来源和许可证见[第三方声明](../addon/THIRD_PARTY_NOTICES.txt)。
+
+编码检测依赖: jschardet 4.1.0 (0BSD), https://registry.npmjs.org/jschardet/-/jschardet-4.1.0.tgz
+
+SHA-512 (base64): `ighRZ11mb6l4m+xSKoivuqNj44qkObODXsAnnkkfYcY4JfYRnEgAe/w1c3mbnJtTQmLtfebAUfXGsUGUJImexg==`.

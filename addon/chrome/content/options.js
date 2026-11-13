@@ -43,6 +43,9 @@ const {
 const { BUILTIN_DIRECTORIES, getBuiltinDirectory, resolveDownloadDirectory } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItDirectories.sys.mjs",
 );
+const { normalizeFilenameEncodings } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItFilename.sys.mjs",
+);
 const localizationReady = initializeDownloadItLocalization(window);
 const DEVELOPER_MODE_DOUBLE_CLICKS = 6;
 const DEVELOPER_MODE_GESTURE_TIMEOUT_MS = 4000;
@@ -293,10 +296,12 @@ function bindEvents() {
     "dblclick",
     activateDeveloperModeFromGesture,
   );
+  bindFilenameEncodingEditor();
   const calloutMark = document.getElementById("callout-mark");
   for (const input of document.querySelectorAll("[data-download-dialog-pref]")) {
     input.addEventListener("change", () => {
       state.draft.downloadDialog[input.dataset.downloadDialogPref] = input.checked;
+      syncFilenameEncodingAccess();
       renderActionState();
     });
   }
@@ -914,8 +919,122 @@ function render() {
   renderActionState();
 }
 
+// Independent draft: Cancel/Escape must not change the settings-page draft.
+let filenameEncodingDraft = [];
+const FILENAME_ENCODING_PRESETS = Object.freeze([
+  { language: "en", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+  { language: "zh", encodings: ["UTF-8", "GB18030", "Big5"] },
+  { language: "hi", encodings: ["UTF-8"] },
+  { language: "es", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+  { language: "ar", encodings: ["UTF-8", "windows-1256", "ISO-8859-6"] },
+  { language: "fr", encodings: ["UTF-8", "windows-1252", "ISO-8859-15"] },
+  { language: "bn", encodings: ["UTF-8"] },
+  { language: "pt", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+  { language: "ru", encodings: ["UTF-8", "windows-1251", "KOI8-R", "ISO-8859-5"] },
+  { language: "id", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+]);
+
+function bindFilenameEncodingEditor() {
+  const dialog = document.getElementById("filename-encoding-editor");
+  const input = document.getElementById("download-dialog-extra-encodings");
+  document.getElementById("manage-filename-encodings").addEventListener("click", () => {
+    if (!state.draft?.downloadDialog?.detectFilenameEncoding || state.busy) return;
+    filenameEncodingDraft = [...(state.draft.downloadDialog.filenameEncodings || [])];
+    input.value = "";
+    document.getElementById("filename-encoding-error").hidden = true;
+    renderFilenameEncodingEditor();
+    dialog.showModal();
+    input.focus();
+  });
+  document.getElementById("add-filename-encoding").addEventListener("click", () => addFilenameEncodings());
+  input.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      addFilenameEncodings();
+    }
+  });
+  document.getElementById("filename-encoding-cancel").addEventListener("click", () => dialog.close());
+  document.getElementById("filename-encoding-save").addEventListener("click", () => {
+    if (input.value.trim() && !addFilenameEncodings()) return;
+    state.draft.downloadDialog.filenameEncodings = [...filenameEncodingDraft];
+    dialog.close();
+    renderDownloadDialogSettings();
+    renderActionState();
+  });
+}
+
+function addFilenameEncodings(labels = null) {
+  const input = document.getElementById("download-dialog-extra-encodings");
+  const error = document.getElementById("filename-encoding-error");
+  try {
+    const additions = normalizeFilenameEncodings(labels || input.value.split(/[,，;；\s]+/u).filter(Boolean));
+    if (!additions.length) throw new RangeError("Empty encoding list");
+    filenameEncodingDraft = normalizeFilenameEncodings([...new Set([...filenameEncodingDraft, ...additions])]);
+    if (!labels) input.value = "";
+    error.hidden = true;
+    renderFilenameEncodingEditor();
+    input.focus();
+    return true;
+  } catch {
+    setLocalized(error, "downloadit-dialog-extra-encodings-invalid");
+    error.hidden = false;
+    input.focus();
+    return false;
+  }
+}
+
+function renderFilenameEncodingEditor() {
+  const list = document.getElementById("filename-encoding-list");
+  list.replaceChildren();
+  for (const encoding of filenameEncodingDraft) {
+    const row = document.createElement("li");
+    row.className = "auto-extension-row";
+    const name = document.createElement("code");
+    name.className = "auto-extension-name";
+    name.textContent = encoding;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button";
+    remove.textContent = "\u00d7";
+    setLocalized(remove, "downloadit-encoding-remove", { encoding });
+    remove.addEventListener("click", () => {
+      filenameEncodingDraft = filenameEncodingDraft.filter(item => item !== encoding);
+      renderFilenameEncodingEditor();
+    });
+    row.append(name, remove);
+    list.append(row);
+  }
+  if (!filenameEncodingDraft.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty-row";
+    setLocalized(empty, "downloadit-encoding-empty");
+    list.append(empty);
+  }
+  const presets = document.getElementById("filename-encoding-presets");
+  presets.replaceChildren();
+  const names = new Intl.DisplayNames([document.documentElement.lang || window.Services?.locale?.appLocaleAsBCP47 || "en-US"], { type: "language" });
+  for (const preset of FILENAME_ENCODING_PRESETS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary-button";
+    setLocalized(button, "downloadit-encoding-preset", {
+      language: names.of(preset.language), encodings: preset.encodings.join(", "),
+    });
+    button.disabled = normalizeFilenameEncodings(preset.encodings).every(item => filenameEncodingDraft.includes(item));
+    button.addEventListener("click", () => addFilenameEncodings(preset.encodings));
+    presets.append(button);
+  }
+}
+
+function syncFilenameEncodingAccess() {
+  document.getElementById("manage-filename-encodings").disabled =
+    state.busy || !state.draft?.downloadDialog?.detectFilenameEncoding;
+}
+
 function renderDownloadDialogSettings() {
+  syncFilenameEncodingAccess();
   const settings = state.draft?.downloadDialog;
+  setLocalized(document.getElementById("filename-encodings-summary"), "downloadit-encoding-summary", { count: (settings?.filenameEncodings || []).length });
   for (const input of document.querySelectorAll("[data-download-dialog-pref]")) {
     input.checked = Boolean(settings?.[input.dataset.downloadDialogPref]);
   }
@@ -1006,6 +1125,7 @@ async function addDownloadDialogDirectory() {
 }
 
 function renderActionState() {
+  syncFilenameEncodingAccess();
   const dirty = isDirty();
   const changeState = document.getElementById("change-state");
   const applyButton = document.getElementById("apply");

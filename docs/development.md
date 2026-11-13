@@ -63,3 +63,7 @@ Use Firefox's internal APIs rather than Loader utilities. The Loader is a startu
 The nightly workflow publishes `addon.xpi` and generates the legacy `update.rdf` from the manifest. Current supported Loaders do not perform automatic updates; users install upgrades manually.
 
 For installation and configuration, see the [user documentation](https://benzbrake.github.io/DownloadIt/). Bundled component sources and licenses are listed in [third-party notices](../addon/THIRD_PARTY_NOTICES.txt).
+
+Encoding detector dependency: jschardet 4.1.0 (0BSD), https://registry.npmjs.org/jschardet/-/jschardet-4.1.0.tgz
+
+SHA-512 (base64): `ighRZ11mb6l4m+xSKoivuqNj44qkObODXsAnnkkfYcY4JfYRnEgAe/w1c3mbnJtTQmLtfebAUfXGsUGUJImexg==`.

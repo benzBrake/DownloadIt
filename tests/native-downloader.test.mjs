@@ -3677,6 +3677,12 @@ test("download-dialog service migrates legacy locations and persists explicit em
     preferenceValues.set(pref, JSON.stringify(empty));
     assert.equal(empty.directoryFormat, 1);
     assert.deepEqual(service.getDownloadDialogSettings().directories, []);
+    const encodings = service.validateDownloadDialogSettings({ ...empty, filenameEncodings: ["cp1251", "windows-1251", "koi8-r"] });
+    preferenceValues.set(pref, JSON.stringify(encodings));
+    assert.deepEqual(service.getDownloadDialogSettings().filenameEncodings, ["windows-1251", "koi8-r"]);
+    assert.deepEqual(service.getDownloadDialogSettings().directories, []);
+    assert.throws(() => service.validateDownloadDialogSettings({ ...empty, filenameEncodings: ["unknown-encoding"] }),
+      error => error.code === "download-dialog-settings-invalid");
     assert.throws(() => service.validateDownloadDialogSettings({ ...empty, directories: [{ path: "{unknown}" }] }),
       error => error.code === "download-dialog-settings-invalid");
   } finally {

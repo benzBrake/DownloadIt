@@ -719,7 +719,8 @@ downloadit-dialog-copy-link-failed =
     .label = コピーに失敗
     .accesskey = C
 downloadit-dialog-encoding-label = ファイル名の文字コード
-downloadit-dialog-encoding-original = Firefox のファイル名
+downloadit-dialog-encoding-original =
+    .label = Firefox のファイル名
 downloadit-dialog-encoding-candidate = { $encoding}：{ $filename }
 downloadit-dialog-save-as =
     .label = 名前を付けて保存
@@ -737,3 +738,33 @@ downloadit-dialog-directory-builtins =
     .aria-label = 組み込みフォルダーをすばやく追加
     .tooltiptext = 組み込みフォルダーをすばやく追加
 downloadit-dialog-directory-unavailable = 現在このフォルダーは利用できません
+
+downloadit-dialog-encoding-button =
+    .label = { $mode ->
+        [auto] 文字コード: 自動
+        [original] 文字コード: Firefox のファイル名
+       *[manual] 文字コード: { $encoding }
+    }
+    .tooltiptext = 文字コード
+    .aria-label = 文字コード
+downloadit-dialog-encoding-auto =
+    .label = 自動
+downloadit-dialog-encoding-choice =
+    .label = { $encoding }
+downloadit-dialog-extra-encodings = 追加のファイル名文字コード
+downloadit-dialog-extra-encodings-help = Firefox が対応する文字コード名をカンマまたは空白で区切って入力します。例: windows-1251, KOI8-R, ISO-8859-2。最大 30 件。
+downloadit-dialog-extra-encodings-invalid = Firefox が対応する文字コード名を最大 30 件入力してください。
+
+downloadit-encoding-add = 追加
+downloadit-encoding-done = 完了
+downloadit-encoding-empty = 追加の文字コードはありません。
+downloadit-encoding-summary = 追加の文字コード: { $count } 件
+downloadit-encoding-presets-title = 言語からすばやく追加
+downloadit-encoding-presets-help = 以下の定義済み文字コードをクリックすると追加できます。追加済みの文字コードは重複して追加されません。
+downloadit-encoding-input =
+    .placeholder = 文字コード名を空白またはカンマで区切って入力
+    .aria-label = 文字コード名を空白またはカンマで区切って入力
+downloadit-encoding-remove =
+    .title = { $encoding } を削除
+    .aria-label = { $encoding } を削除
+downloadit-encoding-preset = { $language }: { $encodings }

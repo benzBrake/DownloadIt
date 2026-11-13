@@ -716,7 +716,8 @@ downloadit-dialog-copy-link-failed =
     .label = 複製失敗
     .accesskey = C
 downloadit-dialog-encoding-label = 檔名編碼
-downloadit-dialog-encoding-original = Firefox 檔名
+downloadit-dialog-encoding-original =
+    .label = Firefox 檔名
 downloadit-dialog-encoding-candidate = { $encoding}：{ $filename }
 downloadit-dialog-save-as =
     .label = 另存新檔
@@ -734,3 +735,33 @@ downloadit-dialog-directory-builtins =
     .aria-label = 快速新增內建資料夾
     .tooltiptext = 快速新增內建資料夾
 downloadit-dialog-directory-unavailable = 資料夾目前無法使用
+
+downloadit-dialog-encoding-button =
+    .label = { $mode ->
+        [auto] 編碼: 自動
+        [original] 編碼: Firefox 檔名
+       *[manual] 編碼: { $encoding }
+    }
+    .tooltiptext = 編碼
+    .aria-label = 編碼
+downloadit-dialog-encoding-auto =
+    .label = 自動
+downloadit-dialog-encoding-choice =
+    .label = { $encoding }
+downloadit-dialog-extra-encodings = 其他檔名編碼
+downloadit-dialog-extra-encodings-help = 輸入 Firefox 支援的編碼名稱，以逗號或空格分隔，例如 windows-1251、KOI8-R、ISO-8859-2。最多新增 30 種編碼。
+downloadit-dialog-extra-encodings-invalid = 請輸入 Firefox 支援的編碼名稱，最多 30 種。
+
+downloadit-encoding-add = 新增
+downloadit-encoding-done = 完成
+downloadit-encoding-empty = 尚未新增其他編碼。
+downloadit-encoding-summary = 已新增 { $count } 種編碼
+downloadit-encoding-presets-title = 依語言快速新增
+downloadit-encoding-presets-help = 以下為預定義編碼，點擊即可新增，已新增的編碼不會重複新增。
+downloadit-encoding-input =
+    .placeholder = 輸入編碼名稱，以空格或逗號分隔
+    .aria-label = 輸入編碼名稱，以空格或逗號分隔
+downloadit-encoding-remove =
+    .title = 移除 { $encoding }
+    .aria-label = 移除 { $encoding }
+downloadit-encoding-preset = { $language }：{ $encodings }

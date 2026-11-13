@@ -778,7 +778,8 @@ downloadit-dialog-copy-link-failed =
     .label = Copy failed
     .accesskey = C
 downloadit-dialog-encoding-label = Filename encoding
-downloadit-dialog-encoding-original = Firefox filename
+downloadit-dialog-encoding-original =
+    .label = Firefox filename
 downloadit-dialog-encoding-candidate = { $encoding }: { $filename }
 downloadit-dialog-save-as =
     .label = Save As
@@ -796,3 +797,33 @@ downloadit-dialog-directory-builtins =
     .aria-label = Quick add a built-in folder
     .tooltiptext = Quick add a built-in folder
 downloadit-dialog-directory-unavailable = Folder currently unavailable
+
+downloadit-dialog-encoding-button =
+    .label = { $mode ->
+        [auto] Encoding: Automatic
+        [original] Encoding: Firefox filename
+       *[manual] Encoding: { $encoding }
+    }
+    .tooltiptext = Encoding
+    .aria-label = Encoding
+downloadit-dialog-encoding-auto =
+    .label = Automatic
+downloadit-dialog-encoding-choice =
+    .label = { $encoding }
+downloadit-dialog-extra-encodings = Additional filename encodings
+downloadit-dialog-extra-encodings-help = Enter Firefox-supported encoding names separated by commas or spaces, for example windows-1251, KOI8-R, ISO-8859-2. Up to 30 additional encodings.
+downloadit-dialog-extra-encodings-invalid = Enter up to 30 encoding names supported by Firefox.
+
+downloadit-encoding-add = Add
+downloadit-encoding-done = Done
+downloadit-encoding-empty = No additional encodings.
+downloadit-encoding-summary = { $count } additional encodings
+downloadit-encoding-presets-title = Quick add by language
+downloadit-encoding-presets-help = Click a predefined encoding group below to add it. Encodings already added will not be duplicated.
+downloadit-encoding-input =
+    .placeholder = Enter encoding names, separated by spaces or commas
+    .aria-label = Enter encoding names, separated by spaces or commas
+downloadit-encoding-remove =
+    .title = Remove { $encoding }
+    .aria-label = Remove { $encoding }
+downloadit-encoding-preset = { $language }: { $encodings }

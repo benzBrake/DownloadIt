@@ -1,39 +1,37 @@
-const ENCODINGS = Object.freeze(["GB18030", "Big5", "Shift_JIS"]);
+import { detectAll } from "./vendor/jschardet-4.1.0.sys.mjs";
 
-function decodePercentBytes(value, encoding) {
-  try {
-    const decoder = new TextDecoder(encoding, { fatal: true });
-    let output = "";
-    for (let index = 0; index < value.length;) {
-      if (value[index] === "%" && /^[\da-f]{2}$/i.test(value.slice(index + 1, index + 3))) {
-        const bytes = [];
-        while (value[index] === "%" && /^[\da-f]{2}$/i.test(value.slice(index + 1, index + 3))) {
-          bytes.push(parseInt(value.slice(index + 1, index + 3), 16));
-          index += 3;
-        }
-        output += decoder.decode(new Uint8Array(bytes));
-        continue;
-      }
+const ENCODINGS = Object.freeze(["GB18030", "Big5", "Shift_JIS", "EUC-JP", "EUC-KR", "windows-1252"]);
+
+function getPercentBytes(value) {
+  const bytes = [];
+  for (let index = 0; index < value.length;) {
+    if (value[index] === "%" && /^[\da-f]{2}$/i.test(value.slice(index + 1, index + 3))) {
+      bytes.push(parseInt(value.slice(index + 1, index + 3), 16)); index += 3;
+    } else {
       const codePoint = value.codePointAt(index);
-      output += String.fromCodePoint(codePoint);
+      for (const byte of new TextEncoder().encode(String.fromCodePoint(codePoint))) bytes.push(byte);
       index += codePoint > 0xffff ? 2 : 1;
     }
-    return output;
-  } catch {
-    return "";
   }
+  return new Uint8Array(bytes);
 }
 
-function scoreCandidate(value, locale) {
-  if (!value || /[\uFFFD\u0000-\u001F]/u.test(value)) {
-    return -Infinity;
+export function normalizeFilenameEncodings(value = []) {
+  if (!Array.isArray(value) || value.length > 30) throw new RangeError("Invalid filename encodings");
+  const result = [];
+  for (const label of value) {
+    if (typeof label !== "string" || label.length > 80) throw new RangeError("Invalid encoding label");
+    const encoding = new TextDecoder(label.trim()).encoding;
+    if (!result.includes(encoding)) result.push(encoding);
   }
-  const cjk = (value.match(/[\u3040-\u30ff\u3400-\u9fff]/gu) || []).length;
-  const suspicious = (value.match(/[ÃÂÐÑØÞðþ]|鈥|锟|縺|繧/gu) || []).length;
-  const localeHint = /^ja/i.test(locale) && /[\u3040-\u30ff]/u.test(value) ||
-    /^zh-(?:cn|sg)/i.test(locale) && /[\u4e00-\u9fff]/u.test(value) ||
-    /^zh-(?:tw|hk)/i.test(locale) && /[\u4e00-\u9fff]/u.test(value);
-  return cjk * 2 - suspicious * 4 + (localeHint ? 1 : 0);
+  return result;
+}
+
+export function decodeURLFilename(raw, encoding) {
+  try {
+    const value = new TextDecoder(encoding, { fatal: true }).decode(getPercentBytes(String(raw || "")));
+    return value && !/[\uFFFD\u0000-\u001F]/u.test(value) ? value : "";
+  } catch { return ""; }
 }
 
 export function getURLFilenameCandidate(url) {
@@ -46,31 +44,34 @@ export function getURLFilenameCandidate(url) {
   }
 }
 
-export function getFilenameEncodingCandidates(rawFilename, locale = "") {
+export function getFilenameEncodingCandidates(rawFilename, locale = "", configuredEncodings = []) {
   const raw = String(rawFilename || "");
-  let utf8 = "";
-  try {
-    utf8 = decodePercentBytes(raw, "utf-8");
-  } catch {}
+  const bytes = getPercentBytes(raw);
+  const utf8 = decodeURLFilename(raw, "utf-8");
   if (utf8 && !/[\uFFFD\u0000-\u001F]/u.test(utf8)) {
-    return { original: utf8, detected: utf8, encoding: "UTF-8", candidates: [] };
+    return { original: utf8, detected: utf8, encoding: "UTF-8", candidates: [], bytes };
   }
 
-  const candidates = ENCODINGS.map(encoding => ({
+  const detectedEncodings = detectAll(bytes)
+    .filter(item => item?.confidence > 0 && !/^UTF-(?:16|32)/i.test(item.encoding))
+    .map(item => item.encoding === "CP932" ? "Shift_JIS" : item.encoding)
+    .filter(Boolean);
+  const encodings = [...new Set([...detectedEncodings, ...ENCODINGS, ...configuredEncodings.map(String)])];
+  const candidates = encodings.map(encoding => ({
     encoding,
-    value: decodePercentBytes(raw, encoding),
+    value: decodeURLFilename(raw, encoding),
   })).filter(candidate => candidate.value);
-  candidates.sort((left, right) =>
-    scoreCandidate(right.value, locale) - scoreCandidate(left.value, locale),
-  );
-  const detected = candidates[0] && scoreCandidate(candidates[0].value, locale) > 0
-    ? candidates[0]
-    : null;
+  // Statistical scores are weak for very short names. Reject mappings that
+  // manufacture private-use characters before choosing a guess.
+  const guesses = candidates.filter(candidate => detectedEncodings.includes(candidate.encoding) &&
+    !/[\uE000-\uF8FF]/u.test(candidate.value));
+  const detected = guesses[0] || null;
   return {
-    original: decodePercentBytes(raw, "utf-8") || raw,
-    detected: detected?.value || decodePercentBytes(raw, "utf-8") || raw,
+    original: utf8 || raw,
+    detected: detected?.value || utf8 || raw,
     encoding: detected?.encoding || "",
     candidates,
+    bytes,
   };
 }
 

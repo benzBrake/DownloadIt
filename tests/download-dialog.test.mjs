@@ -702,7 +702,8 @@ test("download dialog filename detection is independent from filename editing", 
   assert.equal(window.document.getElementById("location").disabled, true);
   const encodingMenu = window.document.getElementById("di-filename-encoding");
   assert.ok(encodingMenu);
-  assert.ok(encodingMenu.selectedIndex > 0);
+  assert.equal(encodingMenu.localName, "button");
+  assert.equal(encodingMenu.l10nArgs.mode, "auto");
 });
 
 test("copy URL reports both outcomes, restarts feedback, and cleans up on destroy", async () => {
@@ -856,7 +857,7 @@ test("dialog sizing waits for quick action translations and styles", async () =>
   };
   const initializing = controller.init();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(translated, ["di-save-as", "di-save-to", "di-save-and-open"]);
+  assert.deepEqual(translated, ["di-filename-encoding", "di-save-as", "di-save-to", "di-save-and-open"]);
   assert.equal(window.sizeToContentCalls, 0);
   releaseStyles();
   await initializing;
@@ -1046,7 +1047,7 @@ test("disabling filename encoding leaves Firefox's suggested name editable", asy
   assert.equal(await controller.init(), true);
   assert.equal(window.document.getElementById("location").value, "file.zip");
   assert.equal(window.document.getElementById("location").disabled, false);
-  assert.equal(window.document.getElementById("di-filename-encoding"), null);
+  assert.ok(window.document.getElementById("di-filename-encoding"));
 });
 
 test("uncertain URL encoding keeps the raw URL candidate", async () => {
@@ -1515,4 +1516,38 @@ test("an explicit empty directory list never inserts built-in menu items", async
   await controller.init();
   assert.equal(window.document.getElementById("di-save-to-popup").children
     .filter(item => item.localName === "menuitem").length, 0);
+});
+
+
+test("encoding button decodes original bytes and supports custom encodings and automatic reset", async () => {
+  const window = createWindow({ source: "https://example.com/%EF%F0%E8%E2%E5%F2.txt" });
+  const service = createService({ downloadDialogSettings: {
+    editFilename: true, detectFilenameEncoding: false, filenameEncodings: ["windows-1251", "cp1251"],
+  } });
+  const controller = new DownloadItDownloadDialogController(service, window, async () => {});
+  await controller.init();
+  const input = window.document.getElementById("locationText");
+  const menu = window.document.getElementById("di-filename-encoding");
+  const popup = window.document.getElementById("di-filename-encoding-popup");
+  assert.equal(menu.parentNode, input.parentNode);
+  assert.ok(input.parentNode.children.indexOf(menu) > input.parentNode.children.indexOf(input));
+  const custom = popup.children.filter(item => /^(windows-1251|cp1251)$/.test(item.value));
+  assert.equal(custom.length, 1);
+  input.value = "edited.txt";
+  popup.dispatch("command", { target: custom[0] });
+  assert.equal(input.value, "привет.txt");
+  input.value = "edited-again.txt";
+  popup.dispatch("command", { target: custom[0] });
+  assert.equal(input.value, "привет.txt");
+  const invalid = popup.children.find(item => item.value === "UTF-8");
+  assert.equal(invalid.disabled, true);
+  popup.dispatch("command", { target: invalid });
+  assert.equal(input.value, "привет.txt");
+  popup.dispatch("command", { target: popup.children[0] });
+  assert.equal(menu.l10nArgs.mode, "auto");
+  assert.equal(input.value, "привет.txt");
+  popup.dispatch("command", { target: popup.children[1] });
+  assert.equal(input.value, "file.zip");
+  controller.destroy();
+  assert.equal(Boolean(window.document.getElementById("di-filename-encoding")), false);
 });

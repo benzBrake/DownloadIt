@@ -9,6 +9,8 @@ import {
   normalizeAutoExtensions,
 } from "./DownloadItAutoCapture.sys.mjs";
 import {
+  decodeURLFilename,
+  FILENAME_ENCODINGS,
   getFilenameEncodingCandidates,
   getURLFilenameCandidate,
 } from "./DownloadItFilename.sys.mjs";
@@ -576,6 +578,7 @@ export class DownloadItDownloadDialogController {
       ? getFilenameEncodingCandidates(
           rawURLFilename,
           this.window.Services?.locale?.appLocaleAsBCP47 || "",
+          settings.filenameEncodings || [],
         )
       : null;
     const filename = hasServerFilename
@@ -647,54 +650,53 @@ export class DownloadItDownloadDialogController {
     }
 
     if (!location) return;
-    const addEncodingControl = !hasServerFilename && rawURLFilename &&
-      settings.detectFilenameEncoding !== false;
-    if (addEncodingControl) {
-      const decoded = detection;
-      if (decoded.candidates.length) {
-        const popup = createXULElement(this.document, "menupopup", {
-          id: "di-filename-encoding-popup",
-        });
-        const original = createXULElement(this.document, "menuitem", {
-          value: String(launcher.suggestedFileName || decoded.original),
-        });
-        this.setLocalized(original, "downloadit-dialog-encoding-original");
-        popup.appendChild(original);
-        for (const candidate of decoded.candidates) {
-          const item = createXULElement(this.document, "menuitem", {
-            value: candidate.value,
-          });
-          this.setLocalized(item, "downloadit-dialog-encoding-candidate", {
-            encoding: candidate.encoding,
-            filename: candidate.value,
-          });
-          popup.appendChild(item);
-        }
-        popup.addEventListener("command", event => {
-          if (event.target?.localName === "menuitem") {
-            (this.filenameInput || location).value = event.target.getAttribute("value") || "";
-          }
-        });
-        this.encodingMenu = createXULElement(this.document, "menulist", {
-          id: "di-filename-encoding",
-          "aria-label": await this.formatMessage("downloadit-dialog-encoding-label"),
-        }, [popup]);
-        const detectedIndex = decoded.candidates.findIndex(candidate =>
-          candidate.encoding === decoded.encoding
-        );
-        this.encodingMenu.selectedIndex = decoded.encoding && detectedIndex >= 0
-          ? detectedIndex + 1
-          : 0;
-        const row = createXULElement(this.document, "hbox", {
-          id: "di-filename-controls",
-          align: "center",
-        }, [this.encodingMenu]);
-        const filenameParent = this.filenameInput?.parentNode || location.parentNode;
-        filenameParent?.after?.(row);
-        if (!filenameParent?.after) filenameParent?.appendChild(row);
-        this.featureControls = row;
-        await this.translateFragment(row);
+    if (!hasServerFilename && rawURLFilename) {
+      const popup = createXULElement(this.document, "menupopup", {
+        id: "di-filename-encoding-popup",
+      });
+      this.encodingMenu = createXULElement(this.document, "button", {
+        id: "di-filename-encoding", type: "menu",
+        style: "flex-shrink: 0; min-width: max-content; margin-inline-start: 4px;",
+      }, [popup]);
+      this.setLocalized(this.encodingMenu, "downloadit-dialog-encoding-button", {
+        mode: settings.detectFilenameEncoding === false ? "original" : "auto",
+        encoding: detection.encoding,
+      });
+      const automatic = createXULElement(this.document, "menuitem", { value: "auto" });
+      this.setLocalized(automatic, "downloadit-dialog-encoding-auto");
+      popup.appendChild(automatic);
+      const original = createXULElement(this.document, "menuitem", { value: "original" });
+      this.setLocalized(original, "downloadit-dialog-encoding-original");
+      popup.appendChild(original);
+      const labels = ["UTF-8", ...FILENAME_ENCODINGS, ...(settings.filenameEncodings || [])];
+      const seen = new Set();
+      for (const encoding of labels) {
+        let canonical;
+        try { canonical = new TextDecoder(encoding).encoding; } catch { continue; }
+        if (seen.has(canonical)) continue;
+        seen.add(canonical);
+        const value = decodeURLFilename(rawURLFilename, encoding);
+        const item = createXULElement(this.document, "menuitem", { value: encoding, disabled: !value });
+        this.setLocalized(item, "downloadit-dialog-encoding-choice", { encoding });
+        popup.appendChild(item);
       }
+      popup.addEventListener("command", event => {
+        if (event.target?.localName !== "menuitem" || event.target.disabled) return;
+        const encoding = event.target.getAttribute("value");
+        const value = encoding === "auto" ? detection.detected
+          : encoding === "original" ? String(launcher.suggestedFileName || detection.original)
+          : decodeURLFilename(rawURLFilename, encoding);
+        if (!value) return;
+        (this.filenameInput || location).value = value;
+        this.setLocalized(this.encodingMenu, "downloadit-dialog-encoding-button", {
+          mode: encoding === "auto" || encoding === "original" ? encoding : "manual",
+          encoding: encoding === "auto" ? detection.encoding : encoding,
+        });
+      });
+      const parent = this.filenameInput?.parentNode || location.parentNode;
+      parent.appendChild(this.encodingMenu);
+      this.featureControls = this.encodingMenu;
+      await this.translateFragment(this.encodingMenu);
     }
 
     await this.buildQuickActions(settings);

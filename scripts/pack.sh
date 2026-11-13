@@ -77,6 +77,11 @@ aria2next_linux_hash="b6f2cdadcd34ba16dd7fcb29de4b84c36f893f9b223a9a05157d189268
 flashgot_repository="benzBrake/Grabby-FlashGot"
 github_token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 
+if [[ "$(sha256sum "${addon_directory}/chrome/content/vendor/jschardet-4.1.0.sys.mjs" | cut -d ' ' -f 1)" != "4e858b0da42b7e5e004ac92eb1240d1ddf02cbea12c91669fc24b3781b5da3a8" ]]; then
+    echo "jschardet 4.1.0 integrity verification failed" >&2
+    exit 1
+fi
+
 required_entries=(
     "bootstrap.js"
     "install.rdf"
@@ -99,6 +104,8 @@ required_entries=(
     "ariang/fonts/fontawesome-webfont.woff2"
     "licenses/aria2-next-COPYING"
     "licenses/ariang-LICENSE"
+    "licenses/jschardet-LICENSE"
+    "chrome/content/vendor/jschardet-4.1.0.sys.mjs"
     "chrome/content/DownloadItBinaryMetadata.sys.mjs"
     "chrome/content/DownloadItAriaNg.sys.mjs"
     "chrome/content/DownloadItAriaNgActor.sys.mjs"

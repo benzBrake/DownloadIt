@@ -1,3 +1,4 @@
+import { normalizeFilenameEncodings } from "./DownloadItFilename.sys.mjs";
 import { DIRECTORY_FORMAT, defaultDownloadDirectories, readDownloadDirectories, validateDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
   buildDownloadBatchJob,
@@ -3175,6 +3176,7 @@ export class DownloadItService {
   getDownloadDialogSettings() {
     const defaults = {
       detectFilenameEncoding: true,
+      filenameEncodings: [],
       editFilename: true,
       showFullURL: true,
       saveAs: true,
@@ -3189,8 +3191,9 @@ export class DownloadItService {
       const value = parsed && typeof parsed === "object" ? parsed : {};
       return {
         ...defaults,
-        ...Object.fromEntries(Object.keys(defaults).filter(key => key !== "directories" && key !== "directoryFormat")
+        ...Object.fromEntries(Object.keys(defaults).filter(key => key !== "directories" && key !== "directoryFormat" && key !== "filenameEncodings")
           .map(key => [key, value[key] == null ? defaults[key] : Boolean(value[key])])),
+        filenameEncodings: normalizeFilenameEncodings(value.filenameEncodings || []),
         directoryFormat: DIRECTORY_FORMAT,
         directories: readDownloadDirectories(value),
       };
@@ -3935,7 +3938,9 @@ export class DownloadItService {
     }
     const current = this.getDownloadDialogSettings();
     let normalizedDirectories;
+    let filenameEncodings;
     try {
+      filenameEncodings = normalizeFilenameEncodings(value.filenameEncodings ?? current.filenameEncodings);
       normalizedDirectories = validateDownloadDirectories(value.directories, Components, Services.appinfo.OS);
     } catch {
       throw new DownloadItError("download-dialog-settings-invalid");
@@ -3943,6 +3948,7 @@ export class DownloadItService {
     return {
       detectFilenameEncoding: value.detectFilenameEncoding == null
         ? current.detectFilenameEncoding : Boolean(value.detectFilenameEncoding),
+      filenameEncodings,
       editFilename: value.editFilename == null ? current.editFilename : Boolean(value.editFilename),
       showFullURL: value.showFullURL == null ? current.showFullURL : Boolean(value.showFullURL),
       saveAs: value.saveAs == null ? current.saveAs : Boolean(value.saveAs),

@@ -91,6 +91,8 @@ $requiredEntries = @(
     "ariang/fonts/fontawesome-webfont.woff2"
     "licenses/aria2-next-COPYING"
     "licenses/ariang-LICENSE"
+    "licenses/jschardet-LICENSE"
+    "chrome/content/vendor/jschardet-4.1.0.sys.mjs"
     "chrome/content/DownloadItBinaryMetadata.sys.mjs"
     "chrome/content/DownloadItAriaNg.sys.mjs"
     "chrome/content/DownloadItAriaNgActor.sys.mjs"
@@ -377,6 +379,11 @@ $aria2NextMetadata
         $binaryMetadata,
         [Text.UTF8Encoding]::new($false)
     )
+
+    $detectorPath = Join-Path $addonDirectory "chrome/content/vendor/jschardet-4.1.0.sys.mjs"
+    if ((Get-FileHash -LiteralPath $detectorPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne "4e858b0da42b7e5e004ac92eb1240d1ddf02cbea12c91669fc24b3781b5da3a8") {
+        throw "jschardet 4.1.0 integrity verification failed"
+    }
 
     [IO.Compression.ZipFile]::CreateFromDirectory(
         $addonDirectory,
