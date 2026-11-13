@@ -51,7 +51,7 @@ function getPicturesDirectory(Cc, Ci, directoryService, os) {
           (match, name) => environment.get(name) || match);
         if (/%[^%]+%/u.test(path)) continue;
         file.initWithPath(path);
-        if (file.isAbsolute()) return file;
+        return file;
       } catch {
         // The legacy expanded Shell Folders value is a fallback for older profiles.
       } finally {
@@ -100,8 +100,8 @@ export function resolveDownloadDirectory(path, components = globalThis.Component
         : directoryService.get(builtin.key, Ci.nsIFile);
     } else {
       file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+      // nsIFile rejects invalid paths in initWithPath; it has no isAbsolute().
       file.initWithPath(path);
-      if (!file.isAbsolute()) return null;
     }
     return file?.exists() && file.isDirectory() ? file : null;
   } catch {

@@ -15,8 +15,12 @@ function components(folders = {}) {
       },
     }) },
     "@mozilla.org/file/local;1": { createInstance: () => ({
-      initWithPath(path) { this.path = path; },
-      isAbsolute() { return /^[A-Z]:\\/i.test(this.path); },
+      initWithPath(path) {
+        if (!/^[A-Z]:\\/i.test(path) && !path.startsWith("\\\\")) {
+          throw new Error("NS_ERROR_FILE_UNRECOGNIZED_PATH");
+        }
+        this.path = path;
+      },
       exists() { return !this.path.includes("missing"); },
       isDirectory() { return !this.path.endsWith(".txt"); },
     }) },
@@ -38,9 +42,13 @@ function picturesComponents({ os, config = '', environment = {}, registry = {}, 
     getService: () => ({ get: name => environment[name] || "" }),
   };
   api.classes["@mozilla.org/file/local;1"] = { createInstance: () => ({
-    initWithPath(path) { this.path = path; },
+    initWithPath(path) {
+      if (!(os === 'WINNT' ? /^[A-Z]:\\/iu.test(path) : path.startsWith('/'))) {
+        throw new Error('NS_ERROR_FILE_UNRECOGNIZED_PATH');
+      }
+      this.path = path;
+    },
     append(name) { this.path += `/${name}`; },
-    isAbsolute() { return os === 'WINNT' ? /^[A-Z]:\\/iu.test(this.path) : this.path.startsWith('/'); },
     exists: () => !missing, isDirectory: () => true,
   }) };
   api.classes["@mozilla.org/windows-registry-key;1"] = { createInstance: () => ({
@@ -112,6 +120,19 @@ test("explicit empty lists survive save and reload without restoring built-ins",
   const value = { directoryFormat: 1, directories: [] };
   const directories = validateDownloadDirectories(value.directories, components(), "WINNT");
   assert.deepEqual(readDownloadDirectories(JSON.parse(JSON.stringify({ ...value, directories }))), []);
+});
+
+test("native nsIFile paths validate and resolve without an isAbsolute method", () => {
+  const api = components();
+  const entries = [
+    { path: "F:\\下载", label: "Downloads" },
+    { path: "\\\\server\\share\\Downloads", label: "Shared" },
+  ];
+  assert.equal("isAbsolute" in api.classes["@mozilla.org/file/local;1"].createInstance(), false);
+  assert.deepEqual(validateDownloadDirectories(entries, api, "WINNT"), entries);
+  assert.deepEqual(resolveDownloadDirectories(entries, api, "WINNT").map(({ path }) => path),
+    entries.map(({ path }) => path));
+  assert.equal(resolveDownloadDirectory("relative", api, "WINNT"), null);
 });
 
 test("built-in placeholders survive unavailable directories and retain optional names", () => {
