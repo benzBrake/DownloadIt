@@ -22,9 +22,13 @@ The project builds on selected FlashGot integrations and is progressively incorp
 
 The **Download history** settings page enables cleanup buttons by default in Firefox **Library → Downloads**: **Remove Failed** and **Remove Unavailable**. The latter refreshes file availability and removes successful download records only when their files have been moved or deleted. Both actions remove records only, keeping actual files. Disabling the setting and applying it also removes the buttons from open Library windows.
 
+The **Request information forwarding** area groups the global cookie-forwarding switch with the read-only **automatically attached** status for Referer and User-Agent.
+
 ## Where it is heading
 
 DownloadIt implements selected download-dialog, save-action, and download-history cleanup features, but not the full DownloadPlus feature set. It also implements only part of FlashGot's original feature set; media sniffing is not currently supported.
+
+Request information forwarding is planned to support **global defaults + site-specific rules**: global switches for cookies, Referer, and User-Agent, with site rules that can override defaults, specify a Referer or User-Agent, or omit cookies. The Referer and User-Agent switches and site rules are not yet available.
 
 ## Requirements and download
 

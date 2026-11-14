@@ -345,6 +345,12 @@
 
           <section id="section-privacy" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="privacy" hidden="hidden">
             <div class="setting-group">
+              <div class="group-heading compact-heading">
+                <div>
+                  <div class="eyebrow" data-l10n-id="downloadit-privacy-eyebrow"></div>
+                  <h2 data-l10n-id="downloadit-request-info-title"></h2>
+                </div>
+              </div>
               <label class="toggle-row" for="send-cookies">
                 <input id="send-cookies" type="checkbox" />
                 <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
@@ -357,6 +363,23 @@
                 <span class="note-mark" aria-hidden="true">!</span>
                 <span data-l10n-id="downloadit-cookie-locked"></span>
               </div>
+              <div class="info-list">
+                <div class="info-row">
+                  <span class="info-mark is-on" aria-hidden="true"></span>
+                  <div>
+                    <strong data-l10n-id="downloadit-referer-title"></strong>
+                    <span data-l10n-id="downloadit-automatic-label"></span>
+                  </div>
+                </div>
+                <div class="info-row">
+                  <span class="info-mark is-on" aria-hidden="true"></span>
+                  <div>
+                    <strong data-l10n-id="downloadit-user-agent-title"></strong>
+                    <span data-l10n-id="downloadit-automatic-label"></span>
+                  </div>
+                </div>
+              </div>
+              <p class="field-help" data-l10n-id="downloadit-automatic-help"></p>
             </div>
 
             <div class="setting-group">
@@ -405,31 +428,6 @@
               </label>
             </div>
 
-            <div class="setting-group">
-              <div class="group-heading compact-heading">
-                <div>
-                  <div class="eyebrow" data-l10n-id="downloadit-automatic-eyebrow"></div>
-                  <h2 data-l10n-id="downloadit-automatic-title"></h2>
-                </div>
-              </div>
-              <div class="info-list">
-                <div class="info-row">
-                  <span class="info-mark is-on" aria-hidden="true"></span>
-                  <div>
-                    <strong data-l10n-id="downloadit-referer-title"></strong>
-                    <span data-l10n-id="downloadit-automatic-label"></span>
-                  </div>
-                </div>
-                <div class="info-row">
-                  <span class="info-mark is-on" aria-hidden="true"></span>
-                  <div>
-                    <strong data-l10n-id="downloadit-user-agent-title"></strong>
-                    <span data-l10n-id="downloadit-automatic-label"></span>
-                  </div>
-                </div>
-              </div>
-              <p class="field-help" data-l10n-id="downloadit-automatic-help"></p>
-            </div>
           </section>
 
           <section id="section-ytdlp" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="ytdlp" hidden="hidden">
