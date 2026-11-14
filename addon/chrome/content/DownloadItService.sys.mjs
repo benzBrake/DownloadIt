@@ -1,4 +1,10 @@
 import { DownloadItHistoryIntegration, HISTORY_CLEANUP_PREF } from "./DownloadItHistory.sys.mjs";
+import {
+  DOWNLOAD_SOUND_PREF,
+  DownloadItSoundIntegration,
+  normalizeDownloadSoundSettings,
+  validateDownloadSoundSettings,
+} from "./DownloadItSound.sys.mjs";
 import { normalizeFilenameEncodings } from "./DownloadItFilename.sys.mjs";
 import { DIRECTORY_FORMAT, defaultDownloadDirectories, readDownloadDirectories, validateDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
@@ -449,6 +455,19 @@ export class DownloadItService {
     this.controllers = new Map();
     this.panelControllers = new Map();
     this.historyIntegration = new DownloadItHistoryIntegration(Services, initializeDownloadItLocalization);
+    this.soundIntegration = new DownloadItSoundIntegration({
+      downloads: Downloads,
+      readSettings: () => this.getDownloadSoundSettings(),
+      resolveURL: path => this.resolveDownloadSoundURL(path),
+      createAudio: url => {
+        const window = Services.wm.getMostRecentWindow("navigator:browser");
+        if (!window || window.closed) {
+          throw new DownloadItError("download-sound-playback-failed", { error: "No browser window" });
+        }
+        return new window.Audio(url);
+      },
+      reportError: error => console.error("DownloadIt: download sound failed", error),
+    });
     this.downloadDialogControllers = new Map();
     this.downloadDialogWatchers = new Map();
     this.temporaryFiles = new Set();
@@ -3090,6 +3109,8 @@ export class DownloadItService {
       ...this.getProtocolDefaultSettings(),
       historyCleanupButtons: Services.prefs.getBoolPref(HISTORY_CLEANUP_PREF, true),
       historyCleanupButtonsLocked: Services.prefs.prefIsLocked(HISTORY_CLEANUP_PREF),
+      downloadSound: this.getDownloadSoundSettings(),
+      downloadSoundLocked: Services.prefs.prefIsLocked(DOWNLOAD_SOUND_PREF),
       downloadDialog: this.getDownloadDialogSettings(),
       protocolDefaultLocks: this.getProtocolDefaultLocks(),
       detectedManagerCount: this.downloaders.filter(downloader =>
@@ -3247,6 +3268,30 @@ export class DownloadItService {
     }
   }
 
+  getDownloadSoundSettings() {
+    try {
+      return normalizeDownloadSoundSettings(JSON.parse(
+        Services.prefs.getStringPref(DOWNLOAD_SOUND_PREF, "{}"),
+      ));
+    } catch {
+      return normalizeDownloadSoundSettings();
+    }
+  }
+
+  resolveDownloadSoundURL(path) {
+    try {
+      const file = this.getLocalFile(this.resolveCustomFilePath(path));
+      if (!file.exists() || !file.isFile()) throw new Error("Not a local file");
+      return Services.io.newFileURI(file).spec;
+    } catch {
+      throw new DownloadItError("download-sound-file-invalid", { path });
+    }
+  }
+
+  previewDownloadSound(settings) {
+    return this.soundIntegration.play(settings);
+  }
+
   async applySettings({
     defaultManager = null,
     magnetManager = null,
@@ -3269,6 +3314,7 @@ export class DownloadItService {
     mirrorSettings = null,
     customDownloaders = null,
     historyCleanupButtons = null,
+    downloadSound = null,
     downloadDialog = null,
   } = {}) {
     const defaultManagerRequested = defaultManager !== null &&
@@ -3283,6 +3329,19 @@ export class DownloadItService {
       : String(ed2kManager || "");
     const currentAutoCaptureRules = this.autoCaptureRules;
     const currentHistoryCleanup = Services.prefs.getBoolPref(HISTORY_CLEANUP_PREF, true);
+    const currentDownloadSound = this.getDownloadSoundSettings();
+    const requestedDownloadSound = downloadSound == null
+      ? currentDownloadSound : validateDownloadSoundSettings(downloadSound);
+    const downloadSoundChanged = JSON.stringify(requestedDownloadSound) !==
+      JSON.stringify(currentDownloadSound);
+    if (downloadSoundChanged) {
+      if (Services.prefs.prefIsLocked(DOWNLOAD_SOUND_PREF)) {
+        throw new DownloadItError("download-sound-settings-locked");
+      }
+      if (requestedDownloadSound.enabled && requestedDownloadSound.path) {
+        this.resolveDownloadSoundURL(requestedDownloadSound.path);
+      }
+    }
     if (historyCleanupButtons != null && Boolean(historyCleanupButtons) !== currentHistoryCleanup &&
         Services.prefs.prefIsLocked(HISTORY_CLEANUP_PREF)) {
       throw new DownloadItError("history-settings-locked");
@@ -3968,6 +4027,10 @@ export class DownloadItService {
     if (historyCleanupButtons != null && Boolean(historyCleanupButtons) !== currentHistoryCleanup) {
       Services.prefs.setBoolPref(HISTORY_CLEANUP_PREF, Boolean(historyCleanupButtons));
     }
+    if (downloadSoundChanged) {
+      Services.prefs.setStringPref(DOWNLOAD_SOUND_PREF, JSON.stringify(requestedDownloadSound));
+      this.soundIntegration.stopAudio();
+    }
     this.syncDownloadDialogButtonDelay(requestedDownloadDialog.disableButtonDelay);
     if (
       JSON.stringify(requestedMirrorSettings) !==
@@ -4059,6 +4122,11 @@ export class DownloadItService {
     }
 
     this.historyIntegration.start();
+    try {
+      await this.soundIntegration.start();
+    } catch (error) {
+      console.error("DownloadIt: could not watch download sounds", error);
+    }
     registerDownloadItHelperAppHook(this);
     registerDownloadItExternalProtocolHook(this);
 
@@ -4088,12 +4156,16 @@ export class DownloadItService {
 
   async shutdown() {
     this.serviceReady = false;
+    const soundShutdown = this.soundIntegration.stop().catch(error => {
+      console.error("DownloadIt: could not stop download sounds", error);
+    });
     this.syncDownloadDialogButtonDelay(false);
     this.idmBridge.stop();
     if (this.aria2Processes?.size || this.aria2StartupPromises?.size) {
       await this.shutdownManagedCustomAria2();
     }
     await this.shutdownAria2NextIfEnabled();
+    await soundShutdown;
     this.historyIntegration.stop();
     unregisterDownloadItHelperAppHook(this);
     unregisterDownloadItExternalProtocolHook(this);

@@ -281,6 +281,30 @@
             <div class="setting-group">
               <label class="toggle-row" for="history-cleanup-buttons"><input id="history-cleanup-buttons" type="checkbox" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-history-show-buttons"></strong><small data-l10n-id="downloadit-history-show-buttons-help"></small></span></label>
             </div>
+            <div class="setting-group">
+              <div class="group-heading compact-heading">
+                <h2 data-l10n-id="downloadit-sound-title"></h2>
+                <span id="download-sound-lock" class="lock-note" hidden="hidden" data-l10n-id="downloadit-locked"></span>
+              </div>
+              <label class="toggle-row" for="download-sound-enabled"><input id="download-sound-enabled" type="checkbox" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-sound-enabled"></strong><small data-l10n-id="downloadit-sound-help"></small></span></label>
+              <div class="editor-field">
+                <label class="select-label" for="download-sound-path" data-l10n-id="downloadit-sound-file-label"></label>
+                <div class="input-action-row">
+                  <input id="download-sound-path" type="text" spellcheck="false" aria-describedby="download-sound-path-help" data-l10n-id="downloadit-sound-file" />
+                  <button id="browse-download-sound" class="secondary-button" type="button" data-l10n-id="downloadit-browse"></button>
+                  <button id="reset-download-sound" class="secondary-button" type="button" data-l10n-id="downloadit-sound-use-builtin"></button>
+                </div>
+                <p id="download-sound-path-help" class="field-help" data-l10n-id="downloadit-sound-file-help"></p>
+              </div>
+              <div class="editor-field">
+                <label class="select-label" for="download-sound-volume" data-l10n-id="downloadit-sound-volume"></label>
+                <div class="input-action-row">
+                  <input id="download-sound-volume" type="range" min="0" max="100" step="1" />
+                  <output id="download-sound-volume-value" for="download-sound-volume"></output>
+                  <button id="preview-download-sound" class="secondary-button" type="button" data-l10n-id="downloadit-sound-preview"></button>
+                </div>
+              </div>
+            </div>
           </section>
 
           <section id="section-link-groups" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="link-groups" hidden="hidden">

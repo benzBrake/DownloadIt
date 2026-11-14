@@ -46,6 +46,9 @@ const { BUILTIN_DIRECTORIES, getBuiltinDirectory, resolveDownloadDirectory } = C
 const { normalizeFilenameEncodings } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItFilename.sys.mjs",
 );
+const { normalizeDownloadSoundSettings } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItSound.sys.mjs",
+);
 const localizationReady = initializeDownloadItLocalization(window);
 const DEVELOPER_MODE_DOUBLE_CLICKS = 6;
 const DEVELOPER_MODE_GESTURE_TIMEOUT_MS = 4000;
@@ -207,6 +210,10 @@ const CUSTOM_ERROR_MESSAGES = {
   "aria2next-partial-failure": "downloadit-error-aria2next-partial",
   "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
   "history-settings-locked": "downloadit-history-settings-locked",
+  "download-sound-settings-invalid": "downloadit-sound-settings-invalid",
+  "download-sound-settings-locked": "downloadit-sound-settings-locked",
+  "download-sound-file-invalid": "downloadit-sound-file-invalid",
+  "download-sound-playback-failed": "downloadit-sound-playback-failed",
   "download-dialog-settings-invalid": "downloadit-error-download-dialog-settings",
 };
 
@@ -291,6 +298,7 @@ function createSettingsState(snapshot) {
     idmBridgeEnabled: snapshot.idmBridgeEnabled,
     autoCaptureRules: clone(snapshot.autoCaptureRules),
     historyCleanupButtons: snapshot.historyCleanupButtons !== false,
+    downloadSound: normalizeDownloadSoundSettings(snapshot.downloadSound),
     downloadDialog: clone(snapshot.downloadDialog),
     linkGroups: clone(snapshot.linkGroups),
     mirrorSettings: clone(snapshot.mirrorSettings),
@@ -316,6 +324,7 @@ function bindEvents() {
     state.draft.historyCleanupButtons = event.target.checked;
     render();
   });
+  bindDownloadSoundSettings();
   document.getElementById("add-download-dialog-directory").addEventListener(
     "click",
     addDownloadDialogDirectory,
@@ -925,12 +934,75 @@ function render() {
   const historyToggle = document.getElementById("history-cleanup-buttons");
   historyToggle.checked = state.draft?.historyCleanupButtons !== false;
   historyToggle.disabled = state.busy || !state.draft || state.snapshot?.historyCleanupButtonsLocked;
+  renderDownloadSoundSettings();
   renderLinkGroups();
   renderMirrors();
   renderPrivacy();
   renderAbout();
 
   renderActionState();
+}
+
+function bindDownloadSoundSettings() {
+  document.getElementById("download-sound-enabled").addEventListener("change", event => {
+    state.draft.downloadSound.enabled = event.target.checked;
+    renderDownloadSoundSettings();
+    renderActionState();
+  });
+  document.getElementById("download-sound-path").addEventListener("input", event => {
+    state.draft.downloadSound.path = event.target.value;
+    renderActionState();
+  });
+  document.getElementById("download-sound-volume").addEventListener("input", event => {
+    state.draft.downloadSound.volume = Number(event.target.value);
+    renderDownloadSoundSettings();
+    renderActionState();
+  });
+  document.getElementById("reset-download-sound").addEventListener("click", () => {
+    state.draft.downloadSound.path = "";
+    renderDownloadSoundSettings();
+    renderActionState();
+  });
+  document.getElementById("browse-download-sound").addEventListener("click", async () => {
+    try {
+      const path = await browseLocalFile("download-sound-path", {
+        titleId: "downloadit-sound-browse-title",
+        filterId: "downloadit-sound-file-filter",
+        filter: "*.wav;*.ogg;*.mp3;*.flac;*.opus;*.m4a",
+      });
+      if (path !== null) state.draft.downloadSound.path = path;
+    } catch (error) {
+      setFeedback(localizedError(error), "error");
+    }
+    renderDownloadSoundSettings();
+    renderActionState();
+  });
+  document.getElementById("preview-download-sound").addEventListener("click", async () => {
+    try {
+      await state.service.previewDownloadSound(clone(state.draft.downloadSound));
+    } catch (error) {
+      setFeedback(localizedError(error), "error");
+    }
+  });
+}
+
+function renderDownloadSoundSettings() {
+  const settings = normalizeDownloadSoundSettings(state.draft?.downloadSound);
+  const disabled = state.busy || !state.draft;
+  const locked = state.snapshot?.downloadSoundLocked === true;
+  const enabled = document.getElementById("download-sound-enabled");
+  enabled.checked = settings.enabled;
+  enabled.disabled = disabled || locked;
+  document.getElementById("download-sound-lock").hidden = !locked;
+  document.getElementById("download-sound-path").value = settings.path;
+  document.getElementById("download-sound-volume").value = settings.volume;
+  setLocalized(document.getElementById("download-sound-volume-value"),
+    "downloadit-sound-volume-value", { volume: settings.volume / 100 });
+  for (const id of ["download-sound-path", "browse-download-sound", "reset-download-sound", "download-sound-volume"]) {
+    document.getElementById(id).disabled = disabled || locked;
+  }
+  // Preview uses the draft even when automatic completion sounds are disabled.
+  document.getElementById("preview-download-sound").disabled = disabled;
 }
 
 // Independent draft: Cancel/Escape must not change the settings-page draft.

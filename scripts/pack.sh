@@ -111,6 +111,8 @@ required_entries=(
     "chrome/content/DownloadItAriaNgActor.sys.mjs"
     "chrome/content/DownloadItDownloaders.sys.mjs"
     "chrome/content/DownloadItHistory.sys.mjs"
+    "chrome/content/DownloadItSound.sys.mjs"
+    "chrome/content/sounds/download-complete.wav"
     "chrome/content/DownloadItDownloadDialog.sys.mjs"
     "chrome/content/DownloadItDirectories.sys.mjs"
     "chrome/content/DownloadItFilename.sys.mjs"

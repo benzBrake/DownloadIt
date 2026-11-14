@@ -18,6 +18,7 @@ The project builds on selected FlashGot integrations and adds download-dialog, s
 - **Filename encoding correction**: Automatically detect URL filename encodings or select and add encodings manually to fix garbled names.
 - **Batch downloads**: Collect, filter, copy, and batch-download links from a page or selection, including magnet and ed2k links when supported by the downloader.
 - **Download capture and compatibility**: Automatically capture downloads by file type, with configurable cookie forwarding, GitHub mirrors, and IDM local-protocol compatibility.
+- **Download completion sound**: Enable it under **Download history** to play a bundled chime on Windows and Linux, or choose a local audio file with adjustable volume and preview. Off by default; covers Firefox-managed downloads (including private windows), not external downloader completion events. Existing completed records remain silent, and overlapping completion sounds are combined.
 - **Multilingual interface**: Available in English, Japanese, Simplified Chinese, and Traditional Chinese.
 
 The **Download history** settings page enables cleanup buttons by default in Firefox **Library → Downloads**: **Remove Failed** and **Remove Unavailable**. The latter refreshes file availability and removes successful download records only when their files have been moved or deleted. Both actions remove records only, keeping actual files. Disabling the setting and applying it also removes the buttons from open Library windows.

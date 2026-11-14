@@ -18,7 +18,10 @@ let xmlHttpRequestFactory = () => ({});
 let localFileFactory = () => ({});
 let processFactory = () => ({});
 let uuidCounter = 0;
-const downloadsMock = { ALL: Symbol("Downloads.ALL") };
+const downloadsMock = {
+  ALL: Symbol("Downloads.ALL"),
+  async getList() { return { async addView() {}, async removeView() {} }; },
+};
 const downloadPathsMock = {};
 const ioUtilsMock = {};
 const interfacesMock = {
@@ -219,6 +222,7 @@ function createService(platform = "windows") {
 
 function createSettingsService(platform = "windows") {
   const service = createService(platform);
+  service.soundIntegration = { stopAudio() {} };
   service.binaryPath = platform === "windows"
     ? "C:\\Profile\\DownloadIt\\FlashGot.exe"
     : "";
@@ -3792,6 +3796,66 @@ test("download-dialog service migrates legacy locations and persists explicit em
   } finally {
     if (had) preferenceValues.set(pref, before);
     else preferenceValues.delete(pref);
+  }
+});
+
+test("download sounds persist validated settings and respect policy locks", async () => {
+  const name = "downloadit.downloadSound";
+  const before = preferenceValues.get(name);
+  const wasLocked = preferenceLocks.has(name);
+  const service = createSettingsService();
+  const resolved = [];
+  const stopped = [];
+  service.resolveDownloadSoundURL = path => { resolved.push(path); return `file:///${path}`; };
+  service.soundIntegration = { stopAudio: () => stopped.push(true) };
+  try {
+    preferenceValues.delete(name);
+    preferenceLocks.delete(name);
+    assert.deepEqual(service.readSettings().downloadSound, { enabled: false, volume: 70, path: "" });
+    preferenceValues.set(name, "bad json");
+    assert.deepEqual(service.getDownloadSoundSettings(), { enabled: false, volume: 70, path: "" });
+    const value = { enabled: true, volume: 45, path: "sounds/complete.ogg" };
+    await service.applySettings({ downloadSound: value });
+    assert.deepEqual(service.readSettings().downloadSound, value);
+    assert.deepEqual(resolved, [value.path]);
+    assert.equal(stopped.length, 1);
+    await assert.rejects(service.applySettings({ downloadSound: { ...value, volume: 101 } }),
+      { code: "download-sound-settings-invalid" });
+    preferenceLocks.add(name);
+    assert.equal(service.readSettings().downloadSoundLocked, true);
+    await service.applySettings({ downloadSound: value });
+    await assert.rejects(service.applySettings({ downloadSound: { ...value, enabled: false } }),
+      { code: "download-sound-settings-locked" });
+    assert.deepEqual(service.readSettings().downloadSound, value);
+    assert.equal(stopped.length, 1);
+  } finally {
+    if (before === undefined) preferenceValues.delete(name);
+    else preferenceValues.set(name, before);
+    if (!wasLocked) preferenceLocks.delete(name);
+  }
+});
+
+test("download sound paths are resolved locally and missing files get localized error data", () => {
+  const service = createService();
+  const original = servicesMock.io.newFileURI;
+  const file = { exists: () => true, isFile: () => true };
+  service.resolveCustomFilePath = value => `C:\\Profile\\chrome\\${value}`;
+  service.getLocalFile = path => {
+    assert.equal(path, "C:\\Profile\\chrome\\sounds/声音.wav");
+    return file;
+  };
+  servicesMock.io.newFileURI = value => {
+    assert.equal(value, file);
+    return { spec: "file:///C:/Profile/chrome/sounds/%E5%A3%B0%E9%9F%B3.wav" };
+  };
+  try {
+    assert.equal(service.resolveDownloadSoundURL("sounds/声音.wav"),
+      "file:///C:/Profile/chrome/sounds/%E5%A3%B0%E9%9F%B3.wav");
+    file.exists = () => false;
+    assert.throws(() => service.resolveDownloadSoundURL("sounds/声音.wav"),
+      { code: "download-sound-file-invalid", args: { path: "sounds/声音.wav" } });
+  } finally {
+    servicesMock.io.newFileURI = original;
   }
 });
 
