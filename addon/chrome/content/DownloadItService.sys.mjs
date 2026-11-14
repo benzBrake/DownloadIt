@@ -220,6 +220,8 @@ const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 const PREF_LINK_GROUPS = "downloadit.linkGroups";
 const PREF_MIRRORS = "downloadit.mirrors";
 const PREF_DOWNLOAD_DIALOG = "downloadit.downloadDialog";
+const PREF_DIALOG_ENABLE_DELAY = "security.dialog_enable_delay";
+const PREF_DIALOG_ENABLE_DELAY_BACKUP = "downloadit.dialogEnableDelayBackup";
 const PREF_DEVELOPER_MODE = "downloadit.developerMode";
 const PREF_KEEP_PROFILE_DATA_ON_UNINSTALL =
   "downloadit.keepProfileDataOnUninstall";
@@ -3175,6 +3177,7 @@ export class DownloadItService {
 
   getDownloadDialogSettings() {
     const defaults = {
+      disableButtonDelay: true,
       detectFilenameEncoding: true,
       filenameEncodings: [],
       editFilename: true,
@@ -3200,6 +3203,42 @@ export class DownloadItService {
     } catch (error) {
       console.error("DownloadIt: invalid download dialog preference", error);
       return defaults;
+    }
+  }
+
+  syncDownloadDialogButtonDelay(enabled = this.getDownloadDialogSettings().disableButtonDelay) {
+    if (Services.prefs.prefIsLocked(PREF_DIALOG_ENABLE_DELAY)) {
+      return;
+    }
+    try {
+      const raw = Services.prefs.getStringPref(PREF_DIALOG_ENABLE_DELAY_BACKUP, "");
+      const current = Services.prefs.getIntPref(PREF_DIALOG_ENABLE_DELAY);
+      if (enabled) {
+        if (current !== 0) {
+          // Persist the original user value (or absence) across unclean restarts.
+          // A later external change supersedes our previous backup.
+          const previous = Services.prefs.prefHasUserValue(PREF_DIALOG_ENABLE_DELAY)
+            ? current : null;
+          Services.prefs.setStringPref(PREF_DIALOG_ENABLE_DELAY_BACKUP, JSON.stringify(previous));
+          Services.prefs.setIntPref(PREF_DIALOG_ENABLE_DELAY, 0);
+        }
+      } else if (raw) {
+        const previous = JSON.parse(raw);
+        if (previous !== null && !Number.isInteger(previous)) {
+          throw new Error("Invalid dialog delay backup");
+        }
+        // Do not overwrite a value changed by the user or another extension.
+        if (current === 0) {
+          if (previous === null) {
+            Services.prefs.clearUserPref(PREF_DIALOG_ENABLE_DELAY);
+          } else {
+            Services.prefs.setIntPref(PREF_DIALOG_ENABLE_DELAY, previous);
+          }
+        }
+        Services.prefs.clearUserPref(PREF_DIALOG_ENABLE_DELAY_BACKUP);
+      }
+    } catch (error) {
+      console.error("DownloadIt: could not update dialog button delay", error);
     }
   }
 
@@ -3915,6 +3954,7 @@ export class DownloadItService {
         JSON.stringify(requestedDownloadDialog),
       );
     }
+    this.syncDownloadDialogButtonDelay(requestedDownloadDialog.disableButtonDelay);
     if (
       JSON.stringify(requestedMirrorSettings) !==
         JSON.stringify(currentMirrorSettings)
@@ -3946,6 +3986,8 @@ export class DownloadItService {
       throw new DownloadItError("download-dialog-settings-invalid");
     }
     return {
+      disableButtonDelay: value.disableButtonDelay == null
+        ? current.disableButtonDelay : Boolean(value.disableButtonDelay),
       detectFilenameEncoding: value.detectFilenameEncoding == null
         ? current.detectFilenameEncoding : Boolean(value.detectFilenameEncoding),
       filenameEncodings,
@@ -3964,6 +4006,7 @@ export class DownloadItService {
     if (!this.platformDefinition) {
       throw new Error("DownloadIt supports Windows and Linux only");
     }
+    this.syncDownloadDialogButtonDelay();
 
     this.binaryPath = this.platformDefinition.flashGotSupported
       ? await this.deployBinary()
@@ -4028,6 +4071,7 @@ export class DownloadItService {
 
   async shutdown() {
     this.serviceReady = false;
+    this.syncDownloadDialogButtonDelay(false);
     this.idmBridge.stop();
     if (this.aria2Processes?.size || this.aria2StartupPromises?.size) {
       await this.shutdownManagedCustomAria2();

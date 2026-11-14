@@ -318,6 +318,12 @@ test("download dialog settings are independent and packaged in every locale", ()
   assert.match(markup, /data-section="download-dialog"/);
   assert.match(markup, /id="section-download-dialog"/);
   assert.match(markup, /data-download-dialog-pref="detectFilenameEncoding"/);
+  assert.match(markup, /data-download-dialog-pref="disableButtonDelay"/);
+  for (const locale of supportedLocales) {
+    const messages = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    assert.match(messages, /^downloadit-dialog-disable-button-delay-title = .+/m);
+    assert.match(messages, /^downloadit-dialog-disable-button-delay-help = .+/m);
+  }
   assert.match(markup, /data-download-dialog-pref="editFilename"/);
   assert.match(script, /downloadDialog: clone\(snapshot\.downloadDialog\)/);
   assert.match(script, /payload\.downloadDialog = clone\(state\.draft\.downloadDialog\)/);

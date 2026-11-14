@@ -21,6 +21,8 @@ The project builds on selected FlashGot integrations and is progressively incorp
 
 The interface is available in English, Japanese, Simplified Chinese, and Traditional Chinese.
 
+**Enable dialog buttons without delay** under Settings → Download dialog is on by default and sets `security.dialog_enable_delay` to `0`. This removes the download prompt's button delay and also affects other Firefox security dialogs that use the same preference. Turning the option off or disabling/uninstalling DownloadIt restores the previous user value (or Firefox's default if none was set), unless the value has since been changed elsewhere. Locked preferences are respected. Apply the setting before opening a new download prompt.
+
 Save To locations are managed together in settings. The arrow beside **Add folder** quickly adds built-in folders; their paths use system-resolved placeholders, while ordinary folders store absolute paths. Built-in names can be customized or left empty for localized defaults. Existing location settings migrate on Apply, preserving custom folders. Removing all locations keeps the list empty.
 
 Pictures uses the Windows user shell-folder configuration or Linux XDG `user-dirs.dirs`, including redirected locations. If no valid existing pictures directory is configured, the built-in entry remains in settings but is omitted from the download menu.
