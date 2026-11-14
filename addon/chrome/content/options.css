@@ -1781,6 +1781,35 @@ dialog.encoding-editor-dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .encoding-presets button { white-space: normal; overflow-wrap: anywhere; text-align: start; }
 #filename-encoding-error { color: var(--danger); }
 
+#filename-encoding-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-block: 8px;
+}
+
+#filename-encoding-list .auto-extension-row {
+  min-height: 34px;
+  max-width: 100%;
+  gap: 6px;
+  padding: 2px 4px 2px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+#filename-encoding-list .auto-extension-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#filename-encoding-list .icon-button {
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+#filename-encoding-list .empty-row { flex-basis: 100%; }
+
 .encoding-setting-row { display: flex; align-items: center; gap: 16px; }
 .encoding-setting-row > .toggle-row { flex: 1; min-width: 0; }
 .encoding-setting-action { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }

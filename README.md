@@ -29,7 +29,7 @@ Pictures uses the Windows user shell-folder configuration or Linux XDG `user-dir
 
 Filename encoding detection uses bundled jschardet and Firefox's native decoders. The button to the right of the filename field offers Automatic, the Firefox filename, and UTF-8, GB18030, Big5, Shift_JIS, EUC-JP, EUC-KR, and Windows-1252. Add up to 30 Firefox-supported encoding names under Settings → Download dialog; separate names with commas or spaces. Switching encodings decodes the original URL bytes and replaces the filename field, including any edits. Server-provided filenames take priority. Short filenames can remain ambiguous; manual selection is available even when automatic detection is disabled.
 
-The **Additional filename encodings** button is beside **Detect URL filename encoding** and is disabled when detection is off. Its dialog accepts multiple names followed by Add or Enter, shows removable entries, and provides quick-add presets for English, Chinese, Hindi, Spanish, Arabic, French, Bengali, Portuguese, Russian, and Indonesian. Done stages the changes for Apply; Cancel or Escape discards dialog changes.
+The **Additional filename encodings** button is beside **Detect URL filename encoding** and is disabled when detection is off. Its dialog accepts multiple names followed by Add or Enter, shows encodings as removable badges that wrap onto additional lines as needed, and provides quick-add presets for English, Chinese, Hindi, Spanish, Arabic, French, Bengali, Portuguese, Russian, and Indonesian. Done stages the changes for Apply; Cancel or Escape discards dialog changes.
 
 ## Where it is heading
 
