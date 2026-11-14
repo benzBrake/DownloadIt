@@ -1,0 +1,254 @@
+---
+import { currentLocale } from "../data/site";
+
+const isZh = currentLocale(Astro.locals.starlightRoute.lang) === "zh-CN";
+const copy = isZh ? {
+  description: "Firefox 下载历史清理演示，分别展示删除失败记录与检查文件后删除失效记录。选择图下方的演示按钮播放。",
+  title: "我的足迹 · 下载", clear: "清空下载", failed: "删除失败记录", unavailable: "删除失效记录",
+  failedStatus: "下载失败", missingStatus: "已完成 · 文件不存在", availableStatus: "已完成 · 文件仍存在",
+  activeStatus: "正在下载 · 42%", canceledStatus: "已取消", checking: "正在检查文件…",
+  note: "仅删除历史记录，不删除实际文件，也不取消下载。",
+  playFailed: "演示删除失败记录", playUnavailable: "演示删除失效记录",
+  replayFailed: "重播删除失败记录", replayUnavailable: "重播删除失效记录", stop: "停止演示",
+  idle: "选择一个按钮播放；每次演示都会恢复完整列表。",
+  runningFailed: "定位报告下载错误的记录，然后清理。",
+  runningUnavailable: "检查成功下载的文件，仅清理文件已不存在的记录。",
+  endedFailed: "已删除 1 条失败记录，其他记录保留。",
+  endedUnavailable: "已删除 1 条失效记录，文件仍存在的成功记录及其他记录保留。",
+} : {
+  description: "Firefox download history cleanup demonstration: remove failed records, or check completed files and remove unavailable records. Use the demo buttons below to play.",
+  title: "Library · Downloads", clear: "Clear Downloads", failed: "Remove Failed Records", unavailable: "Remove Unavailable Records",
+  failedStatus: "Download failed", missingStatus: "Completed · File missing", availableStatus: "Completed · File exists",
+  activeStatus: "Downloading · 42%", canceledStatus: "Canceled", checking: "Checking file…",
+  note: "Only history records are removed. Files and active downloads are kept.",
+  playFailed: "Demo: remove failed records", playUnavailable: "Demo: remove unavailable records",
+  replayFailed: "Replay: remove failed records", replayUnavailable: "Replay: remove unavailable records", stop: "Stop demo",
+  idle: "Choose a demo. Each playback starts with the full list.",
+  runningFailed: "Find records reporting a download error, then remove them.",
+  runningUnavailable: "Check completed downloads and remove only records with missing files.",
+  endedFailed: "Removed 1 failed record. All other records are kept.",
+  endedUnavailable: "Removed 1 unavailable record. Existing files and all other records are kept.",
+};
+
+const records = [
+  { kind: "failed", name: "sample-archive.zip", status: copy.failedStatus, color: "#b53b39" },
+  { kind: "unavailable", name: "travel-notes.pdf", status: copy.missingStatus, color: "#986016" },
+  { kind: "available", name: "DownloadIt-guide.pdf", status: copy.availableStatus, color: "#236747" },
+  { kind: "active", name: "sample-video.mp4", status: copy.activeStatus, color: "#087eb6" },
+  { kind: "canceled", name: "sample-photo.png", status: copy.canceledStatus, color: "#586e80" },
+];
+---
+
+<download-history-demo data-state="idle">
+  <svg class="scene" viewBox="0 0 800 500" width="800" height="500" role="img" aria-label={copy.description}>
+    <rect width="800" height="500" fill="#edf4f8" />
+    <circle cx="766" cy="40" r="170" fill="#e0eef6" />
+    <circle cx="20" cy="490" r="110" fill="#e3eef4" />
+    <rect x="24" y="24" width="752" height="428" rx="14" fill="#fff" stroke="#d5e0e7" />
+    <path d="M38 24h724a14 14 0 0 1 14 14v44H24V38a14 14 0 0 1 14-14Z" fill="#f7f9fb" />
+    <circle cx="48" cy="54" r="5" fill="#d0dae2" />
+    <circle cx="65" cy="54" r="5" fill="#d0dae2" />
+    <circle cx="82" cy="54" r="5" fill="#d0dae2" />
+    <text x="108" y="62" class="heading">{copy.title}</text>
+    <text x="750" y="60" text-anchor="end" class="brand">Firefox</text>
+    <path d="M24 82h752" stroke="#e3e9ef" />
+
+    <rect x="42" y="100" width="142" height="38" rx="6" fill="#f1f5f9" stroke="#d5e0e7" />
+    <text x="113" y="124" text-anchor="middle" class="toolbar-label">{copy.clear}</text>
+    <g data-tool="failed">
+      <rect class="tool-plate" x="194" y="100" width="250" height="38" rx="6" fill="#e2f1fa" stroke="#a8cfe4" />
+      <text x="319" y="124" text-anchor="middle" class="toolbar-label">{copy.failed}</text>
+    </g>
+    <g data-tool="unavailable">
+      <rect class="tool-plate" x="454" y="100" width="304" height="38" rx="6" fill="#e2f1fa" stroke="#a8cfe4" />
+      <text x="606" y="124" text-anchor="middle" class="toolbar-label">{copy.unavailable}</text>
+    </g>
+    <path d="M42 153h716" stroke="#e3e9ef" />
+
+    {records.map((record, index) => (
+      <g transform={`translate(0 ${162 + index * 57})`}>
+        <g data-record={record.kind}>
+          <rect class="record-highlight" x="42" y="0" width="716" height="54" rx="6" fill="#fff0d9" />
+          <rect x="55" y="8" width="34" height="38" rx="6" fill="#f0f5f9" />
+          <path d="M65 16h9l6 6v16H65Zm9 0v7h6" fill="none" stroke={record.color} stroke-width="1.6" stroke-linejoin="round" />
+          <text x="105" y="24" class="filename">{record.name}</text>
+          <text x="105" y="44" class="source">example.org</text>
+          <text x="742" y="32" text-anchor="end" class="record-status" fill={record.color}>{record.status}</text>
+          {(record.kind === "unavailable" || record.kind === "available") && (
+            <text x="742" y="32" text-anchor="end" class="check-note">{copy.checking}</text>
+          )}
+          <path d="M105 55h637" stroke="#edf1f5" />
+        </g>
+      </g>
+    ))}
+
+    <g class="cursor" fill="#172e40" stroke="#fff" stroke-width="2.5" stroke-linejoin="round" aria-hidden="true">
+      <path d="m0 0 3 27 7-7 6 12 6-3-6-12 10-1Z" />
+    </g>
+    <g class="click-ring" fill="none" stroke="#168ac5" stroke-width="3" aria-hidden="true"><circle r="19" /></g>
+    <text x="400" y="482" text-anchor="middle" class="safety-note">{copy.note}</text>
+  </svg>
+
+  <div class="controls" hidden>
+    <button type="button" data-action="failed" data-play={copy.playFailed} data-replay={copy.replayFailed} data-stop={copy.stop}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path class="play-icon" d="m5 3 8 5-8 5Z" /><rect class="stop-icon" x="3" y="3" width="10" height="10" rx="1" /></svg>
+      <span>{copy.playFailed}</span>
+    </button>
+    <button type="button" data-action="unavailable" data-play={copy.playUnavailable} data-replay={copy.replayUnavailable} data-stop={copy.stop}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path class="play-icon" d="m5 3 8 5-8 5Z" /><rect class="stop-icon" x="3" y="3" width="10" height="10" rx="1" /></svg>
+      <span>{copy.playUnavailable}</span>
+    </button>
+  </div>
+  <p class="demo-status" role="status" aria-live="polite" aria-atomic="true" data-idle={copy.idle} data-running-failed={copy.runningFailed} data-running-unavailable={copy.runningUnavailable} data-ended-failed={copy.endedFailed} data-ended-unavailable={copy.endedUnavailable}>{copy.idle}</p>
+</download-history-demo>
+
+<script>
+  type CleanupKind = "failed" | "unavailable";
+
+  class DownloadHistoryDemo extends HTMLElement {
+    private animations: Animation[] = [];
+    private generation = 0;
+    private listeners: AbortController | null = null;
+
+    connectedCallback() {
+      if (this.listeners) return;
+      this.listeners = new AbortController();
+      this.querySelector<HTMLElement>(".controls")!.hidden = false;
+      this.querySelectorAll<HTMLButtonElement>("button[data-action]").forEach(button => {
+        button.addEventListener("click", () => {
+          const kind = button.dataset.action as CleanupKind;
+          if (this.dataset.state === "playing" && this.dataset.kind === kind) this.reset();
+          else void this.play(kind);
+        }, { signal: this.listeners!.signal });
+      });
+    }
+
+    private setState(state: "idle" | "playing" | "ended", kind?: CleanupKind) {
+      this.dataset.state = state;
+      this.dataset.kind = kind ?? "";
+      this.querySelectorAll<HTMLButtonElement>("button[data-action]").forEach(button => {
+        const selected = button.dataset.action === kind;
+        button.dataset.playing = String(state === "playing" && selected);
+        button.querySelector("span")!.textContent = button.dataset[
+          selected && state === "playing" ? "stop" : selected && state === "ended" ? "replay" : "play"
+        ] ?? "";
+      });
+      const status = this.querySelector<HTMLElement>(".demo-status")!;
+      const message = state === "idle" ? "idle"
+        : `${state === "playing" ? "running" : "ended"}${kind === "failed" ? "Failed" : "Unavailable"}`;
+      status.textContent = status.dataset[message] ?? "";
+    }
+
+    private reset() {
+      this.generation++;
+      this.animations.forEach(animation => animation.cancel());
+      this.animations = [];
+      this.setState("idle");
+    }
+
+    private async play(kind: CleanupKind) {
+      this.reset();
+      const generation = this.generation;
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      this.setState("playing", kind);
+      // Every animation shares one five-second timeline, including its final held frame.
+      const animate = (element: Element, keyframes: Keyframe[]) => {
+        this.animations.push(element.animate(keyframes, { duration: reducedMotion ? 0 : 5000, fill: "both", easing: "ease-in-out" }));
+      };
+      const records = Array.from(this.querySelectorAll<SVGGElement>("[data-record]"));
+      const targetIndex = records.findIndex(record => record.dataset.record === kind);
+      const target = records[targetIndex];
+
+      if (!reducedMotion) {
+        const x = kind === "failed" ? 319 : 606;
+        animate(this.querySelector(".cursor")!, [
+          { opacity: 0, transform: "translate(710px, 180px)", offset: 0 },
+          { opacity: 1, transform: `translate(${x}px, 119px)`, offset: 0.2 },
+          { opacity: 1, transform: `translate(${x}px, 122px)`, offset: 0.25 },
+          { opacity: 0, transform: `translate(${x + 15}px, 140px)`, offset: 0.35 },
+          { opacity: 0, transform: `translate(${x + 15}px, 140px)`, offset: 1 },
+        ]);
+        animate(this.querySelector(".click-ring")!, [
+          { opacity: 0, transform: `translate(${x}px, 119px) scale(0.5)`, offset: 0 },
+          { opacity: 0, transform: `translate(${x}px, 119px) scale(0.5)`, offset: 0.23 },
+          { opacity: 0.8, transform: `translate(${x}px, 119px) scale(0.7)`, offset: 0.25 },
+          { opacity: 0, transform: `translate(${x}px, 119px) scale(1.3)`, offset: 0.33 },
+          { opacity: 0, transform: `translate(${x}px, 119px) scale(1.3)`, offset: 1 },
+        ]);
+        animate(this.querySelector(`[data-tool="${kind}"] .tool-plate`)!, [
+          { fill: "#e2f1fa", offset: 0 }, { fill: "#e2f1fa", offset: 0.2 },
+          { fill: "#9dd5f0", offset: 0.25 }, { fill: "#e2f1fa", offset: 0.4 }, { fill: "#e2f1fa", offset: 1 },
+        ]);
+        animate(target.querySelector(".record-highlight")!, [
+          { opacity: 0, offset: 0 }, { opacity: 0, offset: 0.33 },
+          { opacity: 1, offset: 0.42 }, { opacity: 1, offset: 1 },
+        ]);
+        if (kind === "unavailable") {
+          records.filter(record => record.querySelector(".check-note")).forEach(record => {
+            animate(record.querySelector(".check-note")!, [
+              { opacity: 0, offset: 0 }, { opacity: 0, offset: 0.32 },
+              { opacity: 1, offset: 0.34 }, { opacity: 1, offset: 0.53 },
+              { opacity: 0, offset: 0.55 }, { opacity: 0, offset: 1 },
+            ]);
+            animate(record.querySelector(".record-status")!, [
+              { opacity: 1, offset: 0 }, { opacity: 1, offset: 0.32 },
+              { opacity: 0, offset: 0.34 }, { opacity: 0, offset: 0.53 },
+              { opacity: 1, offset: 0.55 }, { opacity: 1, offset: 1 },
+            ]);
+          });
+        }
+      }
+      animate(target, [
+        { opacity: 1, transform: "translateX(0)", offset: 0 },
+        { opacity: 1, transform: "translateX(0)", offset: 0.64 },
+        { opacity: 0, transform: "translateX(-12px)", offset: 0.78 },
+        { opacity: 0, transform: "translateX(-12px)", offset: 1 },
+      ]);
+      records.slice(targetIndex + 1).forEach(record => animate(record, [
+        { transform: "translateY(0)", offset: 0 },
+        { transform: "translateY(0)", offset: 0.78 },
+        { transform: "translateY(-57px)", offset: 0.92 },
+        { transform: "translateY(-57px)", offset: 1 },
+      ]));
+
+      try {
+        await Promise.all(this.animations.map(animation => animation.finished));
+        if (generation === this.generation) this.setState("ended", kind);
+      } catch {
+        // Stopping, switching demos, or leaving the page cancels this playback.
+      }
+    }
+
+    disconnectedCallback() {
+      this.listeners?.abort();
+      this.listeners = null;
+      this.reset();
+    }
+  }
+  if (!customElements.get("download-history-demo")) {
+    customElements.define("download-history-demo", DownloadHistoryDemo);
+  }
+</script>
+
+<style>
+  download-history-demo { display: block; width: 100%; min-width: 0; color-scheme: light; background: #edf4f8; }
+  .scene { display: block; width: 100%; height: auto; font-family: var(--__sl-font), sans-serif; fill: #263b4b; }
+  .heading { font-size: 25px; font-weight: 600; }
+  .brand { font-size: 19px; fill: #61798c; }
+  .toolbar-label { font-size: 18px; font-weight: 500; }
+  .filename { font-size: 21px; font-weight: 500; }
+  .source { font-size: 15px; fill: #61798c; }
+  .record-status, .check-note { font-size: 18px; }
+  .check-note { fill: #087eb6; }
+  .safety-note { font-size: 18px; fill: #496477; }
+  .record-highlight, .check-note, .cursor, .click-ring { opacity: 0; }
+  .controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.65rem; margin: 0; padding: 0.5rem 1rem 0; }
+  .controls[hidden] { display: none; }
+  button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; max-width: 100%; margin: 0; padding: 0.65rem 0.8rem; border: 1px solid #087eb6; border-radius: 6px; background: #087eb6; color: #fff; font: inherit; font-size: 0.85rem; line-height: 1.4; cursor: pointer; }
+  button:hover { background: #075985; border-color: #075985; }
+  button:focus-visible { outline: 3px solid #075985; outline-offset: 3px; }
+  button svg { flex-shrink: 0; }
+  .stop-icon, [data-playing="true"] .play-icon { display: none; }
+  [data-playing="true"] .stop-icon { display: block; }
+  .demo-status { min-height: 3.2em; margin: 0; padding: 0.8rem 1rem 1rem; color: #496477; font-size: 0.85rem; line-height: 1.6; text-align: center; }
+</style>

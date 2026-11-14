@@ -37,3 +37,16 @@ Open **DownloadIt Links** from the toolbar panel or context menu. Filter explici
 Automatic capture is conservative by default. Add file extensions to the allow list only when you want remembered Firefox downloads of those types to use DownloadIt. The deny list and built-in safety rules always take priority.
 
 See [Automatic capture](../../guides/auto-capture/) before enabling broad rules.
+
+
+## Adjust save actions
+
+In **Download dialog** settings, enable the controls you need, configure Save To folders, and click **Apply**. Edit filenames, copy source links, or correct filename encoding when downloading. See [Download dialog and saving](../../guides/download-dialog/).
+
+## Configure the video menu
+
+Install yt-dlp yourself, select its executable under **Specialized Downloaders**, and click **Apply**. Supported pages show a floating menu for video, MP3 audio, subtitles, and playlists. See [yt-dlp video menu](../../guides/yt-dlp/).
+
+## Clean records and enable sound
+
+Open Firefox's **Library → Downloads** to use the cleanup buttons, which are enabled by default. Completion sound is off by default; enable it in **Download history**, choose a sound, set the volume, and preview it. See [Download history and sounds](../../guides/download-history/).

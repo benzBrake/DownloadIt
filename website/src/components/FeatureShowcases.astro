@@ -1,0 +1,46 @@
+---
+import { ArrowUpRight } from "lucide-astro";
+import Screenshot from "./Screenshot.astro";
+import { currentLocale, pagePath, type RouteName } from "../data/site";
+import type { ScreenshotId } from "../data/screenshots";
+
+const locale = currentLocale(Astro.locals.starlightRoute.lang);
+const isZh = locale === "zh-CN";
+interface Scene { title: string; lead: string; points: string[]; route: RouteName; image: ScreenshotId; }
+const scenes: Scene[] = isZh ? [
+  { title: "保存之前，把文件名和位置选好", lead: "让 Firefox 下载弹窗同时成为文件名编辑器和快捷保存入口。", points: ["编辑文件名、复制来源链接，选择另存为或保存并打开。", "把内置位置和自定义文件夹放进保存到菜单。", "自动检测 URL 文件名编码，也可手动选择编码修正乱码。"], route: "downloadDialog", image: "download-dialog-save-to" },
+  { title: "在视频页面选择 yt-dlp 下载方式", lead: "配置自行安装的 yt-dlp，在支持的页面直接打开浮动菜单。", points: ["内置视频、MP3 音频、仅字幕和播放列表四种菜单。", "可修改参数、名称和顺序，第一项已启用菜单作为主按钮操作。", "自动添加页面网址与 Firefox 下载目录；转换和合并可能需要 FFmpeg/ffprobe。"], route: "ytDlp", image: "ytdlp-menu" },
+  { title: "一页链接，筛选后一次提交", lead: "收集页面、选区和 frame 中的显式链接，确认选中的任务再下载。", points: ["按类型、后缀、协议和文本筛选。", "复制 URL、标题和 URL，或 Markdown 链接。", "按下载工具能力提交普通链接、magnet 或 ed2k 链接。"], route: "entryPoints", image: "batch-links" },
+  { title: "下载结束后，整理记录或听声提醒", lead: "在 Firefox 下载历史中清理失败、失效记录，也可以开启完成提示音。", points: ["清理操作只删除历史记录，不删除实际文件。", "提示音默认关闭，支持内置声音、本地音频、音量调节和试听。", "适用于 Firefox 管理的下载，包括隐私窗口；不监听外部下载器。"], route: "downloadHistory", image: "download-history-settings" },
+] : [
+  { title: "Choose the filename and folder before saving", lead: "Turn Firefox's download dialog into a filename editor and a shortcut to your usual folders.", points: ["Edit filenames, copy source links, Save As, or save and open.", "Keep built-in locations and custom folders in the Save To menu.", "Detect URL filename encoding automatically or choose an encoding to fix unreadable names."], route: "downloadDialog", image: "download-dialog-save-to" },
+  { title: "Choose a yt-dlp action right on the video page", lead: "Connect your own yt-dlp installation to a floating menu on supported pages.", points: ["Start with video, MP3 audio, subtitles only, and playlist presets.", "Edit arguments, names, and order. The first enabled action becomes the main button.", "The page URL and Firefox download folder are added automatically; conversion and merging may need FFmpeg/ffprobe."], route: "ytDlp", image: "ytdlp-menu" },
+  { title: "Review a page of links, then send one batch", lead: "Collect explicit links from pages, selections, and frames before choosing what to download.", points: ["Filter by type, extension, protocol, and text.", "Copy URLs, titles with URLs, or Markdown links.", "Send ordinary links, magnet links, or ed2k links according to the downloader's capabilities."], route: "entryPoints", image: "batch-links" },
+  { title: "Keep history tidy and hear when a download finishes", lead: "Remove failed or unavailable records in Firefox download history, and optionally enable a completion sound.", points: ["Cleanup removes history records without deleting files.", "Sound is off by default, with a built-in chime, local audio, volume, and preview controls.", "Sounds cover Firefox-managed downloads, including private windows; external managers are not monitored."], route: "downloadHistory", image: "download-history-settings" },
+];
+---
+
+{scenes.map((scene, index) => (
+  <section class="showcase" aria-labelledby={`scene-${index}`}>
+    <div>
+      <p class="section-label">0{index + 1} / {isZh ? "使用场景" : "In Firefox"}</p>
+      <h2 id={`scene-${index}`}>{scene.title}</h2>
+      <p class="lead">{scene.lead}</p>
+      <ul>{scene.points.map(point => <li>{point}</li>)}</ul>
+      <a href={pagePath(scene.route, locale)}>{isZh ? "查看使用指南" : "Read the guide"}<ArrowUpRight size={16} aria-hidden="true" /></a>
+    </div>
+    <Screenshot id={scene.image} />
+  </section>
+))}
+
+<style>
+  .showcase { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; gap: clamp(2rem, 5vw, 4rem); padding-block: clamp(3rem, 7vw, 6rem); border-bottom: 1px solid var(--sl-color-hairline); }
+  .section-label { margin: 0; color: var(--sl-color-text-accent); font-family: var(--__sl-font-mono); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  h2 { margin: 0.65rem 0 0; color: var(--sl-color-white); font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.15; }
+  .lead { color: var(--sl-color-gray-3); font-size: 1.05rem; margin-top: 1.1rem; }
+  ul { margin: 1.5rem 0 0; padding-inline-start: 1.2rem; color: var(--sl-color-gray-3); }
+  li + li { margin-top: 0.65rem; }
+  a { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1.5rem; color: var(--sl-color-text-accent); font-weight: 600; text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 0.18em; }
+  @media (max-width: 55rem) { .showcase { grid-template-columns: 1fr; gap: 0; } }
+</style>

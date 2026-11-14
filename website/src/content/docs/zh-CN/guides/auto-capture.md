@@ -2,7 +2,7 @@
 title: 自动接管
 description: 通过扩展名白名单、黑名单和不可覆盖的安全规则，决定 DownloadIt 可以接管哪些 Firefox 已记住的下载。
 sidebar:
-  order: 2
+  order: 5
   label: 自动接管
 ---
 

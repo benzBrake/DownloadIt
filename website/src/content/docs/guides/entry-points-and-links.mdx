@@ -2,9 +2,11 @@
 title: Download entry points and batch links
 description: Use DownloadIt from context menus and Firefox prompts, then collect, filter, copy, or download explicit links from a page and its frames.
 sidebar:
-  order: 1
+  order: 3
   label: Entry points and batch links
 ---
+
+import Screenshot from "../../../components/Screenshot.astro";
 
 ## Context menu
 
@@ -17,6 +19,9 @@ Supported standard targets include HTTP, HTTPS, FTP, `magnet:`, and `ed2k:`. The
 For supported downloads, DownloadIt appears alongside Firefox's native actions. The native Firefox downloader is not duplicated inside this prompt because **Save File** already provides the same route.
 
 When Firefox remembers a file-type action, DownloadIt can also intercept later downloads through automatic capture rules. Protected add-on packages and unsupported schemes remain in Firefox.
+
+
+For filename editing, encoding correction, Save To, Save As, and Save and Open, see [Download dialog and saving](../download-dialog/). For the dedicated video-page entry point, see [yt-dlp video menu](../yt-dlp/).
 
 ## DownloadIt Links
 
@@ -42,3 +47,6 @@ Selected rows can be copied as:
 Copying does not contact a download manager. A batch download preserves row alignment for URLs, titles, filenames, and per-link metadata before it reaches the selected provider.
 
 Link-group names and suffixes can be edited under [Settings reference](../../reference/settings/#link-groups).
+
+
+<Screenshot id="batch-links" />

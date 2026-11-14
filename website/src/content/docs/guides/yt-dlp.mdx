@@ -1,0 +1,39 @@
+---
+title: yt-dlp video menu
+description: Configure your own yt-dlp executable and customize the floating video, MP3 audio, subtitle, and playlist menu.
+sidebar:
+  order: 2
+---
+
+import Screenshot from "../../../components/Screenshot.astro";
+
+## Connect yt-dlp
+
+Install yt-dlp yourself; it is not bundled with DownloadIt. In **Specialized Downloaders**, select the yt-dlp executable and click **Apply**. On Linux the file must be executable. Audio extraction, format conversion, and merging may also require FFmpeg/ffprobe to be available to yt-dlp.
+
+DownloadIt asks yt-dlp whether the current page has a supported format before showing the floating button. A configured executable does not mean every video page is supported. The extension does not sniff browser network traffic to discover media.
+
+<Screenshot id="ytdlp-menu" />
+
+## Choose a preset
+
+| Default action | Behavior |
+| --- | --- |
+| Video | Downloads the current video without expanding a playlist. |
+| MP3 audio | Extracts audio and requests MP3 output; FFmpeg may be required. |
+| Subtitles only | Requests all available subtitle languages, including automatic subtitles, without the video or live chat. |
+| Playlist | Allows yt-dlp to download a playlist when the site supports it. |
+
+Click the main button to run the first enabled action, or open its arrow menu to choose another. Subtitle and playlist availability depends on the website and yt-dlp.
+
+## Customize the menu
+
+In **Floating Button Menu**, add, rename, edit, enable, disable, delete, or reorder actions. At least one action must remain enabled. A built-in action with an empty name uses its translated default name. Click **Apply** to save; already open pages also update.
+
+Enter only yt-dlp arguments. DownloadIt automatically adds the current page URL and Firefox's download directory. Quote values containing spaces. A custom `--paths` argument can override the directory. DownloadIt starts yt-dlp with `--ignore-config`, so put arguments needed for this menu in its preset rather than relying on yt-dlp's configuration file.
+
+The **Show yt-dlp window when downloading** option controls process window visibility where the operating system supports hiding it.
+
+<Screenshot id="ytdlp-settings" />
+
+yt-dlp runs as an external tool. Firefox's [completion sound](../download-history/#completion-sound) does not track its downloads, and the downloader [request forwarding](../../reference/privacy/#request-forwarding) controls should not be assumed to supply browser cookies to yt-dlp.

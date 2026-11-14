@@ -2,11 +2,15 @@
 title: Download manager integrations
 description: Understand the native Firefox provider, built-in local integrations, Windows FlashGot bridge, capability labels, and connection tests.
 sidebar:
-  order: 3
+  order: 6
   label: Download managers
 ---
 
+import Screenshot from "../../../components/Screenshot.astro";
+
 DownloadIt presents every usable route through one download-tool list. A route may use Firefox itself, a built-in local protocol, a native executable, the Windows FlashGot bridge, or a custom definition.
+
+<Screenshot id="managers-overview" />
 
 ## Included routes
 
@@ -47,3 +51,6 @@ Each active route reports whether it can receive:
 Configured local HTTP integrations are probed in the background at startup and during refresh. Manual connection tests use the unsaved editor values and do not change the saved provider state. Local launchers are started only for an explicit test or submission, never merely because settings were opened.
 
 For executable templates and external aria2 services, continue with [Custom downloaders](../custom-downloaders/).
+
+
+The video-page yt-dlp menu is configured separately under **Specialized Downloaders**. See [yt-dlp video menu](../yt-dlp/).

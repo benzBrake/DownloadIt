@@ -1,0 +1,38 @@
+---
+title: Download dialog and saving
+description: Edit filenames, copy source links, choose Save To folders, and correct URL filename encodings in Firefox's download dialog.
+sidebar:
+  order: 1
+---
+
+import Screenshot from "../../../components/Screenshot.astro";
+
+## Choose an action before saving
+
+When Firefox shows a supported download confirmation dialog, DownloadIt adds filename editing, a full source link with a copy control, and extra save actions. Open **Download dialog** in DownloadIt settings to choose which controls appear, then click **Apply**.
+
+- **Save To** selects a configured destination without browsing for it each time.
+- **Save As** opens a file picker to choose the filename and location.
+- **Save and Open** opens the file after Firefox finishes downloading it.
+
+Available external downloaders also appear in the dialog. Firefox's native downloader is not duplicated because **Save File** already provides that route. Downloads for which Firefox has remembered an action may skip this dialog; see [Automatic capture](../auto-capture/).
+
+<Screenshot id="download-dialog-save-to" />
+
+## Configure Save To folders
+
+In **Download dialog → Save To locations**, manage the built-in Desktop, Documents, Pictures, and Downloads locations alongside your own folders. Use the arrow next to **Add Folder** to add a built-in location. Built-in paths follow system settings; leave the display name empty to use the translated default name.
+
+On Windows, **Automatically list uncovered drives** adds drive roots that are not already covered by a configured location. This is optional and does not add drive entries on Linux. Click **Apply** to save the configuration.
+
+<Screenshot id="download-dialog-settings" />
+
+## Correct filename encoding
+
+Enable **Detect URL filename encoding** to interpret filenames encoded in download URLs. Detection is a guess: legacy encodings can be ambiguous, and the downloaded file's contents do not determine its URL filename encoding.
+
+If a name is unreadable, open the encoding control in the download dialog and choose a candidate or the original Firefox filename. You can still edit the filename directly. Use **Other Filename Encodings** in settings to add Firefox-supported encoding names, individually or through language presets. Finish the encoding editor and click **Apply** in settings.
+
+<Screenshot id="filename-encoding" />
+
+For all related controls, see [Settings reference](../../reference/settings/#download-dialog).

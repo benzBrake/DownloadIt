@@ -1,7 +1,6 @@
 ---
-import { Picture } from "astro:assets";
 import { ArrowRight, Download, ExternalLink, ShieldCheck } from "lucide-astro";
-import settingsScreenshot from "../assets/screenshots/downloadit-settings-release.png";
+import Screenshot from "./Screenshot.astro";
 import { product } from "../data/product";
 import { currentLocale, pagePath } from "../data/site";
 
@@ -9,71 +8,59 @@ const locale = currentLocale(Astro.locals.starlightRoute.lang);
 const copy =
   locale === "zh-CN"
     ? {
-        eyebrow: "Firefox 原生下载转接",
+        eyebrow: "Firefox 下载增强",
         title: "DownloadIt",
-        tagline: "把 Firefox 的下载任务交给你已经在使用的下载工具。",
+        tagline: "从保存文件到视频下载，让 Firefox 下载更顺手。",
         install: "查看安装指南",
         nightly: `下载 Nightly v${product.version}`,
         prerelease: "预发布",
         loaderLead: "需要兼容的 Loader：",
         loaderSeparator: "；Dev/Nightly 可使用",
-        screenshotAlt: "Firefox 中的 DownloadIt 下载管理器设置页面",
       }
     : {
-        eyebrow: "Firefox-native download routing",
+        eyebrow: "Download enhancements for Firefox",
         title: "DownloadIt",
-        tagline: "Send Firefox downloads to the manager you already use.",
+        tagline: "Make saving files, downloading videos, and handing off tasks easier in Firefox.",
         install: "Read the installation guide",
         nightly: `Download Nightly v${product.version}`,
         prerelease: "Pre-release",
         loaderLead: "Requires a compatible Loader: ",
         loaderSeparator: "; Bootstrap Loader is available on Dev/Nightly",
-        screenshotAlt: "DownloadIt download manager settings inside Firefox",
       };
 ---
 
-<section class="downloadit-hero" aria-labelledby="downloadit-hero-title">
-  <Picture
-    src={settingsScreenshot}
-    widths={[640, 960, 1440, 1920]}
-    sizes="100vw"
-    formats={["avif", "webp"]}
-    fallbackFormat="png"
-    alt={copy.screenshotAlt}
-    loading="eager"
-    decoding="async"
-    class="hero-media"
-    pictureAttributes={{ "aria-hidden": "true" }}
-  />
-  <div class="hero-wash" aria-hidden="true"></div>
+<section id="_top" class="downloadit-hero" aria-labelledby="downloadit-hero-title">
   <div class="hero-content">
-    <div class="hero-kicker"><span class="hero-pulse" aria-hidden="true"></span>{copy.eyebrow}</div>
-    <h1 id="downloadit-hero-title">{copy.title}</h1>
-    <p class="hero-tagline">{copy.tagline}</p>
-    <div class="hero-actions">
-      <a class="hero-button hero-button-primary" href={pagePath("install", locale)}>
-        <ArrowRight size={18} strokeWidth={2.2} aria-hidden="true" />
-        <span>{copy.install}</span>
-      </a>
-      <a class="hero-button hero-button-nightly" href={product.downloadUrl}>
-        <Download size={18} strokeWidth={2.2} aria-hidden="true" />
-        <span>{copy.nightly}</span>
-        <small>{copy.prerelease}</small>
-      </a>
-    </div>
-    <div class="hero-requirement">
-      <ShieldCheck size={17} strokeWidth={2} aria-hidden="true" />
-      <span>{copy.loaderLead}</span>
-      <a href={product.loaderUrl} rel="noreferrer">
-        userChrome.js-Loader
-        <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
-      </a>
-      <span>{copy.loaderSeparator}</span>
-      <a href={product.bootstrapLoaderUrl} rel="noreferrer">
-        Bootstrap Loader
-        <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
-      </a>
-    </div>
+    <div class="hero-copy">
+      <div class="hero-kicker"><span class="hero-pulse" aria-hidden="true"></span>{copy.eyebrow}</div>
+      <h1 id="downloadit-hero-title">{copy.title}</h1>
+      <p class="hero-tagline">{copy.tagline}</p>
+      <div class="hero-actions">
+        <a class="hero-button hero-button-primary" href={pagePath("install", locale)}>
+          <ArrowRight size={18} strokeWidth={2.2} aria-hidden="true" />
+          <span>{copy.install}</span>
+        </a>
+        <a class="hero-button hero-button-nightly" href={product.downloadUrl}>
+          <Download size={18} strokeWidth={2.2} aria-hidden="true" />
+          <span>{copy.nightly}</span>
+          <small>{copy.prerelease}</small>
+        </a>
+      </div>
+      <div class="hero-requirement">
+        <ShieldCheck size={17} strokeWidth={2} aria-hidden="true" />
+        <span>{copy.loaderLead}</span>
+        <a href={product.loaderUrl} rel="noreferrer">
+          userChrome.js-Loader
+          <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
+        </a>
+        <span>{copy.loaderSeparator}</span>
+        <a href={product.bootstrapLoaderUrl} rel="noreferrer">
+          Bootstrap Loader
+          <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
+        </a>
+      </div>
+  </div>
+    <div class="hero-preview"><Screenshot id="managers-overview" eager onDark /></div>
   </div>
   <div class="hero-edge" aria-hidden="true"><span></span><span></span><span></span></div>
 </section>
@@ -88,34 +75,16 @@ const copy =
     overflow: hidden;
     margin: calc(var(--sl-main-pad) * -1);
     margin-bottom: 0;
-    background: #1c1b22;
+    background: linear-gradient(135deg, #1c1b22 30%, #082f44);
   }
 
-  .hero-media,
-  .hero-media :global(img) {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  .hero-media {
-    z-index: -2;
-  }
-
-  .hero-media :global(img) {
-    object-fit: cover;
-    object-position: center center;
-  }
-
-  .hero-wash {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background: rgba(18, 22, 24, 0.68);
-  }
+  .hero-preview { min-width: 0; }
 
   .hero-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3rem;
+    align-items: center;
     position: relative;
     z-index: 1;
     width: min(100% - 3rem, 76rem);
@@ -148,7 +117,7 @@ const copy =
     max-width: none;
     margin: 1.25rem 0 0;
     color: #fbfbfe;
-    font-size: 7.5rem;
+    font-size: clamp(3rem, 6vw, 6rem);
     font-weight: 700;
     letter-spacing: 0;
     line-height: 0.92;
@@ -277,15 +246,9 @@ const copy =
       margin-inline: calc(var(--sl-main-pad) * -1);
     }
 
-    .hero-media :global(img) {
-      object-position: 60% center;
-    }
-
-    .hero-wash {
-      background: rgba(18, 22, 24, 0.76);
-    }
-
     .hero-content {
+      grid-template-columns: 1fr;
+      gap: 1rem;
       width: min(100% - 2rem, 34rem);
       padding-block: 5rem 6rem;
     }

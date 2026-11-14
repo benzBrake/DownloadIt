@@ -1,0 +1,36 @@
+---
+title: Platform compatibility
+description: Check Firefox, Loader, operating system, and bundled helper requirements before installing DownloadIt.
+sidebar:
+  order: 2
+---
+
+import ProductValue from "../../../components/ProductValue.astro";
+
+DownloadIt requires Firefox <ProductValue field="firefoxMinVersion" /> or later and a compatible Loader. It is a bootstrapped XPI using Firefox internals, not a standalone WebExtension.
+
+## Firefox and Loaders
+
+| Firefox channel | Compatible Loader |
+| --- | --- |
+| Release / Beta / ESR | Customized userChrome.js Loader |
+| Developer Edition / Nightly | Customized userChrome.js Loader, or Bootstrap Loader |
+
+See [Installation and upgrades](../../getting-started/installation/) for setup and manual upgrades. A compatible Firefox version alone is insufficient without the Loader.
+
+## Operating systems
+
+| Environment | Current support |
+| --- | --- |
+| Windows | Supported; the bundled FlashGot helper can discover compatible external managers. |
+| Linux native package / Mozilla tarball | Supported; local launchers need executable permission. |
+| macOS | Not supported. |
+| Snap / Flatpak Firefox | Not supported. |
+
+## Individual integrations
+
+Firefox's native downloader is always available on supported platforms. JDownloader, AB Download Manager, XDM, uGet, and external aria2 services need their own local setup. The bundled Aria2Next supports Windows and Linux x86_64. Other Linux architectures may connect to an externally managed aria2 service.
+
+yt-dlp is installed separately. FFmpeg/ffprobe may be needed for extraction, conversion, or merging. The built-in completion sound works on Windows and Linux and follows only Firefox-managed downloads.
+
+The Windows FlashGot helper is an independent component. Its version does not determine the DownloadIt extension version.

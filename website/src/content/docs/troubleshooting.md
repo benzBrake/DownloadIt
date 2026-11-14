@@ -39,4 +39,16 @@ Use a distribution-native Firefox package or Mozilla tarball. Confirm the launch
 
 A Firefox policy may lock the preference; the settings page shows this state. If a custom downloader or rule JSON file is invalid, DownloadIt preserves the file and disables unsafe overwrites. Use retry after correcting it externally, or use the explicit reset action when discarding the damaged configuration is acceptable.
 
+## Video download button does not appear
+
+Check the yt-dlp executable under **Specialized Downloaders**, click **Apply**, and keep at least one menu action enabled. On Linux, check executable permission. The button appears only after yt-dlp detects a supported format; failed detection, unsupported sites, or pages needing extra authentication may prevent it. An executable path alone does not make every page downloadable. See the [yt-dlp guide](../guides/yt-dlp/).
+
+## Filenames are still unreadable
+
+Enable **Detect URL filename encoding** and apply the change. Legacy encodings can be ambiguous: select a candidate encoding in the download dialog or edit the name manually. Add missing choices through **Other Filename Encodings**. The file contents do not determine the URL filename encoding. See [Download dialog and saving](../guides/download-dialog/).
+
+## No completion sound
+
+Sound is off by default. Enable it in **Download history**, choose a nonzero volume, click **Apply**, and use **Preview** to check system volume and the audio file. Try the built-in sound to rule out a custom file problem. Only newly completed Firefox-managed downloads are monitored, not external managers or yt-dlp, and existing completed records do not play a sound. See [Download history and sounds](../guides/download-history/).
+
 For behavior not covered here, search the [GitHub issues](https://github.com/benzBrake/DownloadIt/issues) and include the Firefox version, operating system, DownloadIt version, entry point, and selected provider without posting secrets or Cookie data.

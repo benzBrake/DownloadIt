@@ -2,7 +2,7 @@
 title: 自定义命令与 aria2
 description: 使用明确的路径、模板、能力和生命周期行为配置可重复添加的命令行下载工具或 aria2 JSON-RPC 服务。
 sidebar:
-  order: 4
+  order: 7
   label: 自定义命令与 aria2
 ---
 

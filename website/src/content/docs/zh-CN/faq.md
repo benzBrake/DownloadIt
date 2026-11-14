@@ -40,7 +40,7 @@ DownloadIt 将部分 FlashGot 下载桥接行为移植到当前 Firefox。Window
 
 ## 支持抓取流媒体吗？
 
-不支持。DownloadIt Links 收集显式页面链接，不实现网络媒体嗅探或媒体元素资源发现。
+DownloadIt 不实现网络媒体嗅探或媒体元素资源发现；DownloadIt Links 只收集显式页面链接。视频下载可使用另行配置的 [yt-dlp 视频菜单](../guides/yt-dlp/)，由 yt-dlp 检测和处理支持的网站，需要自行安装依赖。
 
 ## 在哪里报告问题？
 

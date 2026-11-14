@@ -2,7 +2,7 @@
 title: Custom commands and aria2
 description: Configure repeatable command-line downloaders or aria2 JSON-RPC services with explicit paths, templates, capabilities, and lifecycle behavior.
 sidebar:
-  order: 4
+  order: 7
   label: Custom commands and aria2
 ---
 

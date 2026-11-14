@@ -1,0 +1,39 @@
+---
+title: yt-dlp 视频菜单
+description: 配置自行安装的 yt-dlp，并自定义视频、MP3 音频、字幕和播放列表浮动菜单。
+sidebar:
+  order: 2
+---
+
+import Screenshot from "../../../../components/Screenshot.astro";
+
+## 配置 yt-dlp
+
+请自行安装 yt-dlp，DownloadIt 不随包提供。在**专用下载器**中选择 yt-dlp 可执行文件，点击**应用**。Linux 上需要可执行权限。音频提取、格式转换和合并还可能需要 yt-dlp 能够调用 FFmpeg/ffprobe。
+
+DownloadIt 会先调用 yt-dlp 检测当前页面，确认有受支持的格式后才显示浮动按钮。配置了执行文件不代表所有视频页面都受支持。扩展不会通过嗅探浏览器网络流量发现媒体。
+
+<Screenshot id="ytdlp-menu" />
+
+## 选择预设
+
+| 默认操作 | 行为 |
+| --- | --- |
+| 视频 | 下载当前视频，不展开播放列表。 |
+| MP3 音频 | 提取音频并请求 MP3 输出，可能需要 FFmpeg。 |
+| 仅下载字幕 | 请求所有可用语言的字幕，包含自动字幕，不下载视频，也不包含直播聊天记录。 |
+| 播放列表 | 网站支持时允许 yt-dlp 下载播放列表。 |
+
+点击主按钮执行第一项已启用菜单，也可以展开箭头选择其他操作。字幕和播放列表是否可用取决于网站与 yt-dlp。
+
+## 自定义菜单
+
+在**浮动按钮菜单**中，可以添加、改名、编辑参数、启用或停用、删除和调整顺序。至少保留一项启用的菜单。内置菜单名称留空时使用翻译后的默认名称。点击**应用**后保存，已打开的页面也会更新。
+
+只需填写 yt-dlp 参数。DownloadIt 自动添加当前页面网址和 Firefox 下载目录，含空格的值用引号包裹。自定义 `--paths` 参数可覆盖目录。DownloadIt 启动 yt-dlp 时使用 `--ignore-config`，因此菜单所需的参数应写入预设，而不是依赖 yt-dlp 配置文件。
+
+**下载时显示 yt-dlp 窗口**控制进程窗口是否显示，隐藏能力取决于操作系统。
+
+<Screenshot id="ytdlp-settings" />
+
+yt-dlp 属于外部工具，Firefox 的[完成提示音](../download-history/#completion-sound)不追踪它的下载。[请求信息传递](../../reference/privacy/#request-forwarding)中的下载器开关也不代表会自动向 yt-dlp 提供浏览器 Cookie。

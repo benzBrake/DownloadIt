@@ -1,0 +1,29 @@
+---
+title: Download history and sounds
+description: Clean failed or unavailable Firefox download records and configure the optional download completion sound.
+sidebar:
+  order: 4
+---
+
+import Screenshot from "../../../components/Screenshot.astro";
+
+## Clean download records
+
+Open Firefox's **Library → Downloads**. DownloadIt adds **Remove Failed Records** and **Remove Unavailable Records** beside Firefox's cleanup control. The setting to show these buttons is enabled by default.
+
+- Failed-record cleanup removes records reporting a download error.
+- Unavailable-record cleanup checks successful downloads and removes their records only when the target file has been moved or deleted.
+
+Both actions remove history records only. They do not delete files or cancel downloads. Disable the cleanup buttons in **Download history** settings and click **Apply** to remove them from already open Library windows too.
+
+<Screenshot id="download-history" />
+
+## Completion sound
+
+Sound is off by default. In **Download history**, enable **Play a sound when a download completes**, choose a volume, and use **Preview** to listen. Leave the file field empty for the built-in sound, or select a local audio file Firefox can play. **Use Built-in Sound** restores the bundled chime. Click **Apply** to save.
+
+The built-in sound works on Windows and Linux. Audio files within Firefox's `chrome` directory can use portable relative paths; files outside it use absolute paths and must remain accessible.
+
+<Screenshot id="download-history-settings" />
+
+The sound follows Firefox-managed downloads, including private windows. It does not monitor external managers or yt-dlp. Existing completed records do not ring when the extension starts; overlapping completion sounds are coalesced instead of layered.

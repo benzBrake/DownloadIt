@@ -1,0 +1,55 @@
+---
+title: Settings reference
+description: Find DownloadIt's downloader, capture, dialog, history, link grouping, privacy, and yt-dlp settings.
+sidebar:
+  order: 1
+---
+
+Open settings from the DownloadIt toolbar panel. Changes are saved with **Apply**; edits in an inner editor may first be saved to the settings draft. Controls locked by Firefox policy cannot be changed.
+
+## Download managers
+
+Choose defaults for ordinary, magnet, and ed2k links, configure task startup behavior, and add or edit integrations. Availability and capability labels describe DownloadIt's integration path. A connection test can use unsaved editor values without changing the saved provider's status.
+
+See [Downloader integrations](../../guides/download-managers/) and [Custom commands and aria2](../../guides/custom-downloaders/).
+
+## Automatic capture
+
+Allow and deny rules decide which file types are handed off when Firefox has remembered a download action. Deny rules and built-in safety rules take precedence. See [Automatic capture](../../guides/auto-capture/).
+
+## Download dialog
+
+| Control | Purpose |
+| --- | --- |
+| Enable dialog buttons without a delay | Removes the delay for supported confirmation buttons. |
+| Detect URL filename encoding | Tries to interpret encoded URL filenames. |
+| Other Filename Encodings | Adds Firefox-supported encodings and language presets to the choices. |
+| Allow filename editing | Lets you edit the suggested name before saving. |
+| Show and copy the full link | Exposes the source URL and its copy control. |
+| Save As / Save To / Save and Open | Shows the corresponding save actions. |
+| Save To locations | Manages built-in and custom folders and their display names. |
+| Automatically list uncovered drives | Adds uncovered Windows drive roots to Save To. |
+
+See [Download dialog and saving](../../guides/download-dialog/).
+
+## Download history
+
+Cleanup buttons are on by default; completion sound is off by default. Select the built-in sound or a local file, set the volume, and preview it. See [Download history and sounds](../../guides/download-history/).
+
+## Link groups
+
+Manage built-in and custom groups, extensions, enabled state, and display names used by the batch link selector. Edit these here rather than changing browser-wide file handling. See [Entry points and batch links](../../guides/entry-points-and-links/).
+
+## Request and privacy
+
+**Request information forwarding** groups the global Cookie switch and the read-only **Automatically included** states for Referer and User-Agent. IDM protocol compatibility and keeping profile data on uninstall also live here. See [Requests and privacy](../privacy/).
+
+Mirror settings are an experimental section exposed in developer mode; see [Mirrors](../../guides/mirrors/). No per-site request forwarding editor is currently implemented.
+
+## Specialized Downloaders
+
+Select yt-dlp and manage its floating button presets, including arguments, enabled state, and ordering. Click **Apply** to update open pages. See [yt-dlp video menu](../../guides/yt-dlp/).
+
+## About / diagnostics
+
+Check extension version, service state, platform support, and the FlashGot component. DownloadIt and the independently built helper have separate versions.

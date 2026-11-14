@@ -1,0 +1,36 @@
+---
+title: 平台兼容性
+description: 安装 DownloadIt 前检查 Firefox、Loader、操作系统和包内组件要求。
+sidebar:
+  order: 2
+---
+
+import ProductValue from "../../../../components/ProductValue.astro";
+
+DownloadIt 需要 Firefox <ProductValue field="firefoxMinVersion" /> 或更高版本及兼容 Loader。它使用 Firefox 内部 API，以 bootstrapped XPI 加载，不是可独立运行的 WebExtension。
+
+## Firefox 与 Loader
+
+| Firefox 渠道 | 兼容 Loader |
+| --- | --- |
+| Release / Beta / ESR | 定制 userChrome.js Loader |
+| Developer Edition / Nightly | 定制 userChrome.js Loader，或 Bootstrap Loader |
+
+安装配置和手动升级详见[安装与升级](../../getting-started/installation/)。仅满足 Firefox 版本要求仍不够，还必须装载 Loader。
+
+## 操作系统
+
+| 环境 | 当前支持 |
+| --- | --- |
+| Windows | 支持，可通过包内 FlashGot helper 发现兼容外部下载器。 |
+| Linux 原生包 / Mozilla tarball | 支持，本地启动器需要可执行权限。 |
+| macOS | 不支持。 |
+| Snap / Flatpak Firefox | 不支持。 |
+
+## 各项集成
+
+Firefox 内建下载器在支持平台上始终可用。JDownloader、AB Download Manager、XDM、uGet 和外部 aria2 服务需要各自的本地配置。包内 Aria2Next 支持 Windows 和 Linux x86_64，其他 Linux 架构可以连接外部管理的 aria2 服务。
+
+yt-dlp 需要自行安装，提取、转换或合并可能需要 FFmpeg/ffprobe。内置完成提示音支持 Windows 和 Linux，只跟踪 Firefox 管理的下载。
+
+Windows FlashGot helper 是独立组件，其版本不决定 DownloadIt 扩展版本。

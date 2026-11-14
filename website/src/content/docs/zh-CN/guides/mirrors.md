@@ -2,7 +2,7 @@
 title: 镜像加速
 description: 启用实验性的 GitHub 镜像适配器、验证安全端点，并了解改写、Cookie 和失败处理行为。
 sidebar:
-  order: 5
+  order: 8
   label: 镜像加速
 ---
 

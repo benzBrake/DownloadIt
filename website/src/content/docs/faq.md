@@ -40,7 +40,7 @@ It can pass Cookie data to capable external routes when **Send cookies** is enab
 
 ## Does it capture streaming media?
 
-No. DownloadIt Links collects explicit page links. Network media sniffing and media element source discovery are not implemented.
+DownloadIt does not implement network media sniffing or media element source discovery; DownloadIt Links collects explicit page links. For videos, configure the separate [yt-dlp video menu](../guides/yt-dlp/). yt-dlp detects and handles supported sites and must be installed separately.
 
 ## Where should I report a problem?
 

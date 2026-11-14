@@ -2,7 +2,7 @@
 title: Automatic capture
 description: Decide which remembered Firefox downloads DownloadIt may intercept with extension allow and deny lists plus non-overridable safety rules.
 sidebar:
-  order: 2
+  order: 5
   label: Automatic capture
 ---
 

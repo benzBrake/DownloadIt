@@ -2,11 +2,15 @@
 title: 下载工具集成
 description: 了解 Firefox 内建 provider、本地协议、Windows FlashGot bridge、能力标签以及连接测试的行为。
 sidebar:
-  order: 3
+  order: 6
   label: 下载工具
 ---
 
+import Screenshot from "../../../../components/Screenshot.astro";
+
 DownloadIt 通过统一的下载工具列表展示所有可用路径。任务可以由 Firefox 自身、内建本地协议、原生可执行文件、Windows FlashGot bridge 或自定义定义处理。
+
+<Screenshot id="managers-overview" />
 
 ## 内含路径
 
@@ -47,3 +51,6 @@ FlashGot 检测到的工具不出现在此目录中，因为 DownloadIt 没有�
 已配置的本地 HTTP 集成会在启动和刷新时于后台探测。手动连接测试使用尚未保存的编辑器值，不改变已保存 provider 的状态。本地启动器只在明确测试或提交时运行，不会因为打开设置而启动。
 
 可执行文件模板和外部 aria2 服务详见[自定义下载器](../custom-downloaders/)。
+
+
+视频页面的 yt-dlp 菜单在**专用下载器**中单独配置，详见 [yt-dlp 视频菜单](../yt-dlp/)。

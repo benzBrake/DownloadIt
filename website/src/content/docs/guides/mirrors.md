@@ -2,7 +2,7 @@
 title: Mirror acceleration
 description: Enable the experimental GitHub mirror adapter, validate a safe endpoint, and understand rewrite, Cookie, and failure behavior.
 sidebar:
-  order: 5
+  order: 8
   label: Mirror acceleration
 ---
 
