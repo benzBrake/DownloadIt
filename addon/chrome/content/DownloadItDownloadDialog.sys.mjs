@@ -1,3 +1,4 @@
+import { resolveDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
   classifyDownloadTarget,
   DOWNLOAD_TARGET_CLASSIFICATION,
@@ -7,6 +8,12 @@ import {
   getAutoCaptureDisposition,
   normalizeAutoExtensions,
 } from "./DownloadItAutoCapture.sys.mjs";
+import {
+  decodeURLFilename,
+  FILENAME_ENCODINGS,
+  getFilenameEncodingCandidates,
+  getURLFilenameCandidate,
+} from "./DownloadItFilename.sys.mjs";
 
 const DOWNLOAD_DIALOG_URL =
   "chrome://mozapps/content/downloads/unknownContentType.xhtml";
@@ -249,6 +256,7 @@ export function registerDownloadItHelperAppHook (
     wrappedShow: null,
     wrappedPromptForSaveToFileAsync: null,
     pendingLaunchers: new WeakSet(),
+    nativeSaveFilenames: new WeakMap(),
   };
 
   try {
@@ -271,6 +279,13 @@ export function registerDownloadItHelperAppHook (
     if (state.originalPromptForSaveToFileAsync) {
       state.wrappedPromptForSaveToFileAsync = function (...args) {
         const [launcher, context, , , forcePrompt] = args;
+        if (state.nativeSaveFilenames.has(launcher)) {
+          args[2] = state.nativeSaveFilenames.get(launcher);
+          state.nativeSaveFilenames.delete(launcher);
+          // The native launcher requests its destination after the prompt has
+          // closed. Preserve the user's explicit Save choice and edited name.
+          return state.originalPromptForSaveToFileAsync.apply(this, args);
+        }
         const handled = !forcePrompt && !this.mDialog && startAutomaticDownload({
           state,
           launcher,
@@ -357,6 +372,16 @@ export class DownloadItDownloadDialogController {
     this.submitting = false;
     this.initialized = false;
     this.destroyed = false;
+    this.featureControls = null;
+    this.encodingMenu = null;
+    this.linkRow = null;
+    this.copyFeedbackTimer = null;
+    this.copyFeedbackAnimation = null;
+    this.quickActions = null;
+    this.locationElement = null;
+    this.filenameInput = null;
+    this.filenameRow = null;
+    this.quickActionElements = [];
   }
 
   async init () {
@@ -389,26 +414,26 @@ export class DownloadItDownloadDialogController {
       this.initializeLocalization?.(this.window),
     );
 
-    let managers;
+    let managers = [];
     try {
       managers = await this.service.getManagersForDownloadDialog();
     } catch (error) {
       console.error("DownloadIt: download dialog manager scan failed", error);
-      return false;
     }
     if (this.destroyed) {
       return false;
     }
-    if (!Array.isArray(managers) || managers.length === 0) {
-      return false;
-    }
+    managers = Array.isArray(managers) ? managers : [];
 
     await this.localizationReady;
     if (this.destroyed || !this.document.l10n) {
       return false;
     }
 
-    await this.buildOption(mode, managers);
+    if (managers.length) {
+      await this.buildOption(mode, managers);
+    }
+    await this.buildDownloadFeatures();
     if (this.destroyed) {
       return false;
     }
@@ -421,12 +446,21 @@ export class DownloadItDownloadDialogController {
 
   destroy () {
     this.destroyed = true;
+    this.window.clearTimeout?.(this.copyFeedbackTimer);
+    this.copyFeedbackTimer = null;
+    this.copyFeedbackAnimation?.cancel();
+    this.copyFeedbackAnimation = null;
     if (this.dialog && this.dialog.onOK === this.onOK) {
       this.dialog.onOK = this.originalOnOK;
     }
     this.managerPopup?.removeEventListener("popupshowing", this);
     this.mode?.removeEventListener("select", this);
     this.option?.remove();
+    this.filenameRow?.remove();
+    this.filenameInput?.remove();
+    this.featureControls?.remove();
+    this.linkRow?.remove();
+    this.quickActions?.remove?.();
     this.restoreNativeLayout();
     this.dialog = null;
     this.mode = null;
@@ -446,6 +480,15 @@ export class DownloadItDownloadDialogController {
     this.saveOnlyLayout = false;
     this.submitting = false;
     this.initialized = false;
+    this.featureControls = null;
+    this.encodingMenu = null;
+    this.linkRow = null;
+    this.quickActions = null;
+    this.locationElement = null;
+    this.filenameInput = null;
+    this.filenameRow = null;
+    for (const element of this.quickActionElements) element.remove();
+    this.quickActionElements = [];
   }
 
   async buildOption (mode, managers) {
@@ -472,6 +515,7 @@ export class DownloadItDownloadDialogController {
 
     this.radio = createXULElement(document, "radio", {
       id: "downloadit-download-radio",
+      style: "flex: 0 0 auto; white-space: nowrap;",
     });
     this.setLocalized(this.radio, "downloadit-download-dialog-option");
     this.radio.addEventListener("command", () => this.updateModeState());
@@ -485,13 +529,16 @@ export class DownloadItDownloadDialogController {
       "aria-label": managerAriaLabel,
       flex: "1",
       native: true,
-      style: "min-height: var(--button-min-height-small, 28px) !important; max-height: var(--button-min-height-small, 28px) !important;",
+      crop: "end",
+      // The selected label must not determine the row's minimum width.
+      style: "flex: 1 1 0%; min-width: 0 !important; width: 0; min-height: var(--button-min-height-small, 28px) !important; max-height: var(--button-min-height-small, 28px) !important;",
     }, [this.managerPopup]);
 
     this.action = createXULElement(document, "toolbarbutton", {
       id: DOWNLOADIT_ACTION_ID,
       class: "toolbarbutton-1",
       image: "chrome://downloadit/content/icons/downloadit.svg",
+      style: "flex: 0 0 auto;",
     });
     this.setLocalized(this.action, "downloadit-download-dialog-action");
     this.action.addEventListener("command", () => {
@@ -502,16 +549,411 @@ export class DownloadItDownloadDialogController {
     const controls = createXULElement(document, "hbox", {
       align: "center",
       flex: "1",
+      style: "flex: 1 1 0%; min-width: 0;",
     }, [this.manager, this.action]);
     const deck = createXULElement(document, "deck", {
       id: "downloadit-download-deck",
       flex: "1",
+      style: "flex: 1 1 0%; min-width: 0;",
     }, [controls]);
     this.option = createXULElement(document, "hbox", {
       id: DOWNLOADIT_OPTION_ID,
+      align: "center",
+      style: "min-width: 0;",
     }, [this.radio, deck]);
     mode.appendChild(this.option);
     await this.translateFragment(this.option);
+  }
+
+  async buildDownloadFeatures() {
+    const settings = this.service.getDownloadDialogSettings?.() || {};
+    const launcher = this.dialog.mLauncher;
+    const location = this.document.getElementById("location");
+    this.locationElement = location;
+    const sourceElement = this.document.getElementById("source");
+    const source = String(launcher.source?.spec || "");
+    const hasServerFilename = this.launcherHasServerFilename(launcher);
+    const rawURLFilename = getURLFilenameCandidate(source);
+    const detection = !hasServerFilename && rawURLFilename
+      ? getFilenameEncodingCandidates(
+          rawURLFilename,
+          this.window.Services?.locale?.appLocaleAsBCP47 || "",
+          settings.filenameEncodings || [],
+        )
+      : null;
+    const filename = hasServerFilename
+      ? String(launcher.suggestedFileName || "")
+      : detection && settings.detectFilenameEncoding !== false
+        ? detection.detected
+        : String(launcher.suggestedFileName || "");
+
+    if (location) {
+      if (filename && !hasServerFilename && settings.detectFilenameEncoding !== false) {
+        location.value = filename;
+      }
+      if (settings.editFilename !== false) {
+        this.filenameRow = createXULElement(this.document, "hbox", {
+          id: "di-filename-row",
+          align: "center",
+          flex: "1",
+          style: "min-width: 0; width: 100%;",
+        });
+        this.filenameInput = this.document.createElementNS
+          ? this.document.createElementNS("http://www.w3.org/1999/xhtml", "input")
+          : createXULElement(this.document, "textbox");
+        this.filenameInput.setAttribute("id", "locationText");
+        this.filenameInput.setAttribute(
+          "style",
+          "display: block; flex: 1 1 0%; min-width: 0; width: 100%; max-width: 100%; border: 1px solid var(--in-content-box-border-color, ThreeDDarkShadow); border-radius: 4px; padding-inline: 5px; min-height: 24px; max-height: 24px; box-sizing: border-box;",
+        );
+        this.filenameInput.value = filename || location.value || "";
+        this.filenameRow.appendChild(this.filenameInput);
+        this.setTemporaryAttribute(location, "hidden", "true");
+        location.after?.(this.filenameRow);
+        if (!location.after) location.parentNode?.appendChild(this.filenameRow);
+      } else {
+        this.setTemporaryProperty(location, "disabled", true);
+      }
+    }
+
+    const parent = sourceElement?.parentNode;
+    if (settings.showFullURL !== false && source && parent) {
+      this.linkRow = createXULElement(this.document, "hbox", {
+        id: "di-complete-link-row",
+        align: "center",
+        flex: "1",
+        style: "min-width: 0; max-width: 100%; overflow: hidden;",
+      });
+      const linkLabel = createXULElement(this.document, "label", {});
+      this.setLocalized(linkLabel, "downloadit-dialog-complete-link-label");
+      const fullLink = createXULElement(this.document, "description", {
+        id: "di-complete-link",
+        flex: "1",
+        crop: "center",
+        value: source,
+        "tooltiptext": source,
+        style: "min-width: 0 !important; width: 0px !important; max-width: 100%; overflow: hidden;",
+      });
+      const copy = createXULElement(this.document, "button", {
+        id: "di-copy-link",
+        class: "dialog-button",
+        style: "flex: 0 0 auto; min-width: 0 !important; width: fit-content;",
+        "aria-live": "polite",
+        "aria-atomic": "true",
+      });
+      this.setLocalized(copy, "downloadit-dialog-copy-link");
+      copy.addEventListener("command", () => this.copyLink(source));
+      this.linkRow.append(linkLabel, fullLink, copy);
+      parent.after?.(this.linkRow);
+      if (!parent.after) parent.appendChild(this.linkRow);
+      await this.translateFragment(this.linkRow);
+    }
+
+    if (!location) return;
+    if (!hasServerFilename && rawURLFilename) {
+      const popup = createXULElement(this.document, "menupopup", {
+        id: "di-filename-encoding-popup",
+      });
+      this.encodingMenu = createXULElement(this.document, "button", {
+        id: "di-filename-encoding", type: "menu",
+        style: "flex-shrink: 0; min-width: max-content; margin-inline-start: 4px;",
+      }, [popup]);
+      this.setLocalized(this.encodingMenu, "downloadit-dialog-encoding-button", {
+        mode: settings.detectFilenameEncoding === false ? "original" : "auto",
+        encoding: detection.encoding,
+      });
+      const automatic = createXULElement(this.document, "menuitem", { value: "auto" });
+      this.setLocalized(automatic, "downloadit-dialog-encoding-auto");
+      popup.appendChild(automatic);
+      const original = createXULElement(this.document, "menuitem", { value: "original" });
+      this.setLocalized(original, "downloadit-dialog-encoding-original");
+      popup.appendChild(original);
+      const labels = ["UTF-8", ...FILENAME_ENCODINGS, ...(settings.filenameEncodings || [])];
+      const seen = new Set();
+      for (const encoding of labels) {
+        let canonical;
+        try { canonical = new TextDecoder(encoding).encoding; } catch { continue; }
+        if (seen.has(canonical)) continue;
+        seen.add(canonical);
+        const value = decodeURLFilename(rawURLFilename, encoding);
+        const item = createXULElement(this.document, "menuitem", { value: encoding, disabled: !value });
+        this.setLocalized(item, "downloadit-dialog-encoding-choice", { encoding });
+        popup.appendChild(item);
+      }
+      popup.addEventListener("command", event => {
+        if (event.target?.localName !== "menuitem" || event.target.disabled) return;
+        const encoding = event.target.getAttribute("value");
+        const value = encoding === "auto" ? detection.detected
+          : encoding === "original" ? String(launcher.suggestedFileName || detection.original)
+          : decodeURLFilename(rawURLFilename, encoding);
+        if (!value) return;
+        (this.filenameInput || location).value = value;
+        this.setLocalized(this.encodingMenu, "downloadit-dialog-encoding-button", {
+          mode: encoding === "auto" || encoding === "original" ? encoding : "manual",
+          encoding: encoding === "auto" ? detection.encoding : encoding,
+        });
+      });
+      const parent = this.filenameInput?.parentNode || location.parentNode;
+      parent.appendChild(this.encodingMenu);
+      this.featureControls = this.encodingMenu;
+      await this.translateFragment(this.encodingMenu);
+    }
+
+    await this.buildQuickActions(settings);
+  }
+
+  launcherHasServerFilename(launcher) {
+    const channel = launcher?.channel;
+    if (channel?.contentDispositionFilename) return true;
+    let header = String(channel?.contentDispositionHeader || "");
+    if (!header) {
+      try {
+        const httpChannel = channel.QueryInterface(
+          this.window.Components.interfaces.nsIHttpChannel,
+        );
+        header = httpChannel.getResponseHeader("Content-Disposition");
+      } catch {}
+    }
+    return /(?:^|;)\s*filename\*?\s*=/i.test(header);
+  }
+
+  copyLink(value) {
+    if (this.destroyed) return;
+    let succeeded = false;
+    try {
+      const { classes: Cc, interfaces: Ci } = this.window.Components;
+      Cc["@mozilla.org/widget/clipboardhelper;1"]
+        .getService(Ci.nsIClipboardHelper).copyString(value);
+      succeeded = true;
+    } catch (error) {
+      console.error("DownloadIt: could not copy download URL", error);
+    }
+    const button = this.document.getElementById("di-copy-link");
+    if (!button) return;
+    this.window.clearTimeout(this.copyFeedbackTimer);
+    this.copyFeedbackAnimation?.cancel();
+    this.copyFeedbackAnimation = null;
+    this.setLocalized(button, succeeded
+      ? "downloadit-dialog-copy-link-success"
+      : "downloadit-dialog-copy-link-failed");
+    if (!this.window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      this.copyFeedbackAnimation = button.animate?.(
+        succeeded
+          ? [{ opacity: 1 }, { opacity: 0.5 }, { opacity: 1 }]
+          : [
+              { transform: "translateX(0)" },
+              { transform: "translateX(-3px)" },
+              { transform: "translateX(3px)" },
+              { transform: "translateX(0)" },
+            ],
+        { duration: 240, easing: "ease-out" },
+      );
+    }
+    this.copyFeedbackTimer = this.window.setTimeout(() => {
+      this.copyFeedbackTimer = null;
+      if (!this.destroyed) this.setLocalized(button, "downloadit-dialog-copy-link");
+    }, 2500);
+  }
+
+  async buildQuickActions(settings) {
+    const launcher = this.dialog.mLauncher;
+    const frame = this.document.getElementById("unknownContentType") ||
+      this.document.documentElement;
+    const anchor = frame?.getButton?.("extra2") || frame?.getButton?.("accept");
+    const fallback = this.document.getElementById(NORMAL_BOX_ID);
+    const buttonParent = anchor?.parentNode || fallback;
+    if (!buttonParent) return;
+    const actions = [];
+    const add = (id, messageId, callback) => {
+      const button = createXULElement(this.document, "button", {
+        id,
+        class: "dialog-button",
+        part: "dialog-button",
+        size: "small",
+      });
+      this.setLocalized(button, messageId);
+      button.addEventListener("command", callback);
+      actions.push(button);
+    };
+    if (settings.saveAs !== false) {
+      add("di-save-as", "downloadit-dialog-save-as", () => this.saveAs());
+    }
+    if (settings.saveTo !== false) {
+      const popup = createXULElement(this.document, "menupopup", {
+        id: "di-save-to-popup",
+      });
+      this.addNativeMenuStyles(popup);
+      for (const entry of resolveDownloadDirectories(settings.directories || [], this.window.Components, this.window.Services?.appinfo?.OS || globalThis.Services?.appinfo?.OS)) {
+        const item = createXULElement(this.document, "menuitem", {
+          value: entry.path,
+          dir: entry.path,
+          image: `moz-icon:file:///${entry.path}\\`,
+          class: "menuitem-iconic",
+        });
+        if (entry.messageId) {
+          this.setLocalized(item, entry.messageId);
+        } else {
+          item.setAttribute("label", entry.label || entry.path);
+        }
+        item.addEventListener("command", () => this.saveTo(entry.path));
+        popup.appendChild(item);
+      }
+      await this.translateFragment(popup);
+      const menu = createXULElement(this.document, "button", {
+        id: "di-save-to",
+        type: "menu",
+        class: "dialog-button",
+        part: "dialog-button",
+        size: "small",
+        native: "true",
+      }, [popup]);
+      this.setLocalized(menu, "downloadit-dialog-save-to");
+      actions.push({ element: menu, anchor: frame?.getButton?.("cancel") || anchor });
+    }
+    if (settings.saveAndOpen !== false) {
+      add("di-save-and-open", "downloadit-dialog-save-and-open", () => this.saveAndOpen());
+    }
+    if (!actions.length) return;
+    this.quickActionElements = actions.map(action => action.element || action);
+    this.quickActions = this.quickActionElements;
+    for (const action of actions) {
+      const button = action.element || action;
+      const target = action.anchor || anchor;
+      if (target?.parentNode) target.parentNode.insertBefore(button, target);
+      else buttonParent.appendChild(button);
+      await this.translateFragment(button);
+    }
+    await this.addQuickActionStyles(this.quickActionElements[0]);
+  }
+
+  addQuickActionStyles(element) {
+    const root = element.getRootNode();
+    if (!root?.host || root.querySelector("link[data-downloadit-dialog-style]")) {
+      return;
+    }
+    const link = this.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "link",
+    );
+    link.setAttribute("rel", "stylesheet");
+    link.setAttribute("href", "chrome://downloadit/content/download-dialog.css");
+    link.setAttribute("data-downloadit-dialog-style", "true");
+    const ready = new Promise(resolve => {
+      link.addEventListener("load", resolve, { once: true });
+      link.addEventListener("error", resolve, { once: true });
+    });
+    root.appendChild(link);
+    return ready;
+  }
+
+  addNativeMenuStyles(popup) {
+    if (!this.document.createElementNS) return;
+    for (const href of [
+      "chrome://global/skin/global.css",
+      "chrome://global/content/elements/menupopup.css",
+    ]) {
+      const link = this.document.createElementNS(
+        "http://www.w3.org/1999/xhtml",
+        "link",
+      );
+      link.setAttribute("rel", "stylesheet");
+      link.setAttribute("href", href);
+      popup.appendChild(link);
+    }
+  }
+
+  prepareLauncherSave() {
+    const launcher = this.dialog.mLauncher;
+    if (launcher.MIMEInfo && this.window.Components?.interfaces?.nsIMIMEInfo) {
+      launcher.MIMEInfo.preferredAction =
+        this.window.Components.interfaces.nsIMIMEInfo.saveToDisk;
+    }
+    try { launcher.setWebProgressListener(null); } catch {}
+    this.dialog.onCancel = function () { this.onUnload?.(); };
+  }
+
+  async saveAndOpen() {
+    try {
+      this.syncFilenameToNativeField();
+      const launcher = this.dialog.mLauncher;
+      if (launcher.targetFileIsExecutable) {
+        // Firefox disables the Open radio in its save-only layout. Use the
+        // native launcher directly; Firefox still handles download security
+        // checks and the confirmation before launching an executable.
+        launcher.setWebProgressListener(null);
+        launcher.setDownloadToLaunch(false, null);
+        this.dialog.onUnload();
+      } else {
+        const open = this.document.getElementById("open");
+        if (!open || open.disabled) return;
+        open.click();
+        this.originalOnOK?.call(this.dialog);
+      }
+      this.window.close();
+    } catch (error) {
+      await this.showSaveError(error);
+    }
+  }
+
+  async saveAs() {
+    try {
+      const filename = this.getFilename();
+      this.prepareLauncherSave();
+      this.dialog.promptForSaveToFileAsync(
+        this.dialog.mLauncher,
+        this.dialog.mContext,
+        filename,
+        null,
+        true,
+      );
+      this.window.close();
+    } catch (error) {
+      await this.showSaveError(error);
+    }
+  }
+
+  async saveTo(directory) {
+    try {
+      const { classes: Cc, interfaces: Ci } = this.window.Components;
+      const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+      file.initWithPath(directory);
+      if (!file.exists() || !file.isDirectory()) {
+        throw new Error("The configured download folder is unavailable");
+      }
+      file.append(String(this.getFilename()).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_") || "download");
+      this.prepareLauncherSave();
+      this.dialog.mLauncher.saveDestinationAvailable(file);
+      this.window.close();
+    } catch (error) {
+      await this.showSaveError(error);
+    }
+  }
+
+  async showSaveError(error) {
+    const message = await this.formatMessage("downloadit-dialog-action-failed", {
+      error: error?.message || String(error),
+    });
+    this.service.alert(this.window, message);
+  }
+
+  saveNative() {
+    const save = this.document.getElementById("save");
+    if (save) save.click();
+    this.acceptNative();
+  }
+
+  acceptNative(...args) {
+    this.syncFilenameToNativeField();
+    if (this.document.getElementById("save")?.selected && helperAppHook) {
+      helperAppHook.nativeSaveFilenames.set(this.dialog.mLauncher, this.getFilename());
+    }
+    return this.originalOnOK?.apply(this.dialog, args);
+  }
+
+  syncFilenameToNativeField() {
+    if (this.filenameInput && this.locationElement) {
+      this.locationElement.value = this.filenameInput.value;
+    }
   }
 
   createManagerPopup () {
@@ -689,9 +1131,7 @@ export class DownloadItDownloadDialogController {
     this.originalOnOK = this.dialog.onOK;
     this.onOK = (...args) => {
       if (!this.radio?.selected) {
-        return typeof this.originalOnOK === "function"
-          ? this.originalOnOK.apply(this.dialog, args)
-          : undefined;
+        return this.acceptNative(...args);
       }
       args[0]?.preventDefault?.();
       this.action.click();
@@ -701,7 +1141,7 @@ export class DownloadItDownloadDialogController {
   }
 
   getFilename () {
-    const location = this.document.getElementById("location");
+    const location = this.filenameInput || this.document.getElementById("location");
     return location?.value || this.dialog?.mLauncher?.suggestedFileName || "";
   }
 

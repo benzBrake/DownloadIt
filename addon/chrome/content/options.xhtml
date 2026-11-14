@@ -31,6 +31,10 @@
             <span class="nav-number">02</span>
             <span data-l10n-id="downloadit-nav-auto-capture"></span>
           </button>
+          <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-download-dialog" data-section="download-dialog">
+            <span class="nav-number">03</span>
+            <span data-l10n-id="downloadit-nav-download-dialog"></span>
+          </button>
           <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-link-groups" data-section="link-groups">
             <span class="nav-number">03</span>
             <span data-l10n-id="downloadit-nav-link-groups"></span>
@@ -236,6 +240,35 @@
                 </div>
               </div>
 
+            </div>
+          </section>
+
+          <section id="section-download-dialog" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="download-dialog" hidden="hidden">
+            <div class="setting-group">
+              <div class="group-heading compact-heading">
+                <div>
+                  <div class="eyebrow" data-l10n-id="downloadit-dialog-filename-eyebrow"></div>
+                  <h2 data-l10n-id="downloadit-dialog-filename-title"></h2>
+                </div>
+              </div>
+              <div class="encoding-setting-row">
+                <label class="toggle-row" for="download-dialog-detect-encoding"><input id="download-dialog-detect-encoding" type="checkbox" data-download-dialog-pref="detectFilenameEncoding" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-dialog-detect-encoding-title"></strong><small data-l10n-id="downloadit-dialog-detect-encoding-help"></small></span></label>
+                <div class="encoding-setting-action">
+                  <button id="manage-filename-encodings" class="secondary-button" type="button" data-l10n-id="downloadit-dialog-extra-encodings"></button>
+                  <span id="filename-encodings-summary" class="field-help"></span>
+                </div>
+              </div>
+              <label class="toggle-row" for="download-dialog-disable-button-delay"><input id="download-dialog-disable-button-delay" type="checkbox" data-download-dialog-pref="disableButtonDelay" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-dialog-disable-button-delay-title"></strong><small data-l10n-id="downloadit-dialog-disable-button-delay-help"></small></span></label>
+              <label class="toggle-row" for="download-dialog-edit-filename"><input id="download-dialog-edit-filename" type="checkbox" data-download-dialog-pref="editFilename" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-dialog-edit-filename-title"></strong><small data-l10n-id="downloadit-dialog-edit-filename-help"></small></span></label>
+              <label class="toggle-row" for="download-dialog-show-url"><input id="download-dialog-show-url" type="checkbox" data-download-dialog-pref="showFullURL" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-dialog-show-url-title"></strong><small data-l10n-id="downloadit-dialog-show-url-help"></small></span></label>
+              <label class="toggle-row" for="download-dialog-save-as"><input id="download-dialog-save-as" type="checkbox" data-download-dialog-pref="saveAs" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-dialog-save-as-title"></strong></span></label>
+              <label class="toggle-row" for="download-dialog-save-to"><input id="download-dialog-save-to" type="checkbox" data-download-dialog-pref="saveTo" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-dialog-save-to-title"></strong></span></label>
+              <label class="toggle-row" for="download-dialog-save-open"><input id="download-dialog-save-open" type="checkbox" data-download-dialog-pref="saveAndOpen" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-dialog-save-open-title"></strong></span></label>
+            </div>
+            <div class="setting-group">
+              <div class="group-heading compact-heading"><div><div class="eyebrow" data-l10n-id="downloadit-dialog-directories-eyebrow"></div><h2 data-l10n-id="downloadit-dialog-directories-title"></h2></div><div class="directory-add-buttons"><button id="add-download-dialog-directory" class="secondary-button" type="button" data-l10n-id="downloadit-dialog-directory-add"></button><xul:button id="add-builtin-directory" class="directory-add-menu" type="menu" data-l10n-id="downloadit-dialog-directory-builtins"><xul:menupopup id="builtin-directory-popup" /></xul:button></div></div>
+              <p class="field-help" data-l10n-id="downloadit-dialog-directories-help"></p>
+              <ul id="download-dialog-directory-list" class="manager-list"></ul>
             </div>
           </section>
 
@@ -913,5 +946,24 @@
         </footer>
       </section>
     </div>
+    <dialog id="filename-encoding-editor" class="editor-dialog encoding-editor-dialog" aria-labelledby="filename-encoding-title">
+      <header class="editor-header"><h2 id="filename-encoding-title" data-l10n-id="downloadit-dialog-extra-encodings"></h2></header>
+      <div class="editor-scroll">
+        <p class="field-help" data-l10n-id="downloadit-dialog-extra-encodings-help"></p>
+        <div class="auto-rule-entry">
+          <input id="download-dialog-extra-encodings" type="text" spellcheck="false" data-l10n-id="downloadit-encoding-input" data-l10n-attrs="placeholder,aria-label" aria-describedby="filename-encoding-error" />
+          <button id="add-filename-encoding" class="secondary-button" type="button" data-l10n-id="downloadit-encoding-add"></button>
+        </div>
+        <p id="filename-encoding-error" class="field-help" role="alert" hidden="hidden"></p>
+        <ul id="filename-encoding-list" class="auto-extension-list manager-list"></ul>
+        <h3 data-l10n-id="downloadit-encoding-presets-title"></h3>
+        <p class="field-help" data-l10n-id="downloadit-encoding-presets-help"></p>
+        <div id="filename-encoding-presets" class="encoding-presets"></div>
+      </div>
+      <footer class="editor-footer">
+        <button id="filename-encoding-cancel" type="button" class="text-button" data-l10n-id="downloadit-cancel"></button>
+        <button id="filename-encoding-save" type="button" class="primary-button" data-l10n-id="downloadit-encoding-done"></button>
+      </footer>
+    </dialog>
   </body>
 </html>

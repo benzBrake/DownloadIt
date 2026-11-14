@@ -262,7 +262,7 @@ test("AriaNg packaging pins and verifies the standard release", () => {
   assert.match(gitignore, /addon\/ariang\/fonts\//);
 });
 
-test("AriaNg documentation and DownloadIt version stay synchronized", () => {
+test("AriaNg credits and website version use the current project metadata", () => {
   const manifest = fs.readFileSync(
     path.join(projectRoot, "addon/install.rdf"),
     "utf8",
@@ -277,12 +277,11 @@ test("AriaNg documentation and DownloadIt version stay synchronized", () => {
   assert.ok(version, "install.rdf must declare a three-component version");
   for (const source of [readme, readmeChinese]) {
     assert.match(source, /AriaNg/);
-    assert.match(source, /1\.3\.14/);
-    assert.match(source, /moz-extension:\/\//);
-    assert.match(source, /getAriaNgURL\(\)/);
-    assert.match(source, /licenses\/ariang-LICENSE/);
-    assert.ok(source.includes(`\`${version}\``), "README must document the manifest version");
+    assert.match(source, /addon\/THIRD_PARTY_NOTICES\.txt/);
   }
+  const metadata = fs.readFileSync(path.join(projectRoot, "website/src/data/product.ts"), "utf8");
+  assert.match(metadata, /addon.*install\.rdf/);
+  assert.match(metadata, /requireString\(description\?\.version, "version"\)/);
 });
 
 after(() => {

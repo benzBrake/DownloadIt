@@ -442,6 +442,38 @@ textarea:focus-visible {
   padding-bottom: 6px;
 }
 
+.manager-row.download-dialog-directory-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 28px;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 6px;
+}
+.download-dialog-directory-row > input,
+.download-dialog-directory-row .builtin-directory-location > input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.has-builtin-directory > input,
+.has-builtin-directory > .directory-remove {
+  grid-row: 2;
+}
+.has-builtin-directory > input {
+  grid-column: 2;
+}
+.has-builtin-directory > .directory-remove {
+  grid-column: 3;
+}
+.download-dialog-directory-row input[readonly] {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+.directory-remove:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .auto-rule-footer {
   display: flex;
   justify-content: flex-end;
@@ -1579,11 +1611,11 @@ button {
   }
 
   .section-nav {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .section-nav.has-developer-mode {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
   .nav-item {
@@ -1682,4 +1714,107 @@ button {
     width: 100%;
     margin-left: 24px;
   }
+}
+
+.directory-add-buttons {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.directory-add-buttons > .secondary-button {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.directory-add-menu {
+  appearance: none;
+  min-width: 30px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-inline-start: 0;
+  border-radius: 0 6px 6px 0;
+  color: var(--ink);
+  background: var(--surface-muted) url("chrome://downloadit/content/icons/arrow-down.svg") center / 16px 16px no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+.directory-add-menu:hover,
+.directory-add-menu:focus-visible,
+.directory-add-menu[open="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background-color: var(--accent-soft);
+}
+.builtin-directory-location {
+  display: contents;
+}
+.builtin-directory-type {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+.builtin-directory-location > input {
+  grid-column: 1;
+  grid-row: 2;
+}
+.builtin-directory-location > input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.directory-unavailable {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  font-size: 0.85em;
+}
+
+/* Native modal supplies focus containment, Escape, and an inert background. */
+dialog.encoding-editor-dialog {
+  padding: 0;
+  color: var(--ink);
+  width: min(640px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+}
+dialog.encoding-editor-dialog:not([open]) { display: none; }
+dialog.encoding-editor-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.encoding-editor-dialog .editor-scroll { min-height: 0; }
+.encoding-editor-dialog .field-help { margin-block-end: 12px; }
+.encoding-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+.encoding-presets button { white-space: normal; overflow-wrap: anywhere; text-align: start; }
+#filename-encoding-error { color: var(--danger); }
+
+#filename-encoding-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-block: 8px;
+}
+
+#filename-encoding-list .auto-extension-row {
+  min-height: 34px;
+  max-width: 100%;
+  gap: 6px;
+  padding: 2px 4px 2px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+#filename-encoding-list .auto-extension-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#filename-encoding-list .icon-button {
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+#filename-encoding-list .empty-row { flex-basis: 100%; }
+
+.encoding-setting-row { display: flex; align-items: center; gap: 16px; }
+.encoding-setting-row > .toggle-row { flex: 1; min-width: 0; }
+.encoding-setting-action { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.encoding-setting-action .field-help { margin: 0; }
+@media (max-width: 600px) {
+  .encoding-setting-row { flex-wrap: wrap; }
+  .encoding-setting-action { margin-inline-start: auto; }
 }

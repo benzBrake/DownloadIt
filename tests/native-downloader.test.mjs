@@ -55,7 +55,8 @@ const servicesMock = {
   prefs: {
     clearUserPref: name => preferenceValues.delete(name),
     getBoolPref: (name, fallback) => preferenceValues.get(name) ?? fallback,
-    getIntPref: (name, fallback) => preferenceValues.get(name) ?? fallback,
+    getIntPref: (name, fallback) => preferenceValues.get(name) ?? fallback ??
+      (name === "security.dialog_enable_delay" ? 1000 : undefined),
     getStringPref: (name, fallback) => preferenceValues.get(name) ?? fallback,
     prefHasUserValue: name => preferenceValues.has(name),
     prefIsLocked: name => preferenceLocks.has(name),
@@ -329,6 +330,7 @@ test("platform capabilities initialize Windows and Linux services independently"
     assert.equal(service.serviceReady, false);
     await service.startup();
     assert.equal(service.serviceReady, true);
+    assert.equal(preferenceValues.get("security.dialog_enable_delay"), 0);
     assert.equal(deployCalls, os === "WINNT" ? 1 : 0);
     assert.equal(
       service.binaryPath,
@@ -344,6 +346,8 @@ test("platform capabilities initialize Windows and Linux services independently"
     );
     await service.shutdown();
     assert.equal(service.serviceReady, false);
+    assert.equal(preferenceValues.has("security.dialog_enable_delay"), false);
+    assert.equal(preferenceValues.has("downloadit.dialogEnableDelayBackup"), false);
   }
 
   servicesMock.appinfo.OS = "Darwin";
@@ -1465,14 +1469,13 @@ test("native sources retain Firefox isolation context and configure POST channel
 });
 
 test("native provider behavior is documented in both languages", () => {
-  const englishReadme = read("README.md");
-  const chineseReadme = read("README-zh_CN.md");
-
-  for (const source of [englishReadme, chineseReadme]) {
-    assert.match(source, /native:firefox/);
-    assert.match(source, /\.part/);
-    assert.match(source, /name\(1\)\.ext/);
-    assert.match(source, /Cookie jar/i);
+  for (const locale of ["", "zh-CN/"]) {
+    const managers = read(`website/src/content/docs/${locale}guides/download-managers.md`);
+    const capture = read(`website/src/content/docs/${locale}guides/auto-capture.md`);
+    assert.match(managers, /Firefox Downloads API/);
+    assert.match(managers, /Cookie/);
+    assert.match(capture, /POST/);
+    assert.match(capture, /launcher/);
   }
 });
 
@@ -3654,4 +3657,138 @@ test("saving ABDM settings replaces a stale built-in refresh", async () => {
   finishOldProbe({ status: 200, text: "[]" });
   await oldRefresh;
   assert.equal(service.createABDMDescriptor().available, true);
+});
+
+
+test("dialog button delay defaults on, restores the original value, and survives unclean restarts", () => {
+  const pref = "security.dialog_enable_delay";
+  const backup = "downloadit.dialogEnableDelayBackup";
+  preferenceValues.clear();
+  try {
+    for (const original of [undefined, 0, 1700]) {
+      preferenceValues.clear();
+      if (original !== undefined) preferenceValues.set(pref, original);
+      const service = createService();
+      assert.equal(service.getDownloadDialogSettings().disableButtonDelay, true);
+      service.syncDownloadDialogButtonDelay();
+      assert.equal(preferenceValues.get(pref), 0);
+      const saved = preferenceValues.get(backup);
+      // Repeating Apply or starting after a crash must not back up our own zero.
+      service.syncDownloadDialogButtonDelay();
+      const restarted = createService();
+      restarted.syncDownloadDialogButtonDelay();
+      assert.equal(preferenceValues.get(backup), saved);
+      restarted.syncDownloadDialogButtonDelay(false);
+      assert.equal(preferenceValues.get(pref), original);
+      assert.equal(preferenceValues.has(pref), original !== undefined);
+      assert.equal(preferenceValues.has(backup), false);
+    }
+  } finally {
+    preferenceValues.clear();
+  }
+});
+
+test("dialog delay respects locks and preserves changes made elsewhere", () => {
+  const pref = "security.dialog_enable_delay";
+  const backup = "downloadit.dialogEnableDelayBackup";
+  preferenceValues.clear();
+  try {
+    const service = createService();
+    preferenceValues.set(pref, 1500);
+    preferenceLocks.add(pref);
+    service.syncDownloadDialogButtonDelay();
+    assert.equal(preferenceValues.get(pref), 1500);
+    assert.equal(preferenceValues.has(backup), false);
+    preferenceLocks.delete(pref);
+    service.syncDownloadDialogButtonDelay();
+    preferenceLocks.add(pref);
+    service.syncDownloadDialogButtonDelay(false);
+    assert.equal(preferenceValues.get(pref), 0);
+    assert.equal(preferenceValues.get(backup), "1500");
+    preferenceLocks.delete(pref);
+    preferenceValues.set(pref, 2500);
+    service.syncDownloadDialogButtonDelay(false);
+    assert.equal(preferenceValues.get(pref), 2500);
+    assert.equal(preferenceValues.has(backup), false);
+
+    service.syncDownloadDialogButtonDelay();
+    preferenceValues.set(pref, 3000);
+    service.syncDownloadDialogButtonDelay();
+    service.syncDownloadDialogButtonDelay(false);
+    assert.equal(preferenceValues.get(pref), 3000);
+
+    service.syncDownloadDialogButtonDelay();
+    preferenceValues.delete(pref);
+    service.syncDownloadDialogButtonDelay(false);
+    assert.equal(preferenceValues.has(pref), false);
+  } finally {
+    preferenceLocks.delete(pref);
+    preferenceValues.clear();
+  }
+});
+
+test("Apply persists the dialog delay toggle and partial settings keep its value", async () => {
+  const pref = "security.dialog_enable_delay";
+  preferenceValues.clear();
+  try {
+    const service = createSettingsService();
+    service.refreshConfiguredBuiltInProtocols = () => {};
+    // Existing profiles without the new key inherit the enabled default.
+    preferenceValues.set("downloadit.downloadDialog", JSON.stringify({ showFullURL: false }));
+    assert.equal(service.getDownloadDialogSettings().disableButtonDelay, true);
+    await service.applySettings({ downloadDialog: {
+      ...service.getDownloadDialogSettings(), disableButtonDelay: false,
+    } });
+    assert.equal(service.getDownloadDialogSettings().disableButtonDelay, false);
+    assert.equal(preferenceValues.has(pref), false);
+    assert.equal(service.validateDownloadDialogSettings({ directories: [] }).disableButtonDelay, false);
+    service.syncDownloadDialogButtonDelay();
+    assert.equal(preferenceValues.has(pref), false);
+    await service.applySettings({ downloadDialog: {
+      ...service.getDownloadDialogSettings(), disableButtonDelay: true,
+    } });
+    assert.equal(preferenceValues.get(pref), 0);
+    assert.equal(service.getDownloadDialogSettings().showFullURL, false);
+    await service.applySettings({ downloadDialog: {
+      ...service.getDownloadDialogSettings(), disableButtonDelay: false,
+    } });
+    assert.equal(preferenceValues.has(pref), false);
+    assert.equal(JSON.parse(preferenceValues.get("downloadit.downloadDialog")).disableButtonDelay, false);
+  } finally {
+    preferenceValues.clear();
+  }
+});
+
+test("download-dialog service migrates legacy locations and persists explicit empty lists", () => {
+  const pref = "downloadit.downloadDialog";
+  const had = preferenceValues.has(pref);
+  const before = preferenceValues.get(pref);
+  try {
+    const service = Object.create(DownloadItService.prototype);
+    preferenceValues.delete(pref);
+    assert.equal(service.getDownloadDialogSettings().directories.length, 4);
+    preferenceValues.set(pref, JSON.stringify({ saveTo: false,
+      directories: [{ path: "C:\\Custom", label: "My folder" }] }));
+    const migrated = service.getDownloadDialogSettings();
+    assert.equal(migrated.directoryFormat, 1);
+    assert.equal(migrated.saveTo, false);
+    assert.deepEqual(migrated.directories.at(-1), { path: "C:\\Custom", label: "My folder" });
+    assert.equal(migrated.directories.length, 5);
+    assert.equal(JSON.parse(preferenceValues.get(pref)).directoryFormat, undefined);
+    const empty = service.validateDownloadDialogSettings({ ...migrated, directories: [] });
+    preferenceValues.set(pref, JSON.stringify(empty));
+    assert.equal(empty.directoryFormat, 1);
+    assert.deepEqual(service.getDownloadDialogSettings().directories, []);
+    const encodings = service.validateDownloadDialogSettings({ ...empty, filenameEncodings: ["cp1251", "windows-1251", "koi8-r"] });
+    preferenceValues.set(pref, JSON.stringify(encodings));
+    assert.deepEqual(service.getDownloadDialogSettings().filenameEncodings, ["windows-1251", "koi8-r"]);
+    assert.deepEqual(service.getDownloadDialogSettings().directories, []);
+    assert.throws(() => service.validateDownloadDialogSettings({ ...empty, filenameEncodings: ["unknown-encoding"] }),
+      error => error.code === "download-dialog-settings-invalid");
+    assert.throws(() => service.validateDownloadDialogSettings({ ...empty, directories: [{ path: "{unknown}" }] }),
+      error => error.code === "download-dialog-settings-invalid");
+  } finally {
+    if (had) preferenceValues.set(pref, before);
+    else preferenceValues.delete(pref);
+  }
 });

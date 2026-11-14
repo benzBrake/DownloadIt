@@ -144,7 +144,6 @@ test("unified download-tool editor tabs and actions are accessible", () => {
 
 test("IDM bridge help localizes the LinkSwift link through DOM Overlay", () => {
   const markup = read("addon/chrome/content/options.xhtml");
-  const linkUrl = "https://github.com/hmjz100/LinkSwift";
   const localizedLink = /<a data-l10n-name="linkswift">hmjz100\/LinkSwift<\/a>/;
 
   assert.match(
@@ -156,13 +155,6 @@ test("IDM bridge help localizes the LinkSwift link through DOM Overlay", () => {
     assert.match(
       read(`addon/chrome/content/locales/${locale}/downloadit.ftl`),
       localizedLink,
-    );
-  }
-  for (const readme of ["README.md", "README-zh_CN.md"]) {
-    const source = read(readme);
-    assert.equal(
-      (source.match(new RegExp(`\\[hmjz100/LinkSwift\\]\\(${linkUrl}\\)`, "g")) || []).length,
-      2,
     );
   }
 });

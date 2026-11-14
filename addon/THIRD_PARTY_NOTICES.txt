@@ -48,3 +48,16 @@ tree, including index.html, external scripts, styles, and Font Awesome fonts,
 by fixed file size and SHA-256 before including them in the XPI. They add
 Angular's ng-csp="no-unsafe-eval" marker to the local entry page so Angular
 uses its CSP-compatible expression parser.
+
+jschardet
+=========
+
+jschardet is developed by Antonio Afonso and contributors:
+https://github.com/aadsm/jschardet
+
+Bundled version: 4.1.0, unmodified browser ESM minified distribution.
+Upstream license: 0BSD; see licenses/jschardet-LICENSE.
+Source: https://github.com/aadsm/jschardet/tree/v4.1.0
+Package: https://registry.npmjs.org/jschardet/-/jschardet-4.1.0.tgz
+The package SHA-512 is recorded in docs/development.md and its Chinese copy.
+The library only detects encoding; Firefox TextDecoder performs decoding.

@@ -1,3 +1,5 @@
+import { normalizeFilenameEncodings } from "./DownloadItFilename.sys.mjs";
+import { DIRECTORY_FORMAT, defaultDownloadDirectories, readDownloadDirectories, validateDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
   buildDownloadBatchJob,
   classifyDownloadTarget,
@@ -217,6 +219,9 @@ const PREF_OMIT_COOKIES = "downloadit.omitCookies";
 const PREF_IDM_BRIDGE = "downloadit.idmBridgeEnabled";
 const PREF_LINK_GROUPS = "downloadit.linkGroups";
 const PREF_MIRRORS = "downloadit.mirrors";
+const PREF_DOWNLOAD_DIALOG = "downloadit.downloadDialog";
+const PREF_DIALOG_ENABLE_DELAY = "security.dialog_enable_delay";
+const PREF_DIALOG_ENABLE_DELAY_BACKUP = "downloadit.dialogEnableDelayBackup";
 const PREF_DEVELOPER_MODE = "downloadit.developerMode";
 const PREF_KEEP_PROFILE_DATA_ON_UNINSTALL =
   "downloadit.keepProfileDataOnUninstall";
@@ -3081,6 +3086,7 @@ export class DownloadItService {
         ? { ...this.defaultDownloader }
         : null,
       ...this.getProtocolDefaultSettings(),
+      downloadDialog: this.getDownloadDialogSettings(),
       protocolDefaultLocks: this.getProtocolDefaultLocks(),
       detectedManagerCount: this.downloaders.filter(downloader =>
         downloader.ref.provider === FLASHGOT_PROVIDER &&
@@ -3169,6 +3175,73 @@ export class DownloadItService {
     };
   }
 
+  getDownloadDialogSettings() {
+    const defaults = {
+      disableButtonDelay: true,
+      detectFilenameEncoding: true,
+      filenameEncodings: [],
+      editFilename: true,
+      showFullURL: true,
+      saveAs: true,
+      saveTo: true,
+      saveAndOpen: true,
+      directoryFormat: DIRECTORY_FORMAT,
+      directories: defaultDownloadDirectories(),
+    };
+    try {
+      const raw = Services.prefs.getStringPref(PREF_DOWNLOAD_DIALOG, "");
+      const parsed = raw ? JSON.parse(raw) : {};
+      const value = parsed && typeof parsed === "object" ? parsed : {};
+      return {
+        ...defaults,
+        ...Object.fromEntries(Object.keys(defaults).filter(key => key !== "directories" && key !== "directoryFormat" && key !== "filenameEncodings")
+          .map(key => [key, value[key] == null ? defaults[key] : Boolean(value[key])])),
+        filenameEncodings: normalizeFilenameEncodings(value.filenameEncodings || []),
+        directoryFormat: DIRECTORY_FORMAT,
+        directories: readDownloadDirectories(value),
+      };
+    } catch (error) {
+      console.error("DownloadIt: invalid download dialog preference", error);
+      return defaults;
+    }
+  }
+
+  syncDownloadDialogButtonDelay(enabled = this.getDownloadDialogSettings().disableButtonDelay) {
+    if (Services.prefs.prefIsLocked(PREF_DIALOG_ENABLE_DELAY)) {
+      return;
+    }
+    try {
+      const raw = Services.prefs.getStringPref(PREF_DIALOG_ENABLE_DELAY_BACKUP, "");
+      const current = Services.prefs.getIntPref(PREF_DIALOG_ENABLE_DELAY);
+      if (enabled) {
+        if (current !== 0) {
+          // Persist the original user value (or absence) across unclean restarts.
+          // A later external change supersedes our previous backup.
+          const previous = Services.prefs.prefHasUserValue(PREF_DIALOG_ENABLE_DELAY)
+            ? current : null;
+          Services.prefs.setStringPref(PREF_DIALOG_ENABLE_DELAY_BACKUP, JSON.stringify(previous));
+          Services.prefs.setIntPref(PREF_DIALOG_ENABLE_DELAY, 0);
+        }
+      } else if (raw) {
+        const previous = JSON.parse(raw);
+        if (previous !== null && !Number.isInteger(previous)) {
+          throw new Error("Invalid dialog delay backup");
+        }
+        // Do not overwrite a value changed by the user or another extension.
+        if (current === 0) {
+          if (previous === null) {
+            Services.prefs.clearUserPref(PREF_DIALOG_ENABLE_DELAY);
+          } else {
+            Services.prefs.setIntPref(PREF_DIALOG_ENABLE_DELAY, previous);
+          }
+        }
+        Services.prefs.clearUserPref(PREF_DIALOG_ENABLE_DELAY_BACKUP);
+      }
+    } catch (error) {
+      console.error("DownloadIt: could not update dialog button delay", error);
+    }
+  }
+
   async applySettings({
     defaultManager = null,
     magnetManager = null,
@@ -3190,6 +3263,7 @@ export class DownloadItService {
     linkGroups = null,
     mirrorSettings = null,
     customDownloaders = null,
+    downloadDialog = null,
   } = {}) {
     const defaultManagerRequested = defaultManager !== null &&
       defaultManager !== undefined;
@@ -3202,6 +3276,10 @@ export class DownloadItService {
       ? currentProtocolDefaults.ed2kManager
       : String(ed2kManager || "");
     const currentAutoCaptureRules = this.autoCaptureRules;
+    const currentDownloadDialog = this.getDownloadDialogSettings();
+    const requestedDownloadDialog = downloadDialog == null
+      ? currentDownloadDialog
+      : this.validateDownloadDialogSettings(downloadDialog);
     const requestedAutoCaptureRules = autoCaptureRules == null
       ? currentAutoCaptureRules
       : normalizeAutoCaptureDocument(autoCaptureRules);
@@ -3870,6 +3948,13 @@ export class DownloadItService {
     if (JSON.stringify(requestedLinkGroups) !== JSON.stringify(currentLinkGroups)) {
       Services.prefs.setStringPref(PREF_LINK_GROUPS, JSON.stringify(requestedLinkGroups));
     }
+    if (JSON.stringify(requestedDownloadDialog) !== JSON.stringify(currentDownloadDialog)) {
+      Services.prefs.setStringPref(
+        PREF_DOWNLOAD_DIALOG,
+        JSON.stringify(requestedDownloadDialog),
+      );
+    }
+    this.syncDownloadDialogButtonDelay(requestedDownloadDialog.disableButtonDelay);
     if (
       JSON.stringify(requestedMirrorSettings) !==
         JSON.stringify(currentMirrorSettings)
@@ -3887,11 +3972,41 @@ export class DownloadItService {
     return this.readSettings();
   }
 
+  validateDownloadDialogSettings(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new DownloadItError("download-dialog-settings-invalid");
+    }
+    const current = this.getDownloadDialogSettings();
+    let normalizedDirectories;
+    let filenameEncodings;
+    try {
+      filenameEncodings = normalizeFilenameEncodings(value.filenameEncodings ?? current.filenameEncodings);
+      normalizedDirectories = validateDownloadDirectories(value.directories, Components, Services.appinfo.OS);
+    } catch {
+      throw new DownloadItError("download-dialog-settings-invalid");
+    }
+    return {
+      disableButtonDelay: value.disableButtonDelay == null
+        ? current.disableButtonDelay : Boolean(value.disableButtonDelay),
+      detectFilenameEncoding: value.detectFilenameEncoding == null
+        ? current.detectFilenameEncoding : Boolean(value.detectFilenameEncoding),
+      filenameEncodings,
+      editFilename: value.editFilename == null ? current.editFilename : Boolean(value.editFilename),
+      showFullURL: value.showFullURL == null ? current.showFullURL : Boolean(value.showFullURL),
+      saveAs: value.saveAs == null ? current.saveAs : Boolean(value.saveAs),
+      saveTo: value.saveTo == null ? current.saveTo : Boolean(value.saveTo),
+      saveAndOpen: value.saveAndOpen == null ? current.saveAndOpen : Boolean(value.saveAndOpen),
+      directoryFormat: DIRECTORY_FORMAT,
+      directories: normalizedDirectories,
+    };
+  }
+
   async startup() {
     this.serviceReady = false;
     if (!this.platformDefinition) {
       throw new Error("DownloadIt supports Windows and Linux only");
     }
+    this.syncDownloadDialogButtonDelay();
 
     this.binaryPath = this.platformDefinition.flashGotSupported
       ? await this.deployBinary()
@@ -3956,6 +4071,7 @@ export class DownloadItService {
 
   async shutdown() {
     this.serviceReady = false;
+    this.syncDownloadDialogButtonDelay(false);
     this.idmBridge.stop();
     if (this.aria2Processes?.size || this.aria2StartupPromises?.size) {
       await this.shutdownManagedCustomAria2();

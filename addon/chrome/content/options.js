@@ -40,6 +40,12 @@ const {
 } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItAutoCapture.sys.mjs",
 );
+const { BUILTIN_DIRECTORIES, getBuiltinDirectory, resolveDownloadDirectory } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItDirectories.sys.mjs",
+);
+const { normalizeFilenameEncodings } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItFilename.sys.mjs",
+);
 const localizationReady = initializeDownloadItLocalization(window);
 const DEVELOPER_MODE_DOUBLE_CLICKS = 6;
 const DEVELOPER_MODE_GESTURE_TIMEOUT_MS = 4000;
@@ -66,6 +72,11 @@ const SECTION_META = {
     "downloadit-auto-capture-kicker",
     "downloadit-auto-capture-title",
     "downloadit-auto-capture-description",
+  ],
+  "download-dialog": [
+    "downloadit-dialog-settings-kicker",
+    "downloadit-dialog-settings-title",
+    "downloadit-dialog-settings-description",
   ],
   privacy: [
     "downloadit-privacy-kicker",
@@ -190,6 +201,7 @@ const CUSTOM_ERROR_MESSAGES = {
   "aria2next-submit-failed": "downloadit-error-aria2next-submit",
   "aria2next-partial-failure": "downloadit-error-aria2next-partial",
   "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
+  "download-dialog-settings-invalid": "downloadit-error-download-dialog-settings",
 };
 
 const BUILT_IN_PROTOCOL_MESSAGE_IDS = {
@@ -272,6 +284,7 @@ function createSettingsState(snapshot) {
     ),
     idmBridgeEnabled: snapshot.idmBridgeEnabled,
     autoCaptureRules: clone(snapshot.autoCaptureRules),
+    downloadDialog: clone(snapshot.downloadDialog),
     linkGroups: clone(snapshot.linkGroups),
     mirrorSettings: clone(snapshot.mirrorSettings),
     customDownloaders: clone(snapshot.customDownloaders),
@@ -283,7 +296,56 @@ function bindEvents() {
     "dblclick",
     activateDeveloperModeFromGesture,
   );
+  bindFilenameEncodingEditor();
   const calloutMark = document.getElementById("callout-mark");
+  for (const input of document.querySelectorAll("[data-download-dialog-pref]")) {
+    input.addEventListener("change", () => {
+      state.draft.downloadDialog[input.dataset.downloadDialogPref] = input.checked;
+      syncFilenameEncodingAccess();
+      renderActionState();
+    });
+  }
+  document.getElementById("add-download-dialog-directory").addEventListener(
+    "click",
+    addDownloadDialogDirectory,
+  );
+  const builtinPopup = document.getElementById("builtin-directory-popup");
+  for (const builtin of BUILTIN_DIRECTORIES) {
+    const item = createXULElement(document, "menuitem", { value: builtin.path });
+    setLocalized(item, builtin.messageId);
+    item.addEventListener("command", () => {
+      const directories = state.draft.downloadDialog.directories;
+      if (!directories.some(entry => entry.path === builtin.path)) {
+        directories.push({ path: builtin.path, label: "" });
+        renderDownloadDialogSettings();
+        renderActionState();
+      }
+    });
+    builtinPopup.append(item);
+  }
+  document.getElementById("download-dialog-directory-list").addEventListener(
+    "input",
+    event => {
+      const index = Number(event.target.dataset.directoryIndex);
+      const field = event.target.dataset.directoryField;
+      const entry = state.draft?.downloadDialog?.directories?.[index];
+      if (entry && (field === "label" || (field === "path" && !getBuiltinDirectory(entry.path)))) {
+        entry[field] = event.target.value;
+        renderActionState();
+      }
+    },
+  );
+  document.getElementById("download-dialog-directory-list").addEventListener(
+    "click",
+    event => {
+      const index = Number(event.target.dataset.removeDirectory);
+      if (Number.isInteger(index) && state.draft?.downloadDialog?.directories) {
+        state.draft.downloadDialog.directories.splice(index, 1);
+        renderDownloadDialogSettings();
+        renderActionState();
+      }
+    },
+  );
   const showEasterEggLog = async () => {
     try {
       await localizationReady;
@@ -810,8 +872,8 @@ function renderNavigation() {
   const navigation = document.querySelector(".section-nav");
   const mirrorButton = navigation.querySelector('[data-section="mirrors"]');
   const visibleSections = developerMode
-    ? ["managers", "auto-capture", "link-groups", "mirrors", "privacy", "ytdlp", "about"]
-    : ["managers", "auto-capture", "link-groups", "privacy", "ytdlp", "about"];
+    ? ["managers", "auto-capture", "download-dialog", "link-groups", "mirrors", "privacy", "ytdlp", "about"]
+    : ["managers", "auto-capture", "download-dialog", "link-groups", "privacy", "ytdlp", "about"];
 
   mirrorButton.hidden = !developerMode;
   navigation.classList.toggle("has-developer-mode", developerMode);
@@ -848,6 +910,7 @@ function render() {
   renderVideoDownloadSettings();
   renderYtDlpSettings();
   renderAutoCaptureRules();
+  renderDownloadDialogSettings();
   renderLinkGroups();
   renderMirrors();
   renderPrivacy();
@@ -856,7 +919,213 @@ function render() {
   renderActionState();
 }
 
+// Independent draft: Cancel/Escape must not change the settings-page draft.
+let filenameEncodingDraft = [];
+const FILENAME_ENCODING_PRESETS = Object.freeze([
+  { language: "en", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+  { language: "zh", encodings: ["UTF-8", "GB18030", "Big5"] },
+  { language: "hi", encodings: ["UTF-8"] },
+  { language: "es", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+  { language: "ar", encodings: ["UTF-8", "windows-1256", "ISO-8859-6"] },
+  { language: "fr", encodings: ["UTF-8", "windows-1252", "ISO-8859-15"] },
+  { language: "bn", encodings: ["UTF-8"] },
+  { language: "pt", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+  { language: "ru", encodings: ["UTF-8", "windows-1251", "KOI8-R", "ISO-8859-5"] },
+  { language: "id", encodings: ["UTF-8", "windows-1252", "ISO-8859-1"] },
+]);
+
+function bindFilenameEncodingEditor() {
+  const dialog = document.getElementById("filename-encoding-editor");
+  const input = document.getElementById("download-dialog-extra-encodings");
+  document.getElementById("manage-filename-encodings").addEventListener("click", () => {
+    if (!state.draft?.downloadDialog?.detectFilenameEncoding || state.busy) return;
+    filenameEncodingDraft = [...(state.draft.downloadDialog.filenameEncodings || [])];
+    input.value = "";
+    document.getElementById("filename-encoding-error").hidden = true;
+    renderFilenameEncodingEditor();
+    dialog.showModal();
+    input.focus();
+  });
+  document.getElementById("add-filename-encoding").addEventListener("click", () => addFilenameEncodings());
+  input.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      addFilenameEncodings();
+    }
+  });
+  document.getElementById("filename-encoding-cancel").addEventListener("click", () => dialog.close());
+  document.getElementById("filename-encoding-save").addEventListener("click", () => {
+    if (input.value.trim() && !addFilenameEncodings()) return;
+    state.draft.downloadDialog.filenameEncodings = [...filenameEncodingDraft];
+    dialog.close();
+    renderDownloadDialogSettings();
+    renderActionState();
+  });
+}
+
+function addFilenameEncodings(labels = null) {
+  const input = document.getElementById("download-dialog-extra-encodings");
+  const error = document.getElementById("filename-encoding-error");
+  try {
+    const additions = normalizeFilenameEncodings(labels || input.value.split(/[,，;；\s]+/u).filter(Boolean));
+    if (!additions.length) throw new RangeError("Empty encoding list");
+    filenameEncodingDraft = normalizeFilenameEncodings([...new Set([...filenameEncodingDraft, ...additions])]);
+    if (!labels) input.value = "";
+    error.hidden = true;
+    renderFilenameEncodingEditor();
+    input.focus();
+    return true;
+  } catch {
+    setLocalized(error, "downloadit-dialog-extra-encodings-invalid");
+    error.hidden = false;
+    input.focus();
+    return false;
+  }
+}
+
+function renderFilenameEncodingEditor() {
+  const list = document.getElementById("filename-encoding-list");
+  list.replaceChildren();
+  for (const encoding of filenameEncodingDraft) {
+    const row = document.createElement("li");
+    row.className = "auto-extension-row";
+    const name = document.createElement("code");
+    name.className = "auto-extension-name";
+    name.textContent = encoding;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button";
+    remove.textContent = "\u00d7";
+    setLocalized(remove, "downloadit-encoding-remove", { encoding });
+    remove.addEventListener("click", () => {
+      filenameEncodingDraft = filenameEncodingDraft.filter(item => item !== encoding);
+      renderFilenameEncodingEditor();
+    });
+    row.append(name, remove);
+    list.append(row);
+  }
+  if (!filenameEncodingDraft.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty-row";
+    setLocalized(empty, "downloadit-encoding-empty");
+    list.append(empty);
+  }
+  const presets = document.getElementById("filename-encoding-presets");
+  presets.replaceChildren();
+  const names = new Intl.DisplayNames([document.documentElement.lang || window.Services?.locale?.appLocaleAsBCP47 || "en-US"], { type: "language" });
+  for (const preset of FILENAME_ENCODING_PRESETS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary-button";
+    setLocalized(button, "downloadit-encoding-preset", {
+      language: names.of(preset.language), encodings: preset.encodings.join(", "),
+    });
+    button.disabled = normalizeFilenameEncodings(preset.encodings).every(item => filenameEncodingDraft.includes(item));
+    button.addEventListener("click", () => addFilenameEncodings(preset.encodings));
+    presets.append(button);
+  }
+}
+
+function syncFilenameEncodingAccess() {
+  document.getElementById("manage-filename-encodings").disabled =
+    state.busy || !state.draft?.downloadDialog?.detectFilenameEncoding;
+}
+
+function renderDownloadDialogSettings() {
+  syncFilenameEncodingAccess();
+  const settings = state.draft?.downloadDialog;
+  setLocalized(document.getElementById("filename-encodings-summary"), "downloadit-encoding-summary", { count: (settings?.filenameEncodings || []).length });
+  for (const input of document.querySelectorAll("[data-download-dialog-pref]")) {
+    input.checked = Boolean(settings?.[input.dataset.downloadDialogPref]);
+  }
+  const list = document.getElementById("download-dialog-directory-list");
+  list.replaceChildren();
+  const directories = settings?.directories || [];
+  for (const item of document.getElementById("builtin-directory-popup").children) {
+    item.disabled = directories.some(entry => entry.path === item.getAttribute("value"));
+  }
+  document.getElementById("add-download-dialog-directory").disabled =
+    directories.filter(entry => !getBuiltinDirectory(entry.path)).length >= 30;
+  for (const [index, entry] of directories.entries()) {
+    const row = document.createElement("li");
+    row.className = "manager-row download-dialog-directory-row";
+    const path = document.createElement("input");
+    path.type = "text";
+    const builtin = getBuiltinDirectory(entry.path);
+    path.value = builtin ? (resolveDownloadDirectory(entry.path)?.path || "") : entry.path;
+    path.readOnly = Boolean(builtin);
+    path.dataset.directoryIndex = String(index);
+    path.dataset.directoryField = "path";
+    path.setAttribute("aria-label", "");
+    setLocalized(path, "downloadit-dialog-directory-path");
+    const label = document.createElement("input");
+    label.type = "text";
+    label.value = entry.label || "";
+    label.dataset.directoryIndex = String(index);
+    label.dataset.directoryField = "label";
+    label.setAttribute("aria-label", "");
+    setLocalized(label, "downloadit-dialog-directory-label");
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button directory-remove";
+    remove.textContent = "\u00d7";
+    remove.dataset.removeDirectory = String(index);
+    setLocalized(remove, "downloadit-dialog-directory-remove");
+    if (builtin) {
+      const location = document.createElement("div");
+      location.className = "builtin-directory-location";
+      const type = document.createElement("span");
+      setLocalized(type, builtin.messageId);
+      type.className = "builtin-directory-type";
+      row.classList.add("has-builtin-directory");
+      location.append(type, path);
+      if (!path.value) {
+        const unavailable = document.createElement("span");
+        unavailable.className = "directory-unavailable";
+        setLocalized(unavailable, "downloadit-dialog-directory-unavailable");
+        location.append(unavailable);
+      }
+      row.append(location, label, remove);
+    } else {
+      row.append(path, label, remove);
+    }
+    list.append(row);
+  }
+  if (!settings?.directories?.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty-row";
+    setLocalized(empty, "downloadit-dialog-directories-empty");
+    list.append(empty);
+  }
+}
+
+async function addDownloadDialogDirectory() {
+  if (state.draft.downloadDialog.directories.filter(entry => !getBuiltinDirectory(entry.path)).length >= 30) return;
+  const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+  await document.l10n.ready;
+  const title = await document.l10n.formatValue("downloadit-dialog-directory-picker");
+  const pickerParent = !(
+    "inIsolatedMozBrowser" in window.browsingContext.originAttributes
+  ) ? window.browsingContext : window;
+  picker.init(pickerParent, title, Ci.nsIFilePicker.modeGetFolder);
+  const result = await new Promise(resolve => picker.open(resolve));
+  if (result !== Ci.nsIFilePicker.returnOK || !picker.file?.path) {
+    return;
+  }
+  const directories = state.draft.downloadDialog.directories;
+  if (directories.filter(entry => !getBuiltinDirectory(entry.path)).length >= 30) return;
+  const normalizePath = value => window.Services?.appinfo?.OS === "WINNT"
+    ? value.toLowerCase()
+    : value;
+  if (!directories.some(entry => normalizePath(entry.path) === normalizePath(picker.file.path))) {
+    directories.push({ path: picker.file.path, label: picker.file.leafName || picker.file.path });
+    renderDownloadDialogSettings();
+    renderActionState();
+  }
+}
+
 function renderActionState() {
+  syncFilenameEncodingAccess();
   const dirty = isDirty();
   const changeState = document.getElementById("change-state");
   const applyButton = document.getElementById("apply");
@@ -3319,6 +3588,7 @@ async function applySettings() {
     payload.defaultManager = state.defaultManagerTouched
       ? state.draft.defaultManager
       : null;
+    payload.downloadDialog = clone(state.draft.downloadDialog);
     if (state.snapshot.customDownloadersError) {
       payload.customDownloaders = null;
     }

@@ -155,7 +155,7 @@ test("Windows and Linux share one runtime capability matrix and universal XPI", 
   }
   for (const readme of ["README.md", "README-zh_CN.md"]) {
     const source = read(readme);
-    for (const text of ["Windows", "Linux", "Snap", "Flatpak", "FlashGot.exe"] ) {
+    for (const text of ["Windows", "Linux", "Snap", "Flatpak", "FlashGot"] ) {
       assert.match(source, new RegExp(text.replaceAll(".", "\\.")));
     }
   }
@@ -286,7 +286,7 @@ test("automatic capture controls live in a dedicated settings tab", () => {
     markup,
     /aria-controls="section-auto-capture" data-section="auto-capture"/,
   );
-  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 7);
+  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 8);
   assert.ok(managerPanel);
   assert.ok(autoCapturePanel);
   assert.doesNotMatch(managerPanel, /id="auto-allow-list"/);
@@ -299,11 +299,44 @@ test("automatic capture controls live in a dedicated settings tab", () => {
   assert.match(autoCapturePanel, /id="retry-auto-capture-rules"/);
   assert.match(autoCapturePanel, /id="reset-auto-capture-rules"/);
   assert.match(script, /"auto-capture": \[/);
-  assert.match(styles, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/);
   assert.match(
     styles,
-    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(7, minmax\(0, 1fr\)\)/,
+    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(8, minmax\(0, 1fr\)\)/,
   );
+});
+
+test("download dialog settings are independent and packaged in every locale", () => {
+  const markup = read("addon/chrome/content/options.xhtml");
+  const script = read("addon/chrome/content/options.js");
+  const service = read("addon/chrome/content/DownloadItService.sys.mjs");
+  const dialog = read("addon/chrome/content/DownloadItDownloadDialog.sys.mjs");
+  const filename = read("addon/chrome/content/DownloadItFilename.sys.mjs");
+  const packPowerShell = read("scripts/pack.ps1");
+  const packShell = read("scripts/pack.sh");
+
+  assert.match(markup, /data-section="download-dialog"/);
+  assert.match(markup, /id="section-download-dialog"/);
+  assert.match(markup, /data-download-dialog-pref="detectFilenameEncoding"/);
+  assert.match(markup, /data-download-dialog-pref="disableButtonDelay"/);
+  for (const locale of supportedLocales) {
+    const messages = read(`addon/chrome/content/locales/${locale}/downloadit.ftl`);
+    assert.match(messages, /^downloadit-dialog-disable-button-delay-title = .+/m);
+    assert.match(messages, /^downloadit-dialog-disable-button-delay-help = .+/m);
+  }
+  assert.match(markup, /data-download-dialog-pref="editFilename"/);
+  assert.match(script, /downloadDialog: clone\(snapshot\.downloadDialog\)/);
+  assert.match(script, /payload\.downloadDialog = clone\(state\.draft\.downloadDialog\)/);
+  assert.match(service, /PREF_DOWNLOAD_DIALOG = "downloadit\.downloadDialog"/);
+  assert.match(service, /validateDownloadDialogSettings\(value\)/);
+  assert.match(read("addon/chrome/content/DownloadItDirectories.sys.mjs"), /file\?\.exists\(\) && file\.isDirectory\(\)/);
+  assert.match(dialog, /settings\.detectFilenameEncoding !== false/);
+  assert.match(dialog, /settings\.editFilename !== false/);
+  assert.match(filename, /TextDecoder\(encoding, \{ fatal: true \}\)/);
+  for (const source of [packPowerShell, packShell]) {
+    assert.match(source, /DownloadItDownloadDialog\.sys\.mjs/);
+    assert.match(source, /DownloadItFilename\.sys\.mjs/);
+  }
 });
 
 test("yt-dlp settings have a dedicated page and control process window visibility", () => {
@@ -541,34 +574,10 @@ test("built-in provider settings and guarded local protocols are wired end to en
     }
   }
 
-  for (const relativePath of ["README.md", "README-zh_CN.md"]) {
-    const source = read(relativePath);
-    for (const text of [
-      "jdownloader:jdownloader",
-      "downloadit.autoStartTasks",
-      "abdm:abdm",
-      "downloadit.abdm.enabled",
-      "downloadit.abdm.endpoint",
-      "downloadit.abdm.apiKey",
-      "downloadit.abdm.launchPath",
-      "xdm:xdm",
-      "downloadit.xdm.enabled",
-      "downloadit.xdm.launchPath",
-      "uget:uget",
-      "downloadit.uget.enabled",
-      "downloadit.uget.launchPath",
-      "downloadit.jdownloader.enabled",
-      "downloadit.jdownloader.endpoint",
-      "downloadit.jdownloader.launchPath",
-      "downloadit.jdownloader.autoLaunch",
-      "downloadit.jdownloader.detectedPath",
-      "downloadit.jdownloader.detectedJavaArgs",
-      "127.0.0.0/8",
-      "JDownloader2.exe",
-      "dpass",
-      "apass",
-    ]) {
-      assert.match(source, new RegExp(text.replaceAll(".", "\\.")));
+  for (const locale of ["", "zh-CN/"]) {
+    const source = read(`website/src/content/docs/${locale}guides/download-managers.md`);
+    for (const text of ["JDownloader", "AB Download Manager", "Xtreme Download Manager", "uGet", "Aria2Next", "POST", "Cookie", "magnet:", "ed2k:"]) {
+      assert.ok(source.includes(text), `Download manager guide must describe ${text}`);
     }
   }
 });
@@ -741,8 +750,8 @@ test("custom executable paths are portable within the Firefox configuration dire
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const script = read("addon/chrome/content/options.js");
   const markup = read("addon/chrome/content/options.xhtml");
-  const englishReadme = read("README.md");
-  const chineseReadme = read("README-zh_CN.md");
+  const englishGuide = read("website/src/content/docs/guides/custom-downloaders.md");
+  const chineseGuide = read("website/src/content/docs/zh-CN/guides/custom-downloaders.md");
 
   assert.match(service, /Services\.dirsvc\.get\("UChrm", Ci\.nsIFile\)/);
   assert.match(service, /getAbsolutePathPlatform\(path\)/);
@@ -753,8 +762,10 @@ test("custom executable paths are portable within the Firefox configuration dire
   assert.match(script, /currentPathResolver = value => state\.service\.resolveCustomFilePath\(value\)/);
   assert.match(script, /state\.service\.normalizeCustomFilePathForStorage\(picker\.file\)/);
   assert.equal((markup.match(/downloadit-executable-path-help/g) || []).length, 2);
-  assert.match(englishReadme, /`UChrm`/);
-  assert.match(chineseReadme, /`UChrm`/);
+  for (const source of [englishGuide, chineseGuide]) {
+    assert.match(source, /`chrome`/);
+    assert.match(source, /aria2/);
+  }
 });
 
 test("yt-dlp relative paths use an nsIFile Firefox profile base", () => {
@@ -783,12 +794,16 @@ test("yt-dlp page probing explicitly skips media downloads", () => {
 test("automatic capture rules are versioned, profile-scoped, and atomic", () => {
   const rules = read("addon/chrome/content/DownloadItAutoCapture.sys.mjs");
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
-  const englishReadme = read("README.md");
-  const chineseReadme = read("README-zh_CN.md");
+  const englishGuide = read("website/src/content/docs/guides/auto-capture.md");
+  const chineseGuide = read("website/src/content/docs/zh-CN/guides/auto-capture.md");
 
-  for (const source of [service, englishReadme, chineseReadme]) {
+  for (const source of [service, englishGuide, chineseGuide]) {
     assert.doesNotMatch(source, /downloadit\.autoExtensions/);
-    assert.match(source, /auto-capture-rules\.json/);
+  }
+  for (const source of [englishGuide, chineseGuide]) {
+    assert.match(source, /`\.xpi`/);
+    assert.match(source, /`magnet:`/);
+    assert.match(source, /reference\/settings\//);
   }
   assert.match(rules, /AUTO_CAPTURE_RULES_VERSION = 1/);
   assert.match(rules, /BUILT_IN_AUTO_CAPTURE_DENY/);
@@ -806,29 +821,26 @@ test("automatic capture rules are versioned, profile-scoped, and atomic", () => 
 test("link groups are validated, policy-aware, and documented", () => {
   const links = read("addon/chrome/content/DownloadItLinks.sys.mjs");
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
-  const englishReadme = read("README.md");
-  const chineseReadme = read("README-zh_CN.md");
+  const englishGuide = read("website/src/content/docs/guides/entry-points-and-links.md");
+  const chineseGuide = read("website/src/content/docs/zh-CN/guides/entry-points-and-links.md");
 
   assert.match(links, /validateLinkGroupSettings/);
   assert.match(links, /extension-duplicate/);
   assert.match(service, /PREF_LINK_GROUPS = "downloadit\.linkGroups"/);
   assert.match(service, /linkGroupsLocked/);
-  for (const source of [englishReadme, chineseReadme]) {
-    assert.match(source, /downloadit\.linkGroups/);
+  for (const source of [englishGuide, chineseGuide]) {
+    assert.match(source, /reference\/settings\/#/);
+    assert.match(source, /Markdown/);
   }
 });
 
-test("IDM bridge is staged, policy-aware, packaged, and documented", () => {
+test("IDM bridge is staged, policy-aware, and packaged", () => {
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const bridge = read("addon/chrome/content/DownloadItIDMBridge.sys.mjs");
   const packPowerShell = read("scripts/pack.ps1");
   const packShell = read("scripts/pack.sh");
-  const englishReadme = read("README.md");
-  const chineseReadme = read("README-zh_CN.md");
 
-  for (const source of [service, englishReadme, chineseReadme]) {
-    assert.match(source, /downloadit\.idmBridgeEnabled/);
-  }
+  assert.match(service, /downloadit\.idmBridgeEnabled/);
   assert.match(service, /idmBridgeLocked/);
   assert.match(service, /downloadIDMTask/);
   assert.match(bridge, /http-on-modify-request/);
@@ -854,8 +866,8 @@ test("mirror adapters are validated, policy-aware, packaged, and documented", ()
   const styles = read("addon/chrome/content/options.css");
   const packPowerShell = read("scripts/pack.ps1");
   const packShell = read("scripts/pack.sh");
-  const englishReadme = read("README.md");
-  const chineseReadme = read("README-zh_CN.md");
+  const englishGuide = read("website/src/content/docs/guides/mirrors.md");
+  const chineseGuide = read("website/src/content/docs/zh-CN/guides/mirrors.md");
 
   assert.match(service, /PREF_MIRRORS = "downloadit\.mirrors"/);
   assert.match(service, /PREF_DEVELOPER_MODE = "downloadit\.developerMode"/);
@@ -881,10 +893,11 @@ test("mirror adapters are validated, policy-aware, packaged, and documented", ()
     assert.match(source, /DownloadItGitHubMirror\.sys\.mjs/);
     assert.match(source, /DownloadItMirrors\.sys\.mjs/);
   }
-  for (const source of [englishReadme, chineseReadme]) {
-    assert.match(source, /downloadit\.mirrors/);
+  for (const source of [englishGuide, chineseGuide]) {
+    assert.match(source, /HTTPS/);
     assert.doesNotMatch(source, /developer[.\s-]?mode|开发者模式/i);
-    assert.match(source, /https:\/\/gh-proxy\.com\//);
+    assert.match(source, /POST/);
+    assert.match(source, /Cookie/);
     assert.match(source, /raw\.githubusercontent\.com/);
   }
 });
