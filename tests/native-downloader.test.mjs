@@ -1469,14 +1469,13 @@ test("native sources retain Firefox isolation context and configure POST channel
 });
 
 test("native provider behavior is documented in both languages", () => {
-  const englishReadme = read("README.md");
-  const chineseReadme = read("README-zh_CN.md");
-
-  for (const source of [englishReadme, chineseReadme]) {
-    assert.match(source, /native:firefox/);
-    assert.match(source, /\.part/);
-    assert.match(source, /name\(1\)\.ext/);
-    assert.match(source, /Cookie jar/i);
+  for (const locale of ["", "zh-CN/"]) {
+    const managers = read(`website/src/content/docs/${locale}guides/download-managers.md`);
+    const capture = read(`website/src/content/docs/${locale}guides/auto-capture.md`);
+    assert.match(managers, /Firefox Downloads API/);
+    assert.match(managers, /Cookie/);
+    assert.match(capture, /POST/);
+    assert.match(capture, /launcher/);
   }
 });
 
