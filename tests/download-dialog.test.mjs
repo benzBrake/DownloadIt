@@ -704,6 +704,11 @@ test("download dialog filename detection is independent from filename editing", 
   assert.ok(encodingMenu);
   assert.equal(encodingMenu.localName, "button");
   assert.equal(encodingMenu.l10nArgs.mode, "auto");
+  assert.match(encodingMenu.getAttribute("style"), /appearance: none/);
+  assert.match(encodingMenu.getAttribute("style"), /height: 24px/);
+  assert.match(encodingMenu.getAttribute("style"), /margin: 0/);
+  assert.match(encodingMenu.getAttribute("style"), /border-inline-start: 0/);
+  assert.match(encodingMenu.getAttribute("style"), /border-radius: 0 4px 4px 0/);
 });
 
 test("copy URL reports both outcomes, restarts feedback, and cleans up on destroy", async () => {
@@ -833,7 +838,9 @@ test("quick save actions delegate to native dialog handling", async () => {
     dialogStyles[0].getAttribute("href"),
     "chrome://downloadit/content/download-dialog.css",
   );
-  assert.equal(window.document.getElementById("locationText").localName, "input");
+  const filenameInput = window.document.getElementById("locationText");
+  assert.equal(filenameInput.localName, "input");
+  assert.match(filenameInput.getAttribute("style"), /border-radius: 4px 0 0 4px/);
   assert.equal(window.document.getElementById("di-filename-row").getAttribute("flex"), "1");
   assert.equal(window.document.getElementById("di-filename-input"), null);
   assert.equal(

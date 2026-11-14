@@ -604,7 +604,7 @@ export class DownloadItDownloadDialogController {
         this.filenameInput.setAttribute("id", "locationText");
         this.filenameInput.setAttribute(
           "style",
-          "display: block; flex: 1 1 0%; min-width: 0; width: 100%; max-width: 100%; border: 1px solid var(--in-content-box-border-color, ThreeDDarkShadow); border-radius: 4px; padding-inline: 5px; min-height: 24px; max-height: 24px; box-sizing: border-box;",
+          "display: block; flex: 1 1 0%; min-width: 0; width: 100%; max-width: 100%; border: 1px solid var(--in-content-box-border-color, ThreeDDarkShadow); border-radius: 4px 0 0 4px; padding-inline: 5px; min-height: 24px; max-height: 24px; box-sizing: border-box;",
         );
         this.filenameInput.value = filename || location.value || "";
         this.filenameRow.appendChild(this.filenameInput);
@@ -656,7 +656,7 @@ export class DownloadItDownloadDialogController {
       });
       this.encodingMenu = createXULElement(this.document, "button", {
         id: "di-filename-encoding", type: "menu",
-        style: "flex-shrink: 0; min-width: max-content; margin-inline-start: 4px;",
+        style: "appearance: none; flex-shrink: 0; min-width: max-content; height: 24px; min-height: 24px; max-height: 24px; box-sizing: border-box; margin: 0; padding: 0 6px; border: 1px solid var(--in-content-box-border-color, ThreeDDarkShadow); border-inline-start: 0; border-radius: 0 4px 4px 0; background-color: var(--in-content-box-background, Field); color: var(--in-content-text-color, FieldText);",
       }, [popup]);
       this.setLocalized(this.encodingMenu, "downloadit-dialog-encoding-button", {
         mode: settings.detectFilenameEncoding === false ? "original" : "auto",
