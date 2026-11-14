@@ -49,6 +49,9 @@ const { normalizeFilenameEncodings } = ChromeUtils.importESModule(
 const { normalizeDownloadSoundSettings } = ChromeUtils.importESModule(
   "chrome://downloadit/content/DownloadItSound.sys.mjs",
 );
+const { defaultYtDlpPresets, validateYtDlpPresets } = ChromeUtils.importESModule(
+  "chrome://downloadit/content/DownloadItYtDlp.sys.mjs",
+);
 const localizationReady = initializeDownloadItLocalization(window);
 const DEVELOPER_MODE_DOUBLE_CLICKS = 6;
 const DEVELOPER_MODE_GESTURE_TIMEOUT_MS = 4000;
@@ -288,6 +291,7 @@ function createSettingsState(snapshot) {
     videoDownloadButton: snapshot.videoDownloadButton,
     ytDlpPath: snapshot.ytDlpPath || "",
     ytDlpShowWindow: snapshot.ytDlpShowWindow !== false,
+    ytDlpPresets: clone(snapshot.ytDlpPresets || defaultYtDlpPresets()),
     keepProfileDataOnUninstall: snapshot.keepProfileDataOnUninstall,
     builtInProtocols: Object.fromEntries(
       snapshot.builtInProtocols.map(protocol => [
@@ -438,6 +442,7 @@ function bindEvents() {
     clearFeedback();
     render();
   });
+  bindYtDlpPresets();
   document.getElementById("browse-ytdlp-path").addEventListener("click", async () => {
     const path = await browseLocalFile("ytdlp-path", {
       titleId: "downloadit-ytdlp-browse-title",
@@ -1388,6 +1393,101 @@ function renderYtDlpSettings() {
   input.disabled = state.busy;
   document.getElementById("browse-ytdlp-path").disabled = state.busy;
   document.getElementById("clear-ytdlp-path").disabled = state.busy || !input.value;
+  renderYtDlpPresets();
+}
+
+function bindYtDlpPresets() {
+  document.getElementById("add-ytdlp-preset").addEventListener("click", () => {
+    if (state.busy || !state.draft || state.snapshot?.ytDlpPresetsLocked) return;
+    state.draft.ytDlpPresets.push({
+      id: `custom-${Services.uuid.generateUUID().toString().slice(1, -1)}`,
+      name: "", args: "--no-playlist", enabled: true,
+    });
+    clearFeedback();
+    render();
+    document.getElementById(`ytdlp-name-${state.draft.ytDlpPresets.at(-1).id}`)?.focus();
+  });
+  document.getElementById("reset-ytdlp-presets").addEventListener("click", () => {
+    if (state.busy || !state.draft || state.snapshot?.ytDlpPresetsLocked) return;
+    state.draft.ytDlpPresets = defaultYtDlpPresets();
+    clearFeedback();
+    render();
+  });
+}
+
+function renderYtDlpPresets() {
+  const list = document.getElementById("ytdlp-preset-list");
+  const presets = state.draft?.ytDlpPresets || [];
+  const locked = state.busy || !state.draft || state.snapshot?.ytDlpPresetsLocked;
+  document.getElementById("add-ytdlp-preset").disabled = locked || presets.length >= 50;
+  document.getElementById("reset-ytdlp-presets").disabled = locked;
+  list.replaceChildren();
+  for (const [index, preset] of presets.entries()) {
+    const row = document.createElement("li");
+    row.className = "ytdlp-preset-row";
+    const fields = document.createElement("fieldset");
+    fields.disabled = Boolean(locked);
+    const legend = document.createElement("legend");
+    setLocalized(legend, "downloadit-ytdlp-preset-number", { number: index + 1 });
+    fields.append(legend);
+    const update = () => { clearFeedback(); renderActionState(); };
+    const enabledLabel = document.createElement("label");
+    enabledLabel.className = "ytdlp-preset-enabled";
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox";
+    enabled.checked = preset.enabled;
+    enabled.addEventListener("change", () => { preset.enabled = enabled.checked; update(); });
+    const enabledText = document.createElement("span");
+    setLocalized(enabledText, "downloadit-ytdlp-preset-enabled");
+    enabledLabel.append(enabled, enabledText);
+    fields.append(enabledLabel);
+    for (const key of ["name", "args"]) {
+      const field = document.createElement("div");
+      field.className = "editor-field";
+      const label = document.createElement("label");
+      label.htmlFor = `ytdlp-${key}-${preset.id}`;
+      setLocalized(label, `downloadit-ytdlp-preset-${key}`);
+      const input = document.createElement(key === "args" ? "textarea" : "input");
+      input.id = label.htmlFor;
+      input.value = preset[key];
+      input.spellcheck = false;
+      if (key === "name") input.type = "text";
+      input.maxLength = key === "args" ? 8192 : 120;
+      if (key === "args") input.rows = 2;
+      if (key === "name" && ["video", "audio", "subtitles", "playlist"].includes(preset.id)) {
+        // Fluent owns the complete fallback name; user names remain opaque data.
+        document.l10n.formatValue(`downloadit-ytdlp-preset-${preset.id}`).then(name => {
+          if (input.isConnected) input.placeholder = name;
+        }).catch(console.error);
+      }
+      input.addEventListener("input", () => { preset[key] = input.value; update(); });
+      field.append(label, input);
+      fields.append(field);
+    }
+    const actions = document.createElement("div");
+    actions.className = "group-actions";
+    for (const action of ["up", "down", "remove"]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary-button";
+      setLocalized(button, `downloadit-ytdlp-preset-${action}`);
+      button.disabled = action === "up" ? index === 0 : action === "down"
+        ? index === presets.length - 1 : presets.length === 1;
+      button.addEventListener("click", () => {
+        const target = action === "up" ? index - 1 : index + 1;
+        if (action === "remove") presets.splice(index, 1);
+        else [presets[index], presets[target]] = [presets[target], presets[index]];
+        clearFeedback();
+        render();
+        const next = presets.find(item => item.id === preset.id) || presets[Math.min(index, presets.length - 1)];
+        document.getElementById(`ytdlp-name-${next.id}`)?.focus();
+      });
+      actions.append(button);
+    }
+    fields.append(actions);
+    row.append(fields);
+    list.append(row);
+  }
 }
 
 function isBuiltInDownloader(downloader) {
@@ -2175,6 +2275,9 @@ function errorText(error) {
 }
 
 function localizedError(error) {
+  if (error?.code === "ytdlp-presets-invalid" || error?.code === "ytdlp-presets-locked") {
+    return localizedMessage(`downloadit-${error.code}`);
+  }
   if (
     error?.name === "LinkGroupValidationError" &&
     LINK_GROUP_ERROR_MESSAGES[error.code]
@@ -3673,6 +3776,7 @@ async function applySettings() {
   render();
   try {
     const payload = clone(state.draft);
+    payload.ytDlpPresets = validateYtDlpPresets(payload.ytDlpPresets);
     payload.defaultManager = state.defaultManagerTouched
       ? state.draft.defaultManager
       : null;

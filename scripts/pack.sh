@@ -112,6 +112,7 @@ required_entries=(
     "chrome/content/DownloadItDownloaders.sys.mjs"
     "chrome/content/DownloadItHistory.sys.mjs"
     "chrome/content/DownloadItSound.sys.mjs"
+    "chrome/content/DownloadItYtDlp.sys.mjs"
     "chrome/content/sounds/download-complete.wav"
     "chrome/content/DownloadItDownloadDialog.sys.mjs"
     "chrome/content/DownloadItDirectories.sys.mjs"

@@ -783,7 +783,7 @@ test("yt-dlp page probing explicitly skips media downloads", () => {
   const service = read("addon/chrome/content/DownloadItService.sys.mjs");
   const probe = service.slice(
     service.indexOf("  async probeYtDlpPage(pageURL) {"),
-    service.indexOf("  async downloadViaYtDlp(pageURL) {"),
+    service.indexOf("  async downloadViaYtDlp("),
   );
   assert.match(probe, /"--simulate"[\s\S]*?"--skip-download"/);
   assert.match(probe, /"--print-to-file"/);

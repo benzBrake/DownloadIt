@@ -314,6 +314,52 @@ test("yt-dlp support probes write formats during simulation and remove the resul
   }
 });
 
+test("yt-dlp launch resolves presets in the parent and preserves process window preference", async () => {
+  preferenceValues.clear();
+  const service = createSettingsService();
+  Object.defineProperty(service, "ytDlpEnabled", { value: true });
+  Object.defineProperty(service, "ytDlpPath", { value: "yt-dlp.exe" });
+  service.resolveYtDlpPath = value => value;
+  const original = downloadsMock.getPreferredDownloadsDirectory;
+  downloadsMock.getPreferredDownloadsDirectory = async () => "C:\\Downloads with spaces";
+  const launches = [];
+  service.startDetachedProcess = (...args) => launches.push(args);
+  try {
+    await service.downloadViaYtDlp("https://example.com/watch?list=123", "playlist");
+    assert.deepEqual(launches[0], ["yt-dlp.exe", ["--ignore-config", "--paths",
+      "C:\\Downloads with spaces", "--yes-playlist", "--", "https://example.com/watch?list=123"], null, false]);
+    const presets = service.ytDlpPresets;
+    presets[1].args = '--no-playlist -f "bestaudio"';
+    presets[0].enabled = false;
+    preferenceValues.set("downloadit.ytDlp.presets", JSON.stringify(presets));
+    preferenceValues.set("downloadit.ytDlp.showWindow", false);
+    await service.downloadViaYtDlp("https://example.com/watch");
+    assert.ok(launches[1][1].includes("bestaudio"));
+    assert.equal(launches[1][3], true);
+    await assert.rejects(service.downloadViaYtDlp("https://example.com/watch", "video"));
+    await assert.rejects(service.downloadViaYtDlp("file:///test", "audio"));
+    assert.equal(launches.length, 2);
+    assert.deepEqual(service.readSettings().ytDlpPresets, presets);
+    preferenceLocks.add("downloadit.ytDlp.presets");
+    assert.equal(service.readSettings().ytDlpPresetsLocked, true);
+    const changed = structuredClone(presets);
+    changed[1].args = "-x";
+    await assert.rejects(service.applySettings({ ytDlpPresets: changed }), { code: "ytdlp-presets-locked" });
+    assert.deepEqual(service.ytDlpPresets, presets);
+    preferenceLocks.delete("downloadit.ytDlp.presets");
+    await service.applySettings({ ytDlpPresets: changed });
+    assert.deepEqual(service.readSettings().ytDlpPresets, changed);
+    // Invalid input must fail before any unrelated preference changes are applied.
+    await assert.rejects(service.applySettings({ ytDlpPresets: [], ytDlpShowWindow: true }), { code: "ytdlp-presets-invalid" });
+    assert.equal(preferenceValues.get("downloadit.ytDlp.showWindow"), false);
+  } finally {
+    if (original === undefined) delete downloadsMock.getPreferredDownloadsDirectory;
+    else downloadsMock.getPreferredDownloadsDirectory = original;
+    preferenceLocks.delete("downloadit.ytDlp.presets");
+    preferenceValues.clear();
+  }
+});
+
 test("platform capabilities initialize Windows and Linux services independently", async () => {
   preferenceValues.clear();
   for (const [os, expected] of [

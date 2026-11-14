@@ -1,6 +1,7 @@
 const SELECTION_QUERY = "DownloadIt:GetSelectionLinks";
 const PAGE_LINKS_QUERY = "DownloadIt:GetPageLinks";
 const VIDEO_BUTTON_LABEL_QUERY = "DownloadIt:GetVideoButtonLabel";
+const VIDEO_MENU_QUERY = "DownloadIt:GetVideoMenu";
 const VIDEO_BUTTON_SETTING_MESSAGE = "DownloadIt:SetVideoButtonEnabled";
 const VIDEO_DOWNLOAD_MESSAGE = "DownloadIt:DownloadVideo";
 const YTDLP_PROBE_MESSAGE = "DownloadIt:ProbeYtDlpPage";
@@ -130,9 +131,34 @@ export class DownloadItLinkCollectorParent extends ParentActor {
         "chrome://downloadit/content/DownloadItLocalization.sys.mjs",
       );
       await initializeDownloadItLocalization(browserWindow);
+      await browserWindow.document.l10n.ready;
       return await browserWindow?.document?.l10n?.formatValue(
         "downloadit-ytdlp-download",
       ) || "";
+    }
+    if (name === VIDEO_MENU_QUERY) {
+      const browserWindow = this.browsingContext?.top?.embedderElement
+        ?.ownerDocument?.defaultView;
+      if (!browserWindow) return null;
+      const { initializeDownloadItLocalization } = ChromeUtils.importESModule(
+        "chrome://downloadit/content/DownloadItLocalization.sys.mjs",
+      );
+      const { getActiveService } = ChromeUtils.importESModule(
+        "chrome://downloadit/content/DownloadItService.sys.mjs",
+      );
+      await initializeDownloadItLocalization(browserWindow);
+      await browserWindow.document.l10n.ready;
+      const l10n = browserWindow.document.l10n;
+      const presets = getActiveService()?.ytDlpPresets || [];
+      return {
+        menuLabel: await l10n.formatValue("downloadit-ytdlp-menu"),
+        presets: await Promise.all(presets.filter(item => item.enabled).map(async item => ({
+          id: item.id,
+          label: item.name
+            ? await l10n.formatValue("downloadit-ytdlp-custom-name", { name: item.name })
+            : await l10n.formatValue(`downloadit-ytdlp-preset-${item.id}`),
+        }))),
+      };
     }
     if (name === "DownloadIt:GetYtDlpEnabled") {
       try {
@@ -170,7 +196,11 @@ export class DownloadItLinkCollectorParent extends ParentActor {
       if (!service?.ytDlpEnabled || !/^https?:/i.test(pageURL)) {
         throw new Error("yt-dlp is unavailable or the page URL is invalid");
       }
-      await service.downloadViaYtDlp(pageURL);
+      // Only an ID crosses the content boundary. Arguments come from trusted preferences.
+      if (data?.presetId != null && typeof data.presetId !== "string") {
+        throw new Error("Invalid yt-dlp preset ID");
+      }
+      await service.downloadViaYtDlp(pageURL, data?.presetId ?? null);
     } catch (error) {
       console.error("DownloadIt: video download failed", error);
       let label = "";
@@ -208,6 +238,9 @@ export class DownloadItLinkCollectorChild extends ChildActor {
   video = null;
   host = null;
   button = null;
+  menuButton = null;
+  menu = null;
+  menuRequest = 0;
   hideTimer = null;
   observer = null;
   label = "";
@@ -289,12 +322,14 @@ export class DownloadItLinkCollectorChild extends ChildActor {
         this.button.hidden = false;
       }
     });
+    this.refreshVideoMenu();
     document.addEventListener("pointerover", this, true);
     document.addEventListener("pointerout", this, true);
     document.addEventListener("loadedmetadata", this, true);
     document.addEventListener("loadstart", this, true);
     document.addEventListener("emptied", this, true);
     document.addEventListener("visibilitychange", this, true);
+    document.addEventListener("pointerdown", this, true);
     view?.addEventListener("scroll", this, true);
     view?.addEventListener("resize", this, true);
     this.observer = new view.MutationObserver(() => {
@@ -308,7 +343,10 @@ export class DownloadItLinkCollectorChild extends ChildActor {
   }
 
   setYtDlpEnabled(enabled) {
+    const changed = this.ytDlpEnabled !== enabled;
     this.ytDlpEnabled = enabled;
+    if (this.host) this.refreshVideoMenu();
+    if (!changed) return;
     this.supportProbeURL = "";
     this.supportProbeResult = false;
     if (!enabled) {
@@ -324,7 +362,9 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     this.host.style.cssText = "position:fixed;left:0;top:0;z-index:2147483647;display:none";
     const shadow = this.host.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
-    style.textContent = `button{align-items:center;background:rgba(24,32,48,.94);border:0;border-radius:6px;color:#fff;cursor:pointer;display:flex;font:13px/1.2 system-ui,sans-serif;gap:6px;padding:8px 11px;box-shadow:0 2px 8px #0006}button:hover{background:#25385f}button:focus-visible{outline:2px solid #7ab7ff;outline-offset:2px}svg{fill:none;height:16px;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;width:16px}`;
+    style.textContent = `[hidden]{display:none!important}.toolbar{display:flex;width:max-content;max-width:100vw;border-radius:6px;background:rgba(24,32,48,.96);box-shadow:0 2px 8px #0006}button{align-items:center;background:transparent;border:0;border-radius:6px;color:#fff;cursor:pointer;display:flex;font:13px/1.3 system-ui,sans-serif;gap:6px;padding:8px 11px;text-align:start}button:hover,button:focus-visible{background:#25385f}button:focus-visible{outline:2px solid #7ab7ff;outline-offset:-2px}.arrow{border-inline-start:1px solid #ffffff40;border-start-start-radius:0;border-end-start-radius:0;padding-inline:9px}.arrow svg{width:12px;height:12px}.menu{position:absolute;inset-inline-start:0;top:100%;box-sizing:border-box;min-width:100%;width:max-content;max-width:calc(100vw - 20px);max-height:min(60vh,360px);overflow:auto;padding:4px;border-radius:6px;background:rgba(24,32,48,.98);box-shadow:0 2px 8px #0006}.menu.above{top:auto;bottom:100%}.menu button{width:100%;white-space:normal;overflow-wrap:anywhere}svg{flex-shrink:0;fill:none;height:16px;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;width:16px}`;
+    const toolbar = document.createElement("div");
+    toolbar.className = "toolbar";
     this.button = document.createElement("button");
     this.button.type = "button";
     this.button.hidden = true;
@@ -338,22 +378,139 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     const text = document.createElement("span");
     text.textContent = this.label;
     this.button.append(icon, text);
-    shadow.append(style, this.button);
+    this.menuButton = document.createElement("button");
+    this.menuButton.type = "button";
+    this.menuButton.className = "arrow";
+    this.menuButton.hidden = true;
+    this.menuButton.setAttribute("aria-haspopup", "menu");
+    this.menuButton.setAttribute("aria-expanded", "false");
+    this.menuButton.setAttribute("aria-controls", "downloadit-ytdlp-menu");
+    const arrow = icon.cloneNode(true);
+    arrow.firstChild.setAttribute("d", "m5 9 7 7 7-7Z");
+    arrow.firstChild.setAttribute("fill", "currentColor");
+    arrow.firstChild.setAttribute("stroke", "none");
+    this.menuButton.append(arrow);
+    this.menu = document.createElement("div");
+    this.menu.className = "menu";
+    this.menu.id = "downloadit-ytdlp-menu";
+    this.menu.setAttribute("role", "menu");
+    this.menu.hidden = true;
+    toolbar.append(this.button, this.menuButton);
+    shadow.append(style, toolbar, this.menu);
     this.host.addEventListener("pointerenter", () => this.cancelHide());
     this.host.addEventListener("pointerleave", () => this.scheduleHide());
     this.button.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      const pageURL = this.document?.location?.href || "";
-      if (this.ytDlpEnabled && this.supportProbeResult && pageURL) {
-        this.sendAsyncMessage(VIDEO_DOWNLOAD_MESSAGE, { pageURL });
+      this.downloadPreset();
+    });
+    this.menuButton.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.toggleVideoMenu(this.menu.hidden);
+    });
+    shadow.addEventListener("keydown", event => this.handleMenuKey(event));
+    shadow.addEventListener("focusout", event => {
+      if (!shadow.contains(event.relatedTarget)) {
+        this.toggleVideoMenu(false);
+        this.scheduleHide();
       }
-      this.hideVideoButton();
     });
     (document.body || document.documentElement).appendChild(this.host);
   }
 
+  async refreshVideoMenu() {
+    const request = ++this.menuRequest;
+    try {
+      const data = await this.sendQuery(VIDEO_MENU_QUERY);
+      if (this.destroyed || request !== this.menuRequest || !this.menu) return;
+      this.toggleVideoMenu(false);
+      this.menu.replaceChildren();
+      for (const preset of data?.presets || []) {
+        const item = this.document.createElement("button");
+        item.type = "button";
+        item.tabIndex = -1;
+        item.setAttribute("role", "menuitem");
+        item.textContent = preset.label;
+        item.addEventListener("click", event => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.downloadPreset(preset.id);
+        });
+        this.menu.append(item);
+      }
+      this.menuButton.setAttribute("aria-label", data?.menuLabel || this.label);
+      this.menu.setAttribute("aria-label", data?.menuLabel || this.label);
+      this.menuButton.title = data?.menuLabel || this.label;
+      this.menuButton.hidden = !data?.presets?.length;
+      if (data?.presets?.length) this.button.title = data.presets[0].label;
+    } catch (error) {
+      console.error("DownloadIt: video menu localization failed", error);
+    }
+  }
+
+  downloadPreset(presetId = null) {
+    const pageURL = this.document?.location?.href || "";
+    if (this.ytDlpEnabled && this.supportProbeResult && this.supportProbeURL === pageURL) {
+      this.sendAsyncMessage(VIDEO_DOWNLOAD_MESSAGE, { presetId });
+    }
+    this.hideVideoButton();
+  }
+
+  toggleVideoMenu(open) {
+    if (!this.menu || !this.menuButton) return;
+    this.menu.hidden = !open;
+    this.menuButton.setAttribute("aria-expanded", String(open));
+    if (open) {
+      this.cancelHide();
+      this.fitVideoMenu();
+      this.menu.firstElementChild?.focus();
+    }
+  }
+
+  fitVideoMenu() {
+    if (!this.menu || this.menu.hidden || !this.host) return;
+    const view = this.document.defaultView;
+    const rect = this.host.getBoundingClientRect();
+    const below = Math.max(0, view.innerHeight - rect.bottom - 10);
+    const above = Math.max(0, rect.top - 10);
+    this.menu.style.maxWidth = `${Math.max(40, view.innerWidth - rect.left - 10)}px`;
+    // Reset the previous constraint before measuring a newly opened/resized menu.
+    this.menu.style.maxHeight = "min(60vh,360px)";
+    const openAbove = this.menu.offsetHeight > below && above > below;
+    this.menu.classList.toggle("above", openAbove);
+    this.menu.style.maxHeight = `${Math.max(40,
+      Math.min(360, view.innerHeight * 0.6, openAbove ? above : below))}px`;
+  }
+
+  handleMenuKey(event) {
+    if (!this.menu || !this.menuButton) return;
+    const items = [...this.menu.children];
+    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const current = items.indexOf(event.target);
+      if (this.menu.hidden) this.toggleVideoMenu(true);
+      const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+        : event.key === "ArrowUp" ? (current <= 0 ? items.length - 1 : current - 1)
+          : (current + 1) % items.length;
+      items[index]?.focus();
+    } else if (event.key === "Escape" && !this.menu.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.toggleVideoMenu(false);
+      this.menuButton.focus();
+    } else if (event.key === "Tab") {
+      if (!this.menu.hidden) this.menuButton.focus();
+      this.toggleVideoMenu(false);
+    }
+  }
+
   handleEvent(event) {
+    if (event.type === "pointerdown") {
+      if (!event.composedPath?.().includes(this.host)) this.hideVideoButton();
+      return;
+    }
     if (event.type === "pointerover") {
       const video = event.composedPath?.().find(node => node?.localName === "video");
       if (video && this.ytDlpEnabled) {
@@ -426,6 +583,7 @@ export class DownloadItLinkCollectorChild extends ChildActor {
       return;
     }
     this.cancelHide();
+    if (this.video !== video) this.toggleVideoMenu(false);
     this.video = video;
     this.host.style.display = "block";
     this.positionVideoButton();
@@ -443,8 +601,10 @@ export class DownloadItLinkCollectorChild extends ChildActor {
       this.hideVideoButton();
       return;
     }
-    this.host.style.left = `${Math.max(0, rect.left + 10)}px`;
+    this.host.style.left = `${Math.max(0, Math.min(rect.left + 10,
+      this.document.defaultView.innerWidth - this.host.offsetWidth - 10))}px`;
     this.host.style.top = `${Math.max(0, rect.top + 10)}px`;
+    this.fitVideoMenu();
   }
 
   refreshVideo(video = this.video) {
@@ -455,6 +615,7 @@ export class DownloadItLinkCollectorChild extends ChildActor {
 
   scheduleHide() {
     this.cancelHide();
+    if (this.menu && !this.menu.hidden) return;
     this.hideTimer = this.document.defaultView.setTimeout(() => this.hideVideoButton(), 350);
   }
 
@@ -467,6 +628,7 @@ export class DownloadItLinkCollectorChild extends ChildActor {
 
   hideVideoButton() {
     this.cancelHide();
+    this.toggleVideoMenu(false);
     this.video = null;
     if (this.host) {
       this.host.style.display = "none";
@@ -484,10 +646,14 @@ export class DownloadItLinkCollectorChild extends ChildActor {
     document?.removeEventListener("loadstart", this, true);
     document?.removeEventListener("emptied", this, true);
     document?.removeEventListener("visibilitychange", this, true);
+    document?.removeEventListener("pointerdown", this, true);
     document?.defaultView?.removeEventListener("scroll", this, true);
     document?.defaultView?.removeEventListener("resize", this, true);
     this.host?.remove();
     this.host = null;
     this.button = null;
+    this.menuButton = null;
+    this.menu = null;
+    this.menuRequest++;
   }
 }

@@ -496,6 +496,19 @@ textarea:focus-visible {
   padding-bottom: 12px;
 }
 
+.ytdlp-preset-list {
+  list-style: none;
+  padding: 0;
+  margin-block: 16px 0;
+}
+
+.ytdlp-preset-row { margin-block: 12px; }
+.ytdlp-preset-row fieldset { min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+.ytdlp-preset-row legend { padding-inline: 6px; color: var(--muted); }
+.ytdlp-preset-row .editor-field { margin-block: 12px; }
+.ytdlp-preset-row textarea { width: 100%; box-sizing: border-box; resize: vertical; font-family: var(--font-mono); }
+.ytdlp-preset-enabled { display: flex; align-items: center; gap: 8px; }
+
 .link-group-list {
   margin: 0;
   padding: 0;

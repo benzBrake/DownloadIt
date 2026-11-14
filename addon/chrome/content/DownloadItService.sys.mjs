@@ -6,6 +6,9 @@ import {
   validateDownloadSoundSettings,
 } from "./DownloadItSound.sys.mjs";
 import { normalizeFilenameEncodings } from "./DownloadItFilename.sys.mjs";
+import {
+  buildYtDlpArguments, readYtDlpPresets, validateYtDlpPresets, YTDLP_PRESETS_PREF,
+} from "./DownloadItYtDlp.sys.mjs";
 import { DIRECTORY_FORMAT, defaultDownloadDirectories, readDownloadDirectories, validateDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
   buildDownloadBatchJob,
@@ -508,6 +511,10 @@ export class DownloadItService {
     return Services.prefs.getStringPref(PREF_YTDLP_PATH, "");
   }
 
+  get ytDlpPresets() {
+    return readYtDlpPresets(Services.prefs.getStringPref(YTDLP_PRESETS_PREF, ""));
+  }
+
   get ytDlpEnabled() {
     const path = this.ytDlpPath;
     if (!path) {
@@ -599,15 +606,12 @@ export class DownloadItService {
     }
   }
 
-  async downloadViaYtDlp(pageURL) {
+  async downloadViaYtDlp(pageURL, presetId = null) {
     if (!this.ytDlpEnabled) {
       throw new DownloadItError("ytdlp-unavailable");
     }
     const directory = await Downloads.getPreferredDownloadsDirectory();
-    const args = [
-      "--ignore-config", "--no-playlist", "--paths", directory,
-      String(pageURL),
-    ];
+    const args = buildYtDlpArguments(pageURL, directory, this.ytDlpPresets, presetId);
     this.startDetachedProcess(
       this.resolveYtDlpPath(this.ytDlpPath),
       args,
@@ -3136,6 +3140,8 @@ export class DownloadItService {
       ytDlpPath: this.ytDlpPath,
       ytDlpEnabled: this.ytDlpEnabled,
       ytDlpShowWindow: Services.prefs.getBoolPref(PREF_YTDLP_SHOW_WINDOW, true),
+      ytDlpPresets: this.ytDlpPresets,
+      ytDlpPresetsLocked: Services.prefs.prefIsLocked(YTDLP_PRESETS_PREF),
       keepProfileDataOnUninstall: Services.prefs.getBoolPref(
         PREF_KEEP_PROFILE_DATA_ON_UNINSTALL,
         true,
@@ -3301,6 +3307,7 @@ export class DownloadItService {
     videoDownloadButton = null,
     ytDlpPath = null,
     ytDlpShowWindow = null,
+    ytDlpPresets = null,
     keepProfileDataOnUninstall = null,
     builtInProtocols = null,
     abdm = null,
@@ -3381,6 +3388,14 @@ export class DownloadItService {
       ? currentVideoDownloadButton
       : Boolean(videoDownloadButton);
     const currentYtDlpPath = this.ytDlpPath;
+    const currentYtDlpPresets = this.ytDlpPresets;
+    const requestedYtDlpPresets = ytDlpPresets == null
+      ? currentYtDlpPresets : validateYtDlpPresets(ytDlpPresets);
+    const ytDlpPresetsChanged = JSON.stringify(requestedYtDlpPresets) !==
+      JSON.stringify(currentYtDlpPresets);
+    if (ytDlpPresetsChanged && Services.prefs.prefIsLocked(YTDLP_PRESETS_PREF)) {
+      throw new DownloadItError("ytdlp-presets-locked");
+    }
     const requestedYtDlpPath = ytDlpPath == null
       ? currentYtDlpPath
       : this.normalizeYtDlpPathForStorage(String(ytDlpPath).trim());
@@ -3828,6 +3843,11 @@ export class DownloadItService {
     }
     if (requestedYtDlpPath !== currentYtDlpPath) {
       Services.prefs.setStringPref(PREF_YTDLP_PATH, requestedYtDlpPath);
+    }
+    if (ytDlpPresetsChanged) {
+      Services.prefs.setStringPref(YTDLP_PRESETS_PREF, JSON.stringify(requestedYtDlpPresets));
+    }
+    if (requestedYtDlpPath !== currentYtDlpPath || ytDlpPresetsChanged) {
       notifyYtDlpSetting();
     }
     if (requestedYtDlpShowWindow !== currentYtDlpShowWindow) {
@@ -4241,6 +4261,7 @@ export class DownloadItService {
     } else if (topic === DOWNLOAD_DIALOG_TOPIC) {
       this.watchDownloadDialog(subject);
     } else if (topic === APP_LOCALES_CHANGED_TOPIC) {
+      notifyYtDlpSetting();
       for (const controller of this.controllers.values()) {
         controller.localizationReady
           .then(() => controller.refreshMenuLabel())
