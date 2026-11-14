@@ -8,7 +8,7 @@
 
 DownloadIt 是面向现代 Firefox 的下载增强扩展，将下载器集成、批量链接工具和灵活的下载处理融入浏览器。
 
-项目以 FlashGot 的部分下载集成功能为基础，并逐步引入 DownloadPlus（`downloadPlus_Fx136.uc.js`）中的下载弹窗和保存操作增强。
+项目以 FlashGot 的部分下载集成功能为基础，并提供下载弹窗、保存操作和下载历史增强。
 
 ## 现有功能
 
@@ -24,22 +24,16 @@ DownloadIt 是面向现代 Firefox 的下载增强扩展，将下载器集成、
 
 “**请求信息传递**”区域统一展示 Cookie 转发的全局开关，以及 Referer 和 User-Agent 的“**自动附带**”只读状态。
 
-## 后续方向
-
-DownloadIt 已移植部分下载弹窗、保存操作和下载历史清理功能，尚不支持 DownloadPlus 的全部功能。DownloadIt 也仅实现了 FlashGot 的部分功能，目前不支持媒体嗅探。
-
-请求信息传递计划采用“**全局默认值 + 特定站点规则**”：全局开关控制是否附带 Cookies、Referer 和 User-Agent，站点规则可覆盖默认值、指定 Referer 或 User-Agent，或禁止传递 Cookies。Referer、User-Agent 的全局开关和站点规则尚未上线。
-
 ## 运行环境与下载
 
 支持 Windows 和 Linux 上的 Firefox 136 及以上版本。DownloadIt 以 bootstrapped XPI 形式加载，需要定制版 [userChrome.js Loader](https://github.com/benzBrake/userChrome.js-Loader)，或在 Firefox Developer Edition、Nightly 上使用 [Bootstrap Loader](https://github.com/benzBrake/BootstrapLoader/)。它不能作为普通 WebExtension 独立运行。
 
 包内 Aria2Next 支持 Windows 和 Linux x86_64；基于 FlashGot 的下载器发现仅适用于 Windows。目前不支持 macOS 及 Snap、Flatpak 版 Firefox。
 
-[下载 Nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) · [使用文档](https://benzbrake.github.io/DownloadIt/zh-CN/) · [开发说明](docs/development-zh_CN.md)
+[下载 Nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) · [使用文档](https://benzbrake.github.io/DownloadIt/zh-CN/) · [路线图](docs/roadmap-zh_CN.md) · [开发说明](docs/development-zh_CN.md)
 
 手动验证下载和文件名编码可使用[本地 WSLC 下载测试服务器](docs/development-zh_CN.md#本地下载测试服务器)。
 
 ## 致谢与许可证
 
-原 FlashGot 由 Giorgio Maone 创作，采用 GPL-2.0-or-later。DownloadPlus 是后续下载体验增强的移植来源。随包组件包括 Grabby-FlashGot（GPL-3.0）、Aria2Next（GPL-2.0）和 AriaNg（MIT），详见[第三方声明](addon/THIRD_PARTY_NOTICES.txt)。
+原 FlashGot 由 Giorgio Maone 创作，采用 GPL-2.0-or-later。随包组件包括 Grabby-FlashGot（GPL-3.0）、Aria2Next（GPL-2.0）和 AriaNg（MIT），详见[第三方声明](addon/THIRD_PARTY_NOTICES.txt)。

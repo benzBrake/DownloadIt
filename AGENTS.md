@@ -2,7 +2,7 @@
 
 If `AGENTS.local.md` exists, follow the conventions in it first.
 
-DownloadIt is a download enhancement extension for modern Firefox. It ports selected FlashGot download-integration functionality and progressively incorporates download-dialog, save-action, and download-history enhancements from DownloadPlus (`downloadPlus_Fx136.uc.js`). Document implemented features separately from planned ports; do not imply that either source project's full feature set is already supported.
+DownloadIt is a download enhancement extension for modern Firefox. It ports selected FlashGot download-integration functionality and provides download-dialog, save-action, and download-history enhancements. Document implemented features separately from planned work; do not imply that FlashGot's full feature set is already supported.
 
 DownloadIt is packaged as a bootstrapped XPI and requires a compatible Loader: the customized userChrome.js Loader, or Bootstrap Loader on Firefox Developer Edition and Nightly.
 

@@ -8,7 +8,7 @@
 
 DownloadIt enhances downloads in modern Firefox, bringing download-manager integration, batch link tools, and flexible download handling into the browser.
 
-The project builds on selected FlashGot integrations and is progressively incorporating download-dialog and save-action enhancements from DownloadPlus (`downloadPlus_Fx136.uc.js`).
+The project builds on selected FlashGot integrations and adds download-dialog, save-action, and download-history enhancements.
 
 ## Available today
 
@@ -24,22 +24,16 @@ The **Download history** settings page enables cleanup buttons by default in Fir
 
 The **Request information forwarding** area groups the global cookie-forwarding switch with the read-only **automatically attached** status for Referer and User-Agent.
 
-## Where it is heading
-
-DownloadIt implements selected download-dialog, save-action, and download-history cleanup features, but not the full DownloadPlus feature set. It also implements only part of FlashGot's original feature set; media sniffing is not currently supported.
-
-Request information forwarding is planned to support **global defaults + site-specific rules**: global switches for cookies, Referer, and User-Agent, with site rules that can override defaults, specify a Referer or User-Agent, or omit cookies. The Referer and User-Agent switches and site rules are not yet available.
-
 ## Requirements and download
 
 DownloadIt supports Firefox 136 or later on Windows and Linux. It is a bootstrapped XPI and requires the customized [userChrome.js Loader](https://github.com/benzBrake/userChrome.js-Loader), or [Bootstrap Loader](https://github.com/benzBrake/BootstrapLoader/) on Firefox Developer Edition and Nightly. It cannot run as a standalone WebExtension.
 
 The bundled Aria2Next supports Windows and Linux x86_64; FlashGot-based manager discovery is Windows-only. macOS and Snap/Flatpak Firefox are outside the current support scope.
 
-[Download the nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) · [User documentation](https://benzbrake.github.io/DownloadIt/) · [Development](docs/development.md)
+[Download the nightly XPI](https://github.com/benzBrake/DownloadIt/releases/download/nightly/addon.xpi) · [User documentation](https://benzbrake.github.io/DownloadIt/) · [Roadmap](docs/roadmap.md) · [Development](docs/development.md)
 
 For manual download and filename-encoding checks, use the [local WSLC download test server](docs/development.md#local-download-test-server).
 
 ## Credits and licenses
 
-The original FlashGot was created by Giorgio Maone and is licensed under GPL-2.0-or-later. DownloadPlus is a source for planned download-experience enhancements. Bundled components include Grabby-FlashGot (GPL-3.0), Aria2Next (GPL-2.0), and AriaNg (MIT). See [third-party notices](addon/THIRD_PARTY_NOTICES.txt) for details.
+The original FlashGot was created by Giorgio Maone and is licensed under GPL-2.0-or-later. Bundled components include Grabby-FlashGot (GPL-3.0), Aria2Next (GPL-2.0), and AriaNg (MIT). See [third-party notices](addon/THIRD_PARTY_NOTICES.txt) for details.
