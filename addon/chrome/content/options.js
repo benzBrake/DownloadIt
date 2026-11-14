@@ -1047,6 +1047,8 @@ function syncFilenameEncodingAccess() {
 
 function renderDownloadDialogSettings() {
   syncFilenameEncodingAccess();
+  document.getElementById("download-dialog-uncovered-drives-row").hidden =
+    state.snapshot?.platform !== "windows";
   const settings = state.draft?.downloadDialog;
   setLocalized(document.getElementById("filename-encodings-summary"), "downloadit-encoding-summary", { count: (settings?.filenameEncodings || []).length });
   for (const input of document.querySelectorAll("[data-download-dialog-pref]")) {

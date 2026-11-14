@@ -168,3 +168,28 @@ export function resolveDownloadDirectories(entries, components, os) {
       messageId: entry.label ? null : getBuiltinDirectory(entry.path)?.messageId }];
   });
 }
+
+export function getUncoveredWindowsDrives(entries, components, os) {
+  if (os !== "WINNT") return [];
+  const { classes: Cc, interfaces: Ci } = components;
+  const covered = new Set(entries.flatMap(entry => {
+    const file = resolveDownloadDirectory(entry.path, components, os);
+    const match = /^([a-z]):\\/iu.exec(file?.path || "");
+    return match ? [match[1].toUpperCase()] : [];
+  }));
+  const drives = [];
+  for (let code = 65; code <= 90; code++) {
+    const letter = String.fromCharCode(code);
+    if (covered.has(letter)) continue;
+    const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+    try {
+      file.initWithPath(`${letter}:\\`);
+      if (file.exists() && file.isDirectory()) {
+        drives.push({ path: file.path, label: file.path, messageId: null });
+      }
+    } catch {
+      // A drive letter may be invalid or unavailable on this system.
+    }
+  }
+  return drives;
+}

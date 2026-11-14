@@ -1,4 +1,4 @@
-import { resolveDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
+import { getUncoveredWindowsDrives, resolveDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
   classifyDownloadTarget,
   DOWNLOAD_TARGET_CLASSIFICATION,
@@ -783,7 +783,13 @@ export class DownloadItDownloadDialogController {
         id: "di-save-to-popup",
       });
       this.addNativeMenuStyles(popup);
-      for (const entry of resolveDownloadDirectories(settings.directories || [], this.window.Components, this.window.Services?.appinfo?.OS || globalThis.Services?.appinfo?.OS)) {
+      const os = this.window.Services?.appinfo?.OS || globalThis.Services?.appinfo?.OS;
+      const directories = settings.directories || [];
+      const entries = resolveDownloadDirectories(directories, this.window.Components, os);
+      if (settings.listUncoveredDrives) {
+        entries.push(...getUncoveredWindowsDrives(directories, this.window.Components, os));
+      }
+      for (const entry of entries) {
         const item = createXULElement(this.document, "menuitem", {
           value: entry.path,
           dir: entry.path,

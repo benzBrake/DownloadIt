@@ -13,7 +13,7 @@ The project builds on selected FlashGot integrations and is progressively incorp
 ## Available today
 
 - **Download-manager integration**: Send links from the context menu or download prompt to external downloaders, with built-in integrations, custom commands, and aria2 JSON-RPC support. Aria2Next and AriaNg are included.
-- **Save To**: Quickly choose a favorite destination in the download prompt, including built-in Desktop, Documents, Pictures, and Downloads folders or your own custom folders.
+- **Save To**: Quickly choose a favorite destination in the download prompt, including built-in Desktop, Documents, Pictures, and Downloads folders or your own custom folders. On Windows, an option can automatically add drive roots that have no configured Save To location.
 - **Enhanced download prompt**: Edit filenames, copy source links, and choose Save As or Save and Open.
 - **Filename encoding correction**: Automatically detect URL filename encodings or select and add encodings manually to fix garbled names.
 - **Batch downloads**: Collect, filter, copy, and batch-download links from a page or selection, including magnet and ed2k links when supported by the downloader.

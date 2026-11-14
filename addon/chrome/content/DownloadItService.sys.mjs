@@ -3188,6 +3188,7 @@ export class DownloadItService {
       showFullURL: true,
       saveAs: true,
       saveTo: true,
+      listUncoveredDrives: false,
       saveAndOpen: true,
       directoryFormat: DIRECTORY_FORMAT,
       directories: defaultDownloadDirectories(),
@@ -4008,6 +4009,8 @@ export class DownloadItService {
       showFullURL: value.showFullURL == null ? current.showFullURL : Boolean(value.showFullURL),
       saveAs: value.saveAs == null ? current.saveAs : Boolean(value.saveAs),
       saveTo: value.saveTo == null ? current.saveTo : Boolean(value.saveTo),
+      listUncoveredDrives: value.listUncoveredDrives == null
+        ? current.listUncoveredDrives : Boolean(value.listUncoveredDrives),
       saveAndOpen: value.saveAndOpen == null ? current.saveAndOpen : Boolean(value.saveAndOpen),
       directoryFormat: DIRECTORY_FORMAT,
       directories: normalizedDirectories,
