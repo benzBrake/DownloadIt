@@ -12,24 +12,13 @@ The project builds on selected FlashGot integrations and is progressively incorp
 
 ## Available today
 
-- Send links to external download managers from the context menu or Firefox's native download prompt, or use Firefox's own downloader.
-- Edit suggested filenames (including for Firefox's native Save action), detect legacy encodings for URL-derived names, copy the complete source URL with a content-sized button and success/failure text and animation feedback, and use Save As, editable Save To locations (including removable built-in Desktop, Documents, Pictures, and Downloads folders), or Save and Open in Firefox's download prompt.
-- Save and Open is also available for executable downloads and uses Firefox's native download-and-launch handling.
-- Collect, filter, copy, and batch-download links from a page or selection, including magnet and ed2k links when supported by the selected downloader.
-- Choose from built-in downloader integrations, bundled Aria2Next with AriaNg, custom commands, or aria2 JSON-RPC.
-- Control automatic file-type capture and cookie forwarding, with optional GitHub mirror and IDM local-protocol compatibility.
-
-The interface is available in English, Japanese, Simplified Chinese, and Traditional Chinese.
-
-**Enable dialog buttons without delay** under Settings → Download dialog is on by default and sets `security.dialog_enable_delay` to `0`. This removes the download prompt's button delay and also affects other Firefox security dialogs that use the same preference. Turning the option off or disabling/uninstalling DownloadIt restores the previous user value (or Firefox's default if none was set), unless the value has since been changed elsewhere. Locked preferences are respected. Apply the setting before opening a new download prompt.
-
-Save To locations are managed together in settings. The arrow beside **Add folder** quickly adds built-in folders; their paths use system-resolved placeholders, while ordinary folders store absolute paths. Built-in names can be customized or left empty for localized defaults. Existing location settings migrate on Apply, preserving custom folders. Removing all locations keeps the list empty.
-
-Pictures uses the Windows user shell-folder configuration or Linux XDG `user-dirs.dirs`, including redirected locations. If no valid existing pictures directory is configured, the built-in entry remains in settings but is omitted from the download menu.
-
-Filename encoding detection uses bundled jschardet and Firefox's native decoders. The button to the right of the filename field offers Automatic, the Firefox filename, and UTF-8, GB18030, Big5, Shift_JIS, EUC-JP, EUC-KR, and Windows-1252. Add up to 30 Firefox-supported encoding names under Settings → Download dialog; separate names with commas or spaces. Switching encodings decodes the original URL bytes and replaces the filename field, including any edits. Server-provided filenames take priority. Short filenames can remain ambiguous; manual selection is available even when automatic detection is disabled.
-
-The **Additional filename encodings** button is beside **Detect URL filename encoding** and is disabled when detection is off. Its dialog accepts multiple names followed by Add or Enter, shows encodings as removable badges that wrap onto additional lines as needed, and provides quick-add presets for English, Chinese, Hindi, Spanish, Arabic, French, Bengali, Portuguese, Russian, and Indonesian. Done stages the changes for Apply; Cancel or Escape discards dialog changes.
+- **Download-manager integration**: Send links from the context menu or download prompt to external downloaders, with built-in integrations, custom commands, and aria2 JSON-RPC support. Aria2Next and AriaNg are included.
+- **Save To**: Quickly choose a favorite destination in the download prompt, including built-in Desktop, Documents, Pictures, and Downloads folders or your own custom folders.
+- **Enhanced download prompt**: Edit filenames, copy source links, and choose Save As or Save and Open.
+- **Filename encoding correction**: Automatically detect URL filename encodings or select and add encodings manually to fix garbled names.
+- **Batch downloads**: Collect, filter, copy, and batch-download links from a page or selection, including magnet and ed2k links when supported by the downloader.
+- **Download capture and compatibility**: Automatically capture downloads by file type, with configurable cookie forwarding, GitHub mirrors, and IDM local-protocol compatibility.
+- **Multilingual interface**: Available in English, Japanese, Simplified Chinese, and Traditional Chinese.
 
 ## Where it is heading
 
