@@ -35,6 +35,10 @@
             <span class="nav-number">03</span>
             <span data-l10n-id="downloadit-nav-download-dialog"></span>
           </button>
+          <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-download-history" data-section="download-history">
+            <span class="nav-number">04</span>
+            <span data-l10n-id="downloadit-history-title"></span>
+          </button>
           <button class="nav-item" type="button" role="tab" aria-selected="false" aria-controls="section-link-groups" data-section="link-groups">
             <span class="nav-number">03</span>
             <span data-l10n-id="downloadit-nav-link-groups"></span>
@@ -269,6 +273,12 @@
               <div class="group-heading compact-heading"><div><div class="eyebrow" data-l10n-id="downloadit-dialog-directories-eyebrow"></div><h2 data-l10n-id="downloadit-dialog-directories-title"></h2></div><div class="directory-add-buttons"><button id="add-download-dialog-directory" class="secondary-button" type="button" data-l10n-id="downloadit-dialog-directory-add"></button><xul:button id="add-builtin-directory" class="directory-add-menu" type="menu" data-l10n-id="downloadit-dialog-directory-builtins"><xul:menupopup id="builtin-directory-popup" /></xul:button></div></div>
               <p class="field-help" data-l10n-id="downloadit-dialog-directories-help"></p>
               <ul id="download-dialog-directory-list" class="manager-list"></ul>
+            </div>
+          </section>
+
+          <section id="section-download-history" class="settings-section" role="tabpanel" aria-labelledby="section-title" data-section-panel="download-history" hidden="hidden">
+            <div class="setting-group">
+              <label class="toggle-row" for="history-cleanup-buttons"><input id="history-cleanup-buttons" type="checkbox" /><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span><span class="toggle-copy"><strong data-l10n-id="downloadit-history-show-buttons"></strong><small data-l10n-id="downloadit-history-show-buttons-help"></small></span></label>
             </div>
           </section>
 

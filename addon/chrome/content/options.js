@@ -73,6 +73,11 @@ const SECTION_META = {
     "downloadit-auto-capture-title",
     "downloadit-auto-capture-description",
   ],
+  "download-history": [
+    "downloadit-history-kicker",
+    "downloadit-history-title",
+    "downloadit-history-description",
+  ],
   "download-dialog": [
     "downloadit-dialog-settings-kicker",
     "downloadit-dialog-settings-title",
@@ -201,6 +206,7 @@ const CUSTOM_ERROR_MESSAGES = {
   "aria2next-submit-failed": "downloadit-error-aria2next-submit",
   "aria2next-partial-failure": "downloadit-error-aria2next-partial",
   "flashgot-unsupported-platform": "downloadit-error-flashgot-platform",
+  "history-settings-locked": "downloadit-history-settings-locked",
   "download-dialog-settings-invalid": "downloadit-error-download-dialog-settings",
 };
 
@@ -284,6 +290,7 @@ function createSettingsState(snapshot) {
     ),
     idmBridgeEnabled: snapshot.idmBridgeEnabled,
     autoCaptureRules: clone(snapshot.autoCaptureRules),
+    historyCleanupButtons: snapshot.historyCleanupButtons !== false,
     downloadDialog: clone(snapshot.downloadDialog),
     linkGroups: clone(snapshot.linkGroups),
     mirrorSettings: clone(snapshot.mirrorSettings),
@@ -305,6 +312,10 @@ function bindEvents() {
       renderActionState();
     });
   }
+  document.getElementById("history-cleanup-buttons").addEventListener("change", event => {
+    state.draft.historyCleanupButtons = event.target.checked;
+    render();
+  });
   document.getElementById("add-download-dialog-directory").addEventListener(
     "click",
     addDownloadDialogDirectory,
@@ -872,8 +883,8 @@ function renderNavigation() {
   const navigation = document.querySelector(".section-nav");
   const mirrorButton = navigation.querySelector('[data-section="mirrors"]');
   const visibleSections = developerMode
-    ? ["managers", "auto-capture", "download-dialog", "link-groups", "mirrors", "privacy", "ytdlp", "about"]
-    : ["managers", "auto-capture", "download-dialog", "link-groups", "privacy", "ytdlp", "about"];
+    ? ["managers", "auto-capture", "download-dialog", "download-history", "link-groups", "mirrors", "privacy", "ytdlp", "about"]
+    : ["managers", "auto-capture", "download-dialog", "download-history", "link-groups", "privacy", "ytdlp", "about"];
 
   mirrorButton.hidden = !developerMode;
   navigation.classList.toggle("has-developer-mode", developerMode);
@@ -911,6 +922,9 @@ function render() {
   renderYtDlpSettings();
   renderAutoCaptureRules();
   renderDownloadDialogSettings();
+  const historyToggle = document.getElementById("history-cleanup-buttons");
+  historyToggle.checked = state.draft?.historyCleanupButtons !== false;
+  historyToggle.disabled = state.busy || !state.draft || state.snapshot?.historyCleanupButtonsLocked;
   renderLinkGroups();
   renderMirrors();
   renderPrivacy();

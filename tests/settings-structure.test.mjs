@@ -286,7 +286,7 @@ test("automatic capture controls live in a dedicated settings tab", () => {
     markup,
     /aria-controls="section-auto-capture" data-section="auto-capture"/,
   );
-  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 8);
+  assert.equal((markup.match(/class="nav-item(?: is-active)?"/g) || []).length, 9);
   assert.ok(managerPanel);
   assert.ok(autoCapturePanel);
   assert.doesNotMatch(managerPanel, /id="auto-allow-list"/);
@@ -299,10 +299,10 @@ test("automatic capture controls live in a dedicated settings tab", () => {
   assert.match(autoCapturePanel, /id="retry-auto-capture-rules"/);
   assert.match(autoCapturePanel, /id="reset-auto-capture-rules"/);
   assert.match(script, /"auto-capture": \[/);
-  assert.match(styles, /grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /grid-template-columns: repeat\(8, minmax\(0, 1fr\)\)/);
   assert.match(
     styles,
-    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(8, minmax\(0, 1fr\)\)/,
+    /\.section-nav\.has-developer-mode[\s\S]*?repeat\(9, minmax\(0, 1fr\)\)/,
   );
 });
 

@@ -110,6 +110,7 @@ required_entries=(
     "chrome/content/DownloadItAriaNg.sys.mjs"
     "chrome/content/DownloadItAriaNgActor.sys.mjs"
     "chrome/content/DownloadItDownloaders.sys.mjs"
+    "chrome/content/DownloadItHistory.sys.mjs"
     "chrome/content/DownloadItDownloadDialog.sys.mjs"
     "chrome/content/DownloadItDirectories.sys.mjs"
     "chrome/content/DownloadItFilename.sys.mjs"

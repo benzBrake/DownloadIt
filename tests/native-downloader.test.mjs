@@ -53,6 +53,8 @@ const servicesMock = {
   },
   io: { newURI: spec => ({ spec }) },
   prefs: {
+    addObserver() {},
+    removeObserver() {},
     clearUserPref: name => preferenceValues.delete(name),
     getBoolPref: (name, fallback) => preferenceValues.get(name) ?? fallback,
     getIntPref: (name, fallback) => preferenceValues.get(name) ?? fallback ??
@@ -3790,5 +3792,24 @@ test("download-dialog service migrates legacy locations and persists explicit em
   } finally {
     if (had) preferenceValues.set(pref, before);
     else preferenceValues.delete(pref);
+  }
+});
+
+test("history cleanup setting defaults on, persists and respects policy locks", async () => {
+  const name = "downloadit.history.showCleanupButtons";
+  preferenceValues.delete(name);
+  preferenceLocks.delete(name);
+  const service = createSettingsService();
+  try {
+    assert.equal(service.readSettings().historyCleanupButtons, true);
+    await service.applySettings({ historyCleanupButtons: false });
+    assert.equal(service.readSettings().historyCleanupButtons, false);
+    preferenceLocks.add(name);
+    assert.equal(service.readSettings().historyCleanupButtonsLocked, true);
+    await assert.rejects(service.applySettings({ historyCleanupButtons: true }), error => error.code === "history-settings-locked");
+    assert.equal(service.readSettings().historyCleanupButtons, false);
+  } finally {
+    preferenceValues.delete(name);
+    preferenceLocks.delete(name);
   }
 });

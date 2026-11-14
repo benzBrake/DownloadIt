@@ -829,3 +829,16 @@ downloadit-encoding-remove =
     .title = Remove { $encoding }
     .aria-label = Remove { $encoding }
 downloadit-encoding-preset = { $language }: { $encodings }
+
+downloadit-history-title = Download history
+downloadit-history-kicker = History
+downloadit-history-description = Manage cleanup buttons in the Library downloads view.
+downloadit-history-show-buttons = Show cleanup buttons in download history
+downloadit-history-show-buttons-help = Show Remove Failed and Remove Unavailable in Library → Downloads. Unavailable records refer to files that have been moved or deleted. Only records are removed; files are kept.
+downloadit-history-settings-locked = Download history settings are locked by policy.
+downloadit-history-remove-failed =
+    .label = Remove Failed
+    .tooltiptext = Remove failed download records
+downloadit-history-remove-unavailable =
+    .label = Remove Unavailable
+    .tooltiptext = Remove download records whose files have been moved or deleted

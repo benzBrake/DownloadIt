@@ -1,3 +1,4 @@
+import { DownloadItHistoryIntegration, HISTORY_CLEANUP_PREF } from "./DownloadItHistory.sys.mjs";
 import { normalizeFilenameEncodings } from "./DownloadItFilename.sys.mjs";
 import { DIRECTORY_FORMAT, defaultDownloadDirectories, readDownloadDirectories, validateDownloadDirectories } from "./DownloadItDirectories.sys.mjs";
 import {
@@ -447,6 +448,7 @@ export class DownloadItService {
     this.autoCaptureRulesWritePromise = Promise.resolve();
     this.controllers = new Map();
     this.panelControllers = new Map();
+    this.historyIntegration = new DownloadItHistoryIntegration(Services, initializeDownloadItLocalization);
     this.downloadDialogControllers = new Map();
     this.downloadDialogWatchers = new Map();
     this.temporaryFiles = new Set();
@@ -3086,6 +3088,8 @@ export class DownloadItService {
         ? { ...this.defaultDownloader }
         : null,
       ...this.getProtocolDefaultSettings(),
+      historyCleanupButtons: Services.prefs.getBoolPref(HISTORY_CLEANUP_PREF, true),
+      historyCleanupButtonsLocked: Services.prefs.prefIsLocked(HISTORY_CLEANUP_PREF),
       downloadDialog: this.getDownloadDialogSettings(),
       protocolDefaultLocks: this.getProtocolDefaultLocks(),
       detectedManagerCount: this.downloaders.filter(downloader =>
@@ -3263,6 +3267,7 @@ export class DownloadItService {
     linkGroups = null,
     mirrorSettings = null,
     customDownloaders = null,
+    historyCleanupButtons = null,
     downloadDialog = null,
   } = {}) {
     const defaultManagerRequested = defaultManager !== null &&
@@ -3276,6 +3281,11 @@ export class DownloadItService {
       ? currentProtocolDefaults.ed2kManager
       : String(ed2kManager || "");
     const currentAutoCaptureRules = this.autoCaptureRules;
+    const currentHistoryCleanup = Services.prefs.getBoolPref(HISTORY_CLEANUP_PREF, true);
+    if (historyCleanupButtons != null && Boolean(historyCleanupButtons) !== currentHistoryCleanup &&
+        Services.prefs.prefIsLocked(HISTORY_CLEANUP_PREF)) {
+      throw new DownloadItError("history-settings-locked");
+    }
     const currentDownloadDialog = this.getDownloadDialogSettings();
     const requestedDownloadDialog = downloadDialog == null
       ? currentDownloadDialog
@@ -3954,6 +3964,9 @@ export class DownloadItService {
         JSON.stringify(requestedDownloadDialog),
       );
     }
+    if (historyCleanupButtons != null && Boolean(historyCleanupButtons) !== currentHistoryCleanup) {
+      Services.prefs.setBoolPref(HISTORY_CLEANUP_PREF, Boolean(historyCleanupButtons));
+    }
     this.syncDownloadDialogButtonDelay(requestedDownloadDialog.disableButtonDelay);
     if (
       JSON.stringify(requestedMirrorSettings) !==
@@ -4042,6 +4055,7 @@ export class DownloadItService {
       }
     }
 
+    this.historyIntegration.start();
     registerDownloadItHelperAppHook(this);
     registerDownloadItExternalProtocolHook(this);
 
@@ -4077,6 +4091,7 @@ export class DownloadItService {
       await this.shutdownManagedCustomAria2();
     }
     await this.shutdownAria2NextIfEnabled();
+    this.historyIntegration.stop();
     unregisterDownloadItHelperAppHook(this);
     unregisterDownloadItExternalProtocolHook(this);
     try {

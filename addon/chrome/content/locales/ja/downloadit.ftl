@@ -770,3 +770,16 @@ downloadit-encoding-remove =
     .title = { $encoding } を削除
     .aria-label = { $encoding } を削除
 downloadit-encoding-preset = { $language }: { $encodings }
+
+downloadit-history-title = ダウンロード履歴
+downloadit-history-kicker = 履歴
+downloadit-history-description = ライブラリーのダウンロード画面に表示する整理ボタンを管理します。
+downloadit-history-show-buttons = ダウンロード履歴に整理ボタンを表示する
+downloadit-history-show-buttons-help = 「ライブラリー → ダウンロード」に「失敗した履歴を削除」と「無効な履歴を削除」を表示します。無効な履歴は、ファイルが移動または削除された記録です。履歴のみを削除し、ファイルは削除しません。
+downloadit-history-settings-locked = ダウンロード履歴の設定はポリシーによりロックされています。
+downloadit-history-remove-failed =
+    .label = 失敗した履歴を削除
+    .tooltiptext = ダウンロードに失敗した履歴を削除します
+downloadit-history-remove-unavailable =
+    .label = 無効な履歴を削除
+    .tooltiptext = ファイルが移動または削除されたダウンロード履歴を削除します

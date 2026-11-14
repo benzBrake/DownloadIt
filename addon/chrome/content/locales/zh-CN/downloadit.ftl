@@ -767,3 +767,16 @@ downloadit-encoding-remove =
     .title = 移除 { $encoding }
     .aria-label = 移除 { $encoding }
 downloadit-encoding-preset = { $language }：{ $encodings }
+
+downloadit-history-title = 下载历史
+downloadit-history-kicker = 历史记录
+downloadit-history-description = 管理“我的足迹”下载页面中的清理按钮。
+downloadit-history-show-buttons = 在下载历史中显示清理按钮
+downloadit-history-show-buttons-help = 在“我的足迹 → 下载”中显示“删除失败记录”和“删除失效记录”。失效记录指对应文件已移动或删除的下载记录。仅删除记录，不删除实际文件。
+downloadit-history-settings-locked = 下载历史设置已被策略锁定。
+downloadit-history-remove-failed =
+    .label = 删除失败记录
+    .tooltiptext = 删除下载失败的历史记录
+downloadit-history-remove-unavailable =
+    .label = 删除失效记录
+    .tooltiptext = 删除对应文件已移动或删除的下载记录

@@ -20,9 +20,11 @@ The project builds on selected FlashGot integrations and is progressively incorp
 - **Download capture and compatibility**: Automatically capture downloads by file type, with configurable cookie forwarding, GitHub mirrors, and IDM local-protocol compatibility.
 - **Multilingual interface**: Available in English, Japanese, Simplified Chinese, and Traditional Chinese.
 
+The **Download history** settings page enables cleanup buttons by default in Firefox **Library → Downloads**: **Remove Failed** and **Remove Unavailable**. The latter refreshes file availability and removes successful download records only when their files have been moved or deleted. Both actions remove records only, keeping actual files. Disabling the setting and applying it also removes the buttons from open Library windows.
+
 ## Where it is heading
 
-DownloadPlus-inspired download-history enhancements remain planned. DownloadIt implements selected download-dialog and save actions, not the full DownloadPlus feature set. It also implements only part of FlashGot's original feature set; media sniffing is not currently supported.
+DownloadIt implements selected download-dialog, save-action, and download-history cleanup features, but not the full DownloadPlus feature set. It also implements only part of FlashGot's original feature set; media sniffing is not currently supported.
 
 ## Requirements and download
 
